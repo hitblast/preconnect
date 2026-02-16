@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:preconnect/model/friend_schedule.dart';
 import 'package:preconnect/pages/friend_schedule_sections/friend_header.dart';
 import 'package:preconnect/pages/ui_kit.dart';
+import 'package:preconnect/tools/ramadan_timing.dart';
 import 'package:preconnect/tools/time_utils.dart';
 
 class FriendScheduleItem {
@@ -26,6 +27,7 @@ class FriendScheduleSection extends StatelessWidget {
   const FriendScheduleSection({
     super.key,
     required this.item,
+    this.isRamadan = false,
     this.onDelete,
     this.onToggleFavorite,
     this.onEditNickname,
@@ -34,6 +36,7 @@ class FriendScheduleSection extends StatelessWidget {
   });
 
   final FriendScheduleItem item;
+  final bool isRamadan;
   final VoidCallback? onDelete;
   final VoidCallback? onToggleFavorite;
   final VoidCallback? onEditNickname;
@@ -44,7 +47,7 @@ class FriendScheduleSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final friend = item.friend;
     final courseCount = friend.courses.length;
-    final nextClass = _pickNextClassSummary(friend);
+    final nextClass = _pickNextClassSummary(friend, isRamadan: isRamadan);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -69,7 +72,10 @@ class FriendScheduleSection extends StatelessWidget {
   return BracuTime.parseHourMinute(raw);
 }
 
-String? _pickNextClassSummary(FriendSchedule friend) {
+String? _pickNextClassSummary(
+  FriendSchedule friend, {
+  required bool isRamadan,
+}) {
   if (friend.courses.isEmpty) return null;
 
   final dayMap = {
@@ -89,13 +95,18 @@ String? _pickNextClassSummary(FriendSchedule friend) {
 
   for (final course in friend.courses) {
     for (final s in course.schedule) {
+      final adjusted = RamadanTiming.adjustRange(
+        s.startTime,
+        s.endTime,
+        isRamadan: isRamadan,
+      );
       final normalizedDay = normalizeWeekday(s.day);
       final targetWeekday = dayMap[normalizedDay];
       if (targetWeekday == null) continue;
 
       int daysAhead = (targetWeekday - now.weekday + 7) % 7;
 
-      final parsed = _parse24h(s.startTime);
+      final parsed = _parse24h(adjusted.startTime);
       if (parsed == null) continue;
       final (h, m) = parsed;
       final startMinutes = h * 60 + m;
@@ -118,7 +129,7 @@ String? _pickNextClassSummary(FriendSchedule friend) {
         final displayDay = shortDay.length > 3
             ? shortDay.substring(0, 3)
             : shortDay;
-        final displayTime = formatTime(s.startTime);
+        final displayTime = formatTime(adjusted.startTime);
         bestLabel = 'Next: ${course.courseCode} $displayDay $displayTime';
       }
     }

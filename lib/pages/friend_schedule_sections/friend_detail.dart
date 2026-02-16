@@ -6,6 +6,7 @@ import 'package:preconnect/pages/friend_schedule_sections/compare_schedules.dart
 import 'package:preconnect/pages/friend_schedule_sections/friend_header.dart';
 import 'package:preconnect/pages/shared_widgets/section_badge.dart';
 import 'package:preconnect/pages/ui_kit.dart';
+import 'package:preconnect/tools/ramadan_timing.dart';
 import 'package:preconnect/tools/time_utils.dart';
 
 class FriendDetailPage extends StatefulWidget {
@@ -14,6 +15,7 @@ class FriendDetailPage extends StatefulWidget {
     required this.friend,
     this.displayName,
     this.isFavorite = false,
+    this.isRamadan = false,
     required this.onToggleFavorite,
     required this.onEditNickname,
     required this.onDelete,
@@ -22,6 +24,7 @@ class FriendDetailPage extends StatefulWidget {
   final FriendSchedule friend;
   final String? displayName;
   final bool isFavorite;
+  final bool isRamadan;
   final Future<void> Function() onToggleFavorite;
   final Future<String?> Function() onEditNickname;
   final Future<bool> Function() onDelete;
@@ -68,6 +71,7 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
             mySchedule: myCourses,
             friendItem: widget.friend,
             myPhotoUrl: myPhotoUrl,
+            isRamadan: widget.isRamadan,
           ),
         ),
       );
@@ -224,6 +228,11 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
 
     for (final course in widget.friend.courses) {
       for (final schedule in course.schedule) {
+        final adjusted = RamadanTiming.adjustRange(
+          schedule.startTime,
+          schedule.endTime,
+          isRamadan: widget.isRamadan,
+        );
         final day = schedule.day.trim().isEmpty
             ? schedule.day
             : schedule.day[0].toUpperCase() +
@@ -233,8 +242,8 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
           'sectionName': course.sectionName,
           'roomNumber': course.roomNumber,
           'faculties': course.faculties,
-          'startTime': schedule.startTime,
-          'endTime': schedule.endTime,
+          'startTime': adjusted.startTime,
+          'endTime': adjusted.endTime,
         });
       }
     }

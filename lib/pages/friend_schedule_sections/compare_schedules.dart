@@ -4,6 +4,7 @@ import 'package:preconnect/model/friend_schedule.dart';
 import 'package:preconnect/pages/friend_schedule_sections/friend_header.dart';
 import 'package:preconnect/pages/shared_widgets/section_badge.dart';
 import 'package:preconnect/pages/ui_kit.dart';
+import 'package:preconnect/tools/ramadan_timing.dart';
 import 'package:preconnect/tools/time_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,11 +14,13 @@ class CompareSchedulesPage extends StatefulWidget {
     required this.mySchedule,
     required this.friendItem,
     this.myPhotoUrl,
+    this.isRamadan = false,
   });
 
   final List<Course>? mySchedule;
   final FriendSchedule friendItem;
   final String? myPhotoUrl;
+  final bool isRamadan;
 
   @override
   State<CompareSchedulesPage> createState() => _CompareSchedulesPageState();
@@ -25,6 +28,7 @@ class CompareSchedulesPage extends StatefulWidget {
   static Map<String, List> compareSchedules(
     List<Course> myCourses,
     List<Course> friendCourses,
+    bool isRamadan,
   ) {
     final freeSlots = <Map<String, dynamic>>[];
     final busySlots = <Map<String, dynamic>>[];
@@ -42,8 +46,8 @@ class CompareSchedulesPage extends StatefulWidget {
       if (friendCodes.contains(code)) commonClasses.add(code);
     }
 
-    final myScheduleMap = _buildScheduleMap(myCourses);
-    final friendScheduleMap = _buildScheduleMap(friendCourses);
+    final myScheduleMap = _buildScheduleMap(myCourses, isRamadan);
+    final friendScheduleMap = _buildScheduleMap(friendCourses, isRamadan);
 
     const days = [
       'Saturday',
@@ -91,16 +95,22 @@ class CompareSchedulesPage extends StatefulWidget {
 
   static Map<String, List<Map<String, String>>> _buildScheduleMap(
     List<Course> courses,
+    bool isRamadan,
   ) {
     final map = <String, List<Map<String, String>>>{};
 
     for (final course in courses) {
       for (final schedule in course.schedule) {
+        final adjusted = RamadanTiming.adjustRange(
+          schedule.startTime,
+          schedule.endTime,
+          isRamadan: isRamadan,
+        );
         final day = _normalizeDay(schedule.day);
         if (day.isEmpty) continue;
         map.putIfAbsent(day, () => []).add({
-          'startTime': schedule.startTime,
-          'endTime': schedule.endTime,
+          'startTime': adjusted.startTime,
+          'endTime': adjusted.endTime,
         });
       }
     }
@@ -446,6 +456,7 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
     final comparison = CompareSchedulesPage.compareSchedules(
       widget.mySchedule!,
       widget.friendItem.courses,
+      widget.isRamadan,
     );
     final freeSlots =
         (comparison['freeSlots'] ?? const <Map<String, dynamic>>[])

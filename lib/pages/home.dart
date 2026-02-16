@@ -20,6 +20,7 @@ import 'package:preconnect/pages/shared_widgets/section_badge.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/cached_image.dart';
+import 'package:preconnect/tools/ramadan_timing.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
 import 'package:preconnect/tools/time_utils.dart';
@@ -259,11 +260,17 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     final scheduleFuture = forceRefresh
         ? BracuAuthManager().fetchStudentSchedule()
         : BracuAuthManager().getStudentSchedule();
+    final ramadanFuture = RamadanTiming.isRamadan(forceRefresh: forceRefresh);
 
-    final results = await Future.wait<dynamic>([profileFuture, scheduleFuture]);
+    final results = await Future.wait<dynamic>([
+      profileFuture,
+      scheduleFuture,
+      ramadanFuture,
+    ]);
 
     Map<String, String?>? profile = results[0] as Map<String, String?>?;
     String? scheduleJson = results[1] as String?;
+    final isRamadan = results[2] as bool;
 
     if (!forceRefresh) {
       profile ??= await BracuAuthManager().fetchProfile();
@@ -280,11 +287,16 @@ class _HomeDashboardState extends State<_HomeDashboard> {
       sections.addAll(decoded);
       for (final section in decoded) {
         for (final s in section.sectionSchedule.classSchedules) {
+          final adjusted = RamadanTiming.adjustRange(
+            s.startTime,
+            s.endTime,
+            isRamadan: isRamadan,
+          );
           entries.add(
             _ScheduleEntry(
               day: s.day,
-              startTime: s.startTime,
-              endTime: s.endTime,
+              startTime: adjusted.startTime,
+              endTime: adjusted.endTime,
               courseCode: section.courseCode,
               sectionName: section.sectionName,
               roomNumber: section.roomNumber,
@@ -299,6 +311,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
       entries: entries,
       photoUrl: photoUrl,
       sections: sections,
+      isRamadan: isRamadan,
     );
   }
 
@@ -439,6 +452,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                     builder: (context, snapshot) {
                       final profile = snapshot.data?.profile ?? {};
                       final photoUrl = snapshot.data?.photoUrl;
+                      final isRamadan = snapshot.data?.isRamadan ?? false;
                       final today = _todayName();
                       final todayDate = DateFormat(
                         'd MMMM, y',
@@ -544,6 +558,33 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                 ),
                               ),
                               const SizedBox(height: 12),
+                              if (isRamadan)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: BracuCard(
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.access_time_filled_rounded,
+                                          color: BracuPalette.accent,
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            'Ramadan class timing is active.',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: BracuPalette.textSecondary(
+                                                context,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               if (todayEntries.isEmpty)
                                 InkWell(
                                   onTap: () => widget.onNavigate(
@@ -1139,12 +1180,14 @@ class _HomeData {
     required this.entries,
     required this.photoUrl,
     required this.sections,
+    required this.isRamadan,
   });
 
   final Map<String, String?>? profile;
   final List<_ScheduleEntry> entries;
   final String? photoUrl;
   final List<section.Section> sections;
+  final bool isRamadan;
 }
 
 class _ScheduleEntry {

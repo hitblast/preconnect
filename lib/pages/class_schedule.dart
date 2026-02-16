@@ -6,6 +6,7 @@ import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/shared_widgets/section_badge.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
+import 'package:preconnect/tools/ramadan_timing.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
 import 'package:preconnect/tools/time_utils.dart';
 
@@ -84,6 +85,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
   }
 
   Future<_ScheduleData> _loadSchedule({bool forceRefresh = false}) async {
+    final ramadanFuture = RamadanTiming.isRamadan(forceRefresh: forceRefresh);
     if (forceRefresh) {
       await BracuAuthManager().fetchStudentSchedule();
     } else {
@@ -91,9 +93,15 @@ class _ClassScheduleState extends State<ClassSchedule> {
     }
     final jsonString = await BracuAuthManager().getStudentSchedule();
     if (jsonString == null || jsonString.trim().isEmpty) {
-      return _ScheduleData(grouped: {}, nextSchedule: null);
+      final isRamadan = await ramadanFuture;
+      return _ScheduleData(
+        grouped: {},
+        nextSchedule: null,
+        isRamadan: isRamadan,
+      );
     }
 
+    final isRamadan = await ramadanFuture;
     final decoded = jsonDecode(jsonString) as List<dynamic>;
     final sections = decoded.map((e) => section.Section.fromJson(e)).toList();
 
@@ -118,6 +126,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
           day: classSchedule.day,
           startTime: classSchedule.startTime,
           endTime: classSchedule.endTime,
+          isRamadan: isRamadan,
           now: now,
           nowMinutes: nowMinutes,
         );
@@ -133,15 +142,35 @@ class _ClassScheduleState extends State<ClassSchedule> {
       entries.sort((a, b) {
         final aSchedule = a["schedule"] as section.ClassSchedule;
         final bSchedule = b["schedule"] as section.ClassSchedule;
-        final aStart = _timeToMinutes(aSchedule.startTime);
-        final bStart = _timeToMinutes(bSchedule.startTime);
+        final aStart = RamadanTiming.effectiveStartMinutes(
+          aSchedule.startTime,
+          aSchedule.endTime,
+          isRamadan: isRamadan,
+        );
+        final bStart = RamadanTiming.effectiveStartMinutes(
+          bSchedule.startTime,
+          bSchedule.endTime,
+          isRamadan: isRamadan,
+        );
         if (aStart != bStart) return aStart.compareTo(bStart);
-        final aEnd = _timeToMinutes(aSchedule.endTime);
-        final bEnd = _timeToMinutes(bSchedule.endTime);
+        final aEnd = RamadanTiming.effectiveEndMinutes(
+          aSchedule.startTime,
+          aSchedule.endTime,
+          isRamadan: isRamadan,
+        );
+        final bEnd = RamadanTiming.effectiveEndMinutes(
+          bSchedule.startTime,
+          bSchedule.endTime,
+          isRamadan: isRamadan,
+        );
         return aEnd.compareTo(bEnd);
       });
     }
-    return _ScheduleData(grouped: grouped, nextSchedule: nextSchedule);
+    return _ScheduleData(
+      grouped: grouped,
+      nextSchedule: nextSchedule,
+      isRamadan: isRamadan,
+    );
   }
 
   Future<void> _handleRefresh({bool notify = true}) async {
@@ -163,6 +192,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
     required String day,
     required String startTime,
     required String endTime,
+    required bool isRamadan,
     required DateTime now,
     required int nowMinutes,
   }) {
@@ -178,12 +208,18 @@ class _ClassScheduleState extends State<ClassSchedule> {
     final targetWeekday = dayMap[day.toUpperCase()];
     if (targetWeekday == null) return null;
 
-    final startParsed = BracuTime.parseHourMinute(startTime);
+    final adjusted = RamadanTiming.adjustRange(
+      startTime,
+      endTime,
+      isRamadan: isRamadan,
+    );
+
+    final startParsed = BracuTime.parseHourMinute(adjusted.startTime);
     if (startParsed == null) return null;
     final (startHour, startMinute) = startParsed;
     final startMinutes = startHour * 60 + startMinute;
 
-    final endParsed = BracuTime.parseHourMinute(endTime);
+    final endParsed = BracuTime.parseHourMinute(adjusted.endTime);
     final endHour = endParsed?.$1 ?? 0;
     final endMinute = endParsed?.$2 ?? 0;
     final endMinutes = endHour * 60 + endMinute;
@@ -200,10 +236,6 @@ class _ClassScheduleState extends State<ClassSchedule> {
     }
     final date = now.add(Duration(days: daysAhead));
     return DateTime(date.year, date.month, date.day, startHour, startMinute);
-  }
-
-  int _timeToMinutes(String time) {
-    return BracuTime.toMinutes(time) ?? 0;
   }
 
   @override
@@ -244,6 +276,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
 
           final grouped = snapshot.data?.grouped ?? {};
           final nextSchedule = snapshot.data?.nextSchedule;
+          final isRamadan = snapshot.data?.isRamadan ?? false;
           if (grouped.isEmpty) {
             return RefreshIndicator(
               onRefresh: _handleRefresh,
@@ -271,6 +304,34 @@ class _ClassScheduleState extends State<ClassSchedule> {
           days = days.where((day) => keys.contains(day)).toList();
 
           final children = <Widget>[];
+          if (isRamadan) {
+            children.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: BracuCard(
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.access_time_filled_rounded,
+                        size: 18,
+                        color: BracuPalette.accent,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Ramadan timing is active for mapped class slots.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: BracuPalette.textSecondary(context),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
           String? highlightToken;
           _highlightKey = null;
           for (var i = 0; i < days.length; i++) {
@@ -289,6 +350,11 @@ class _ClassScheduleState extends State<ClassSchedule> {
                     final sectionName = entry["sectionName"];
                     final room = entry["roomNumber"];
                     final faculties = entry["faculties"] as String?;
+                    final adjusted = RamadanTiming.adjustRange(
+                      s.startTime,
+                      s.endTime,
+                      isRamadan: isRamadan,
+                    );
 
                     final isHighlighted = nextSchedule == s;
                     if (isHighlighted) {
@@ -328,7 +394,10 @@ class _ClassScheduleState extends State<ClassSchedule> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        formatTimeRange(s.startTime, s.endTime),
+                                        formatTimeRange(
+                                          adjusted.startTime,
+                                          adjusted.endTime,
+                                        ),
                                         style: TextStyle(
                                           color: BracuPalette.textSecondary(
                                             context,
@@ -410,8 +479,13 @@ class _ClassScheduleState extends State<ClassSchedule> {
 }
 
 class _ScheduleData {
-  const _ScheduleData({required this.grouped, required this.nextSchedule});
+  const _ScheduleData({
+    required this.grouped,
+    required this.nextSchedule,
+    required this.isRamadan,
+  });
 
   final Map<String, List<Map<String, dynamic>>> grouped;
   final section.ClassSchedule? nextSchedule;
+  final bool isRamadan;
 }

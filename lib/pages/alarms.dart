@@ -10,6 +10,7 @@ import 'package:preconnect/api/bracu_auth_manager.dart';
 import 'package:preconnect/model/section_info.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
+import 'package:preconnect/tools/ramadan_timing.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
 import 'package:preconnect/tools/time_utils.dart';
 
@@ -21,14 +22,14 @@ class AlarmPage extends StatefulWidget {
 }
 
 class _AlarmPageState extends State<AlarmPage> {
-  late Future<List<Section>> _futureSections;
+  late Future<_AlarmData> _futureData;
   final Map<String, int> _minutesBefore = {};
 
   @override
   void initState() {
     super.initState();
     unawaited(BracuAuthManager().fetchStudentSchedule());
-    _futureSections = _fetchSchedule();
+    _futureData = _fetchSchedule();
     RefreshBus.instance.addListener(_onRefreshSignal);
   }
 
@@ -46,7 +47,8 @@ class _AlarmPageState extends State<AlarmPage> {
     unawaited(_handleRefresh(notify: false));
   }
 
-  Future<List<Section>> _fetchSchedule({bool forceRefresh = false}) async {
+  Future<_AlarmData> _fetchSchedule({bool forceRefresh = false}) async {
+    final ramadanFuture = RamadanTiming.isRamadan(forceRefresh: forceRefresh);
     if (forceRefresh) {
       await BracuAuthManager().fetchStudentSchedule();
     } else {
@@ -54,11 +56,14 @@ class _AlarmPageState extends State<AlarmPage> {
     }
     final jsonString = await BracuAuthManager().getStudentSchedule();
     if (jsonString == null || jsonString.trim().isEmpty) {
-      return const [];
+      final isRamadan = await ramadanFuture;
+      return _AlarmData(sections: const [], isRamadan: isRamadan);
     }
 
     final decoded = jsonDecode(jsonString) as List<dynamic>;
-    return decoded.map((e) => Section.fromJson(e)).toList();
+    final sections = decoded.map((e) => Section.fromJson(e)).toList();
+    final isRamadan = await ramadanFuture;
+    return _AlarmData(sections: sections, isRamadan: isRamadan);
   }
 
   Future<void> _handleRefresh({bool notify = true}) async {
@@ -66,9 +71,9 @@ class _AlarmPageState extends State<AlarmPage> {
       return;
     }
     setState(() {
-      _futureSections = _fetchSchedule(forceRefresh: true);
+      _futureData = _fetchSchedule(forceRefresh: true);
     });
-    await _futureSections;
+    await _futureData;
   }
 
   Future<void> _setAlarm(
@@ -225,8 +230,8 @@ class _AlarmPageState extends State<AlarmPage> {
       title: 'Set Alarms',
       subtitle: 'Class Reminders',
       icon: Icons.alarm_outlined,
-      body: FutureBuilder<List<Section>>(
-        future: _futureSections,
+      body: FutureBuilder<_AlarmData>(
+        future: _futureData,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return RefreshIndicator(
@@ -255,7 +260,8 @@ class _AlarmPageState extends State<AlarmPage> {
             );
           }
 
-          final sections = snapshot.data ?? [];
+          final sections = snapshot.data?.sections ?? const <Section>[];
+          final isRamadan = snapshot.data?.isRamadan ?? false;
           if (sections.isEmpty) {
             return RefreshIndicator(
               onRefresh: _handleRefresh,
@@ -345,6 +351,11 @@ class _AlarmPageState extends State<AlarmPage> {
                           spacing: 8,
                           runSpacing: 8,
                           children: schedules.map((s) {
+                            final adjusted = RamadanTiming.adjustRange(
+                              s.startTime,
+                              s.endTime,
+                              isRamadan: isRamadan,
+                            );
                             return Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 10,
@@ -355,7 +366,7 @@ class _AlarmPageState extends State<AlarmPage> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
-                                '${s.day} • ${formatTimeRange(s.startTime, s.endTime)}',
+                                '${s.day} • ${formatTimeRange(adjusted.startTime, adjusted.endTime)}',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: textPrimary,
@@ -465,8 +476,12 @@ class _AlarmPageState extends State<AlarmPage> {
                                       .map((s) => s.day)
                                       .toList();
                                   final startTime = schedules.isNotEmpty
-                                      ? schedules.first.startTime
-                                      : "";
+                                      ? RamadanTiming.adjustRange(
+                                          schedules.first.startTime,
+                                          schedules.first.endTime,
+                                          isRamadan: isRamadan,
+                                        ).startTime
+                                      : '';
 
                                   if (startTime.isNotEmpty && days.isNotEmpty) {
                                     await _setAlarm(
@@ -495,4 +510,11 @@ class _AlarmPageState extends State<AlarmPage> {
       ),
     );
   }
+}
+
+class _AlarmData {
+  const _AlarmData({required this.sections, required this.isRamadan});
+
+  final List<Section> sections;
+  final bool isRamadan;
 }

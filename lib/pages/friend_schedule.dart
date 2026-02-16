@@ -16,6 +16,7 @@ import 'package:preconnect/pages/friend_schedule_sections/schedule_list.dart';
 import 'package:preconnect/pages/friend_schedule_sections/friend_detail.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
+import 'package:preconnect/tools/ramadan_timing.dart';
 
 class FriendSchedulePage extends StatefulWidget {
   const FriendSchedulePage({super.key, required this.onNavigate});
@@ -33,6 +34,7 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
   final TextEditingController _searchController = TextEditingController();
   bool _isPicking = false;
   String _searchQuery = '';
+  bool _isRamadan = false;
 
   @override
   void initState() {
@@ -71,6 +73,7 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
   }
 
   Future<void> _loadSchedules() async {
+    final ramadanFuture = RamadanTiming.isRamadan();
     final prefs = await SharedPreferences.getInstance();
     final List<String>? encodedList = prefs.getStringList("friendSchedules");
 
@@ -89,7 +92,14 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
       }
     }
 
-    if (encodedList == null) return;
+    final isRamadan = await ramadanFuture;
+    if (encodedList == null) {
+      if (!mounted) return;
+      setState(() {
+        _isRamadan = isRamadan;
+      });
+      return;
+    }
 
     List<FriendScheduleItem> allSchedules = [];
     List<String> validEntries = [];
@@ -124,6 +134,7 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
 
     setState(() {
       decodedSchedules = allSchedules;
+      _isRamadan = isRamadan;
     });
   }
 
@@ -679,6 +690,7 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
               ..._filteredSchedules.map(
                 (item) => FriendScheduleSection(
                   item: item,
+                  isRamadan: _isRamadan,
                   showActions: false,
                   onTap: () {
                     Navigator.push(
@@ -688,6 +700,7 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
                           friend: item.friend,
                           displayName: item.displayName,
                           isFavorite: item.isFavorite,
+                          isRamadan: _isRamadan,
                           onToggleFavorite: () async => _toggleFavorite(item),
                           onEditNickname: () async => _editNickname(item),
                           onDelete: () async => _deleteFriendSchedule(item),
