@@ -7,7 +7,7 @@ import 'package:preconnect/model/payment_info.dart';
 import 'package:preconnect/model/attendance_info.dart';
 import 'package:preconnect/pages/card_section.dart';
 import 'package:preconnect/pages/student_profile_sections/academic_summary.dart';
-import 'package:preconnect/pages/student_profile_sections/attendance_graph.dart';
+import 'package:preconnect/pages/student_profile_sections/attendance_summary.dart';
 import 'package:preconnect/pages/student_profile_sections/payment_graph.dart';
 import 'package:preconnect/pages/student_profile_sections/payment_list.dart';
 import 'package:preconnect/pages/ui_kit.dart';
@@ -253,10 +253,10 @@ class _StudentProfileState extends State<StudentProfile>
             const SizedBox(height: 18),
             const BracuSectionTitle(title: 'Attendance'),
             const SizedBox(height: 10),
-            _attendances.isEmpty
-                ? const SizedBox.shrink()
-                : AttendanceGraph(attendances: _attendances),
-            if (_attendances.isNotEmpty) const SizedBox(height: 12),
+            if (_attendances.isNotEmpty) ...[
+              AttendanceSummary(attendances: _attendances),
+              const SizedBox(height: 12),
+            ],
             const SizedBox(height: 18),
             const BracuSectionTitle(title: 'Payments'),
             const SizedBox(height: 10),
