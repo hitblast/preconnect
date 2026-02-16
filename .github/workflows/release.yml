@@ -490,22 +490,48 @@ jobs:
           fi
 
           NOTES_DIR="play-whatsnew"
+          rm -rf "$NOTES_DIR"
           mkdir -p "$NOTES_DIR"
 
-          NOTES=$(if [ "$RANGE" = "HEAD" ]; then
-            git log --max-count=8 --pretty=format:'- %s'
+          RAW_NOTES=$(if [ "$RANGE" = "HEAD" ]; then
+            git log --max-count=8 --pretty=format:'%s'
           else
-            git log "$RANGE" --max-count=8 --pretty=format:'- %s'
+            git log "$RANGE" --max-count=8 --pretty=format:'%s'
           fi)
+
+          # Normalize commit subjects into clean bullet points for Google Play.
+          NOTES=$(printf '%s\n' "$RAW_NOTES" \
+            | sed -E 's/[[:space:]]+-[[:space:]]+/\n/g' \
+            | sed -E 's/^[[:space:]]*-[[:space:]]*//' \
+            | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
+            | sed -E '/^<\/?[[:alpha:]]{2}(-[[:alnum:]]{2,8})?>$/d' \
+            | sed -E '/^Enter or paste your release notes for .* here$/d' \
+            | awk 'NF { print "- " $0 }' \
+            | awk '!seen[$0]++')
 
           if [ -z "$NOTES" ]; then
             NOTES="- Maintenance updates and bug fixes."
           fi
 
           # Google Play "What's new" has short per-locale limits.
-          NOTES=$(printf '%s' "$NOTES" | head -c 480)
+          NOTES=$(printf '%s\n' "$NOTES" | awk -v max=480 '
+            BEGIN { len = 0 }
+            {
+              add = length($0) + (len > 0 ? 1 : 0)
+              if (len + add <= max) {
+                if (len > 0) printf "\n"
+                printf "%s", $0
+                len += add
+              } else {
+                exit
+              }
+            }
+            END {
+              if (len > 0) printf "\n"
+            }
+          ')
 
-          printf '%s\n' "$NOTES" > "$NOTES_DIR/whatsnew-en-US"
+          printf '%s' "$NOTES" > "$NOTES_DIR/whatsnew-en-US"
 
           echo "dir=$NOTES_DIR" >> "$GITHUB_OUTPUT"
 
