@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:preconnect/tools/cached_image.dart';
+import 'package:preconnect/tools/profile_image_cache.dart';
 import 'package:preconnect/tools/token_storage.dart';
 
 class BracuAuthManager {
@@ -24,25 +26,24 @@ class BracuAuthManager {
       final refreshToken = await _storage.read(key: 'refresh_token');
 
       if (refreshToken != null && refreshToken.isNotEmpty) {
-        final response = await http.post(
+        await http.post(
           Uri.parse(endSessionEndpoint),
           headers: {'Content-Type': 'application/x-www-form-urlencoded'},
           body: {'client_id': 'slm', 'refresh_token': refreshToken},
         );
-
-        if (response.statusCode != 204) {}
       }
-
-      await _storage.deleteAll();
-      await _clearCachedData();
-    } catch (e) {
-      return;
-    }
+    } catch (_) {}
+    await _clearLocalSessionData();
   }
 
-  Future<void> _clearCachedData() async {
+  Future<void> _clearLocalSessionData() async {
+    await _storage.deleteAll();
+    final asyncPrefs = SharedPreferencesAsync();
+    await asyncPrefs.clear();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+    await ProfileImageCache.instance.clear();
+    CachedImage.clearMemoryCache();
   }
 
   Future<bool> refreshToken() async {
@@ -364,6 +365,12 @@ class BracuAuthManager {
   }) async {
     final SharedPreferencesAsync asyncPrefs = SharedPreferencesAsync();
     final String? id = await asyncPrefs.getString('id');
+    if (id == null || id.isEmpty) {
+      if (fromGet) {
+        return null;
+      }
+      return getPaymentInfo(fromFetch: true);
+    }
     final paymentUrl =
         'https://connect.bracu.ac.bd/api/fin/v1/payment/portfolio/$id?paymentTypes=ADMISSION_FEE&paymentTypes=REGISTRATION_FEE&paymentTypes=MAKEUP_EXAM_FEE&paymentTypes=DEPARTMENT_CHANGE_FEE&paymentTypes=ACCOMMODATION_FEE&paymentTypes=PRE_UNIVERSITY_FEE&paymentTypes=LIBRARY_FINE_FEE&paymentTypes=SHORT_COURSE_FEE&paymentTypes=CERTIFICATE_COURSE_FEE&paymentTypes=VISITING_STUDENT_ADMISSION_FEE&paymentTypes=ADDED_COURSE_FEE&paymentTypes=OTHER_FEE';
 
@@ -450,6 +457,12 @@ class BracuAuthManager {
   }) async {
     final SharedPreferencesAsync asyncPrefs = SharedPreferencesAsync();
     final String? studentId = await asyncPrefs.getString('studentId');
+    if (studentId == null || studentId.isEmpty) {
+      if (fromGet) {
+        return null;
+      }
+      return getAdvisingInfo(fromFetch: true);
+    }
     final advisingUrl =
         'https://connect.bracu.ac.bd/api/adv/v1/advising/$studentId/active-advising-sessions?advisingPhase=PHASE_ONE&advisingPhase=PHASE_TWO&advisingPhase=SELF_REGISTRATION';
 
@@ -602,10 +615,13 @@ class BracuAuthManager {
   }) async {
     final SharedPreferencesAsync asyncPrefs = SharedPreferencesAsync();
     String? id = await asyncPrefs.getString('id');
-
-    while (id == null) {
-      await fetchProfile();
+    if (id == null || id.isEmpty) {
+      await fetchProfile(fromGet: true);
       id = await asyncPrefs.getString('id');
+    }
+    if (id == null || id.isEmpty) {
+      if (fromGet) return null;
+      return getStudentSchedule(fromFetch: true);
     }
 
     final String url =
@@ -689,10 +705,13 @@ class BracuAuthManager {
   }) async {
     final SharedPreferencesAsync asyncPrefs = SharedPreferencesAsync();
     String? id = await asyncPrefs.getString('id');
-
-    while (id == null) {
-      await fetchProfile();
+    if (id == null || id.isEmpty) {
+      await fetchProfile(fromGet: true);
       id = await asyncPrefs.getString('id');
+    }
+    if (id == null || id.isEmpty) {
+      if (fromGet) return null;
+      return getAttendanceInfo(fromFetch: true);
     }
 
     final String url =

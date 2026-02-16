@@ -156,6 +156,9 @@ class _LoginPageState extends State<LoginPage> {
       unawaited(BracuAuthManager().getStudentSchedule());
       unawaited(BracuAuthManager().fetchProfile());
       unawaited(BracuAuthManager().fetchStudentSchedule());
+      unawaited(BracuAuthManager().fetchPaymentInfo());
+      unawaited(BracuAuthManager().fetchAttendanceInfo());
+      unawaited(BracuAuthManager().fetchAdvisingInfo());
 
       RefreshBus.instance.notify(reason: 'auth');
       if (mounted) {

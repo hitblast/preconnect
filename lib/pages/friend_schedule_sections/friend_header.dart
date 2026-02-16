@@ -80,13 +80,8 @@ class FriendHeaderCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    friend.id.trim().isEmpty ? 'ID: N/A' : 'ID: ${friend.id}',
-                    style: TextStyle(fontSize: 11, color: textSecondary),
-                  ),
                   if (subtitle != null) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
                       subtitle!,
                       style: TextStyle(fontSize: 11, color: textSecondary),

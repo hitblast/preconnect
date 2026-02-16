@@ -28,6 +28,10 @@ class CachedImage extends StatefulWidget {
   final Widget? error;
   final int maxBytesInPrefs;
 
+  static void clearMemoryCache() {
+    _CachedImageState.clearMemoryCache();
+  }
+
   @override
   State<CachedImage> createState() => _CachedImageState();
 }
@@ -36,6 +40,10 @@ class _CachedImageState extends State<CachedImage> {
   static final Future<SharedPreferences> _prefs =
       SharedPreferences.getInstance();
   static final Map<String, Uint8List> _memoryCache = {};
+
+  static void clearMemoryCache() {
+    _memoryCache.clear();
+  }
 
   Uint8List? _bytes;
   Object? _error;

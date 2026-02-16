@@ -155,10 +155,17 @@ class FriendMetadata {
     };
   }
 
-  FriendMetadata copyWith({String? nickname, bool? isFavorite}) {
+  static const Object _unsetNickname = Object();
+
+  FriendMetadata copyWith({
+    Object? nickname = _unsetNickname,
+    bool? isFavorite,
+  }) {
     return FriendMetadata(
       friendId: friendId,
-      nickname: nickname ?? this.nickname,
+      nickname: identical(nickname, _unsetNickname)
+          ? this.nickname
+          : nickname as String?,
       isFavorite: isFavorite ?? this.isFavorite,
     );
   }

@@ -551,7 +551,8 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                   ),
                                   child: const _ScheduleTile(
                                     title: 'No Class Today',
-                                    subtitle: 'Enjoy your day off or check your schedule',
+                                    subtitle:
+                                        'Enjoy your day off or check your schedule',
                                     badge: '--',
                                     color: _primary,
                                   ),
