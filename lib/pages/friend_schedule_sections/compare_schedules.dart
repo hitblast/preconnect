@@ -229,11 +229,22 @@ class CompareSchedulesPage extends StatefulWidget {
 
 class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
   final Set<String> _pinnedEntries = <String>{};
+  final ScrollController _scrollController = ScrollController();
+  GlobalKey? _highlightKey;
+  String? _lastHighlightKey;
+  bool _didScroll = false;
+  bool _scrollRetry = false;
 
   @override
   void initState() {
     super.initState();
     unawaited(_loadPins());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   String _pinKey() {
@@ -268,6 +279,115 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
       }
     });
     unawaited(_savePins());
+  }
+
+  void _attemptScrollToHighlight() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = _highlightKey?.currentContext;
+      if (context == null) {
+        if (!_scrollRetry) {
+          _scrollRetry = true;
+          _attemptScrollToHighlight();
+        }
+        return;
+      }
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeOutCubic,
+      );
+      _didScroll = true;
+    });
+  }
+
+  int? _weekdayFromDay(String day) {
+    switch (day.trim().toLowerCase()) {
+      case 'monday':
+        return DateTime.monday;
+      case 'tuesday':
+        return DateTime.tuesday;
+      case 'wednesday':
+        return DateTime.wednesday;
+      case 'thursday':
+        return DateTime.thursday;
+      case 'friday':
+        return DateTime.friday;
+      case 'saturday':
+        return DateTime.saturday;
+      case 'sunday':
+        return DateTime.sunday;
+      default:
+        return null;
+    }
+  }
+
+  String? _pickHighlightedEntryKey(List<_DayCompareEntry> entries) {
+    final now = DateTime.now();
+    DateTime? currentEnd;
+    String? currentKey;
+    DateTime? nextStart;
+    String? nextKey;
+
+    for (final entry in entries) {
+      final startMinutes = entry.startMinutes;
+      final endMinutes = entry.endMinutes;
+      final weekday = _weekdayFromDay(entry.day);
+      if (startMinutes == null || endMinutes == null || weekday == null) {
+        continue;
+      }
+
+      var daysAhead = (weekday - now.weekday + 7) % 7;
+      var date = now.add(Duration(days: daysAhead));
+      var start = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        startMinutes ~/ 60,
+        startMinutes % 60,
+      );
+      var end = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        endMinutes ~/ 60,
+        endMinutes % 60,
+      );
+
+      if (daysAhead == 0 && !now.isBefore(end)) {
+        daysAhead = 7;
+        date = now.add(Duration(days: daysAhead));
+        start = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          startMinutes ~/ 60,
+          startMinutes % 60,
+        );
+        end = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          endMinutes ~/ 60,
+          endMinutes % 60,
+        );
+      }
+
+      final isCurrent = !now.isBefore(start) && now.isBefore(end);
+      if (isCurrent) {
+        if (currentEnd == null || end.isBefore(currentEnd)) {
+          currentEnd = end;
+          currentKey = entry.key;
+        }
+      } else if (start.isAfter(now)) {
+        if (nextStart == null || start.isBefore(nextStart)) {
+          nextStart = start;
+          nextKey = entry.key;
+        }
+      }
+    }
+
+    return currentKey ?? nextKey;
   }
 
   List<_DayCompareEntry> _buildEntries(
@@ -469,6 +589,18 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
 
     final entries = _buildEntries(freeSlots, busySlots, commonClasses);
     final grouped = _groupByDay(entries);
+    final highlightedEntryKey = _pickHighlightedEntryKey(entries);
+    _highlightKey = null;
+
+    if (highlightedEntryKey != null &&
+        highlightedEntryKey != _lastHighlightKey) {
+      _lastHighlightKey = highlightedEntryKey;
+      _didScroll = false;
+      _scrollRetry = false;
+    }
+    if (!_didScroll && highlightedEntryKey != null) {
+      _attemptScrollToHighlight();
+    }
 
     return Scaffold(
       body: BracuPageScaffold(
@@ -476,6 +608,7 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
         subtitle: subtitle,
         icon: Icons.compare_arrows_rounded,
         body: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(20),
           children: [
             _buildPeopleCard(context),
@@ -492,7 +625,17 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
                 );
                 for (final item in entry.value) {
                   final pinned = _pinnedEntries.contains(item.key);
-                  yield _buildEntryCard(context, item, pinned);
+                  final isHighlighted = item.key == highlightedEntryKey;
+                  if (isHighlighted) {
+                    _highlightKey ??= GlobalKey();
+                  }
+                  yield _buildEntryCard(
+                    context,
+                    item,
+                    pinned,
+                    isHighlighted: isHighlighted,
+                    highlightKey: isHighlighted ? _highlightKey : null,
+                  );
                 }
                 yield const SizedBox(height: 8);
               }),
@@ -578,8 +721,10 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
   Widget _buildEntryCard(
     BuildContext context,
     _DayCompareEntry item,
-    bool isPinned,
-  ) {
+    bool isPinned, {
+    required bool isHighlighted,
+    GlobalKey? highlightKey,
+  }) {
     final (badgeLabel, color) = switch (item.type) {
       _CompareType.free => ('FR', BracuPalette.accent),
       _CompareType.busy => ('BZ', BracuPalette.warning),
@@ -589,6 +734,9 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: BracuCard(
+        key: highlightKey,
+        isHighlighted: isHighlighted,
+        highlightColor: BracuPalette.primary,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

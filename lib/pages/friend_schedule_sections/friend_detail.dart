@@ -38,6 +38,17 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
   late String? _displayName = widget.displayName?.trim().isNotEmpty == true
       ? widget.displayName
       : null;
+  final ScrollController _scrollController = ScrollController();
+  GlobalKey? _highlightKey;
+  String? _lastHighlightKey;
+  bool _didScroll = false;
+  bool _scrollRetry = false;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   Future<List<Course>?> _loadMyCourses() async {
     final jsonString = await BracuAuthManager().getStudentSchedule();
@@ -91,6 +102,117 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
         .encode(utf8.encode(photoFilePath))
         .replaceAll('=', '');
     return 'https://connect.bracu.ac.bd/cdn/img/thumb/$encoded.jpg';
+  }
+
+  void _attemptScrollToHighlight() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = _highlightKey?.currentContext;
+      if (context == null) {
+        if (!_scrollRetry) {
+          _scrollRetry = true;
+          _attemptScrollToHighlight();
+        }
+        return;
+      }
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeOutCubic,
+      );
+      _didScroll = true;
+    });
+  }
+
+  int? _weekdayFromDay(String day) {
+    switch (day.trim().toLowerCase()) {
+      case 'monday':
+        return DateTime.monday;
+      case 'tuesday':
+        return DateTime.tuesday;
+      case 'wednesday':
+        return DateTime.wednesday;
+      case 'thursday':
+        return DateTime.thursday;
+      case 'friday':
+        return DateTime.friday;
+      case 'saturday':
+        return DateTime.saturday;
+      case 'sunday':
+        return DateTime.sunday;
+      default:
+        return null;
+    }
+  }
+
+  String? _pickHighlightedEntryKey(List<Map<String, dynamic>> flatEntries) {
+    final now = DateTime.now();
+    DateTime? currentEnd;
+    String? currentKey;
+    DateTime? nextStart;
+    String? nextKey;
+
+    for (final entry in flatEntries) {
+      final day = entry['day']?.toString() ?? '';
+      final start = _timeToMinutes(entry['startTime']?.toString());
+      final end = _timeToMinutes(entry['endTime']?.toString());
+      final key = entry['entryKey']?.toString();
+      final weekday = _weekdayFromDay(day);
+      if (key == null || weekday == null || start == null || end == null) {
+        continue;
+      }
+
+      var daysAhead = (weekday - now.weekday + 7) % 7;
+      var date = now.add(Duration(days: daysAhead));
+      var startTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        start ~/ 60,
+        start % 60,
+      );
+      var endTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        end ~/ 60,
+        end % 60,
+      );
+
+      if (daysAhead == 0 && !now.isBefore(endTime)) {
+        daysAhead = 7;
+        date = now.add(Duration(days: daysAhead));
+        startTime = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          start ~/ 60,
+          start % 60,
+        );
+        endTime = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          end ~/ 60,
+          end % 60,
+        );
+      }
+
+      final isCurrent = !now.isBefore(startTime) && now.isBefore(endTime);
+      if (isCurrent) {
+        if (currentEnd == null || endTime.isBefore(currentEnd)) {
+          currentEnd = endTime;
+          currentKey = key;
+        }
+      } else if (startTime.isAfter(now)) {
+        if (nextStart == null || startTime.isBefore(nextStart)) {
+          nextStart = startTime;
+          nextKey = key;
+        }
+      }
+    }
+
+    return currentKey ?? nextKey;
   }
 
   @override
@@ -155,6 +277,7 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
           ),
         ],
         body: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(20),
           children: [
             BracuCard(
@@ -225,6 +348,7 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
 
   List<Widget> _buildScheduleByDay(BuildContext context) {
     final Map<String, List<Map<String, dynamic>>> grouped = {};
+    final flatEntries = <Map<String, dynamic>>[];
 
     for (final course in widget.friend.courses) {
       for (final schedule in course.schedule) {
@@ -238,12 +362,22 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
             : schedule.day[0].toUpperCase() +
                   schedule.day.substring(1).toLowerCase();
         grouped.putIfAbsent(day, () => []).add({
+          'day': day,
           'courseCode': course.courseCode,
           'sectionName': course.sectionName,
           'roomNumber': course.roomNumber,
           'faculties': course.faculties,
           'startTime': adjusted.startTime,
           'endTime': adjusted.endTime,
+          'entryKey':
+              '$day|${course.courseCode}|${adjusted.startTime}|${adjusted.endTime}',
+        });
+        flatEntries.add({
+          'day': day,
+          'startTime': adjusted.startTime,
+          'endTime': adjusted.endTime,
+          'entryKey':
+              '$day|${course.courseCode}|${adjusted.startTime}|${adjusted.endTime}',
         });
       }
     }
@@ -260,14 +394,16 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
     final sortedDays = orderedDays.where(grouped.containsKey).toList();
 
     final widgets = <Widget>[];
+    final highlightedEntryKey = _pickHighlightedEntryKey(flatEntries);
+    _highlightKey = null;
     for (final day in sortedDays) {
       final entries = grouped[day]!;
       entries.sort((a, b) {
-        final aStart = _timeToMinutes(a['startTime']?.toString());
-        final bStart = _timeToMinutes(b['startTime']?.toString());
+        final aStart = _timeToMinutes(a['startTime']?.toString()) ?? 24 * 60;
+        final bStart = _timeToMinutes(b['startTime']?.toString()) ?? 24 * 60;
         if (aStart != bStart) return aStart.compareTo(bStart);
-        final aEnd = _timeToMinutes(a['endTime']?.toString());
-        final bEnd = _timeToMinutes(b['endTime']?.toString());
+        final aEnd = _timeToMinutes(a['endTime']?.toString()) ?? 24 * 60;
+        final bEnd = _timeToMinutes(b['endTime']?.toString()) ?? 24 * 60;
         if (aEnd != bEnd) return aEnd.compareTo(bEnd);
         return (a['courseCode']?.toString() ?? '').compareTo(
           b['courseCode']?.toString() ?? '',
@@ -283,6 +419,11 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
               (entry) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: BracuCard(
+                  key: entry['entryKey'] == highlightedEntryKey
+                      ? (_highlightKey ??= GlobalKey())
+                      : null,
+                  isHighlighted: entry['entryKey'] == highlightedEntryKey,
+                  highlightColor: BracuPalette.primary,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -357,10 +498,19 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
         ),
       );
     }
+    if (highlightedEntryKey != null &&
+        highlightedEntryKey != _lastHighlightKey) {
+      _lastHighlightKey = highlightedEntryKey;
+      _didScroll = false;
+      _scrollRetry = false;
+    }
+    if (!_didScroll && highlightedEntryKey != null) {
+      _attemptScrollToHighlight();
+    }
     return widgets;
   }
 
-  int _timeToMinutes(String? raw) {
-    return BracuTime.toMinutes(raw) ?? 24 * 60;
+  int? _timeToMinutes(String? raw) {
+    return BracuTime.toMinutes(raw);
   }
 }

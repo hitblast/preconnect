@@ -5,5 +5,6 @@ import 'app.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  runApp(const MyApp());
+  final bootstrapState = await MyApp.bootstrap();
+  runApp(MyApp(bootstrapState: bootstrapState));
 }

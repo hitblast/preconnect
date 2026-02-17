@@ -176,7 +176,7 @@ class _HomePageState extends State<HomePage> {
       await BracuAuthManager().logout();
       RefreshBus.instance.notify(reason: 'auth');
       if (!context.mounted) return;
-      Navigator.pushReplacementNamed(context, '/login');
+      Navigator.pushReplacementNamed(context, '/onboarding');
     }
   }
 

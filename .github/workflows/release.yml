@@ -482,36 +482,11 @@ jobs:
         id: play_notes
         shell: bash
         run: |
-          LAST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)
-          if [ -n "$LAST_TAG" ]; then
-            RANGE="$LAST_TAG..HEAD"
-          else
-            RANGE="HEAD"
-          fi
-
           NOTES_DIR="play-whatsnew"
           rm -rf "$NOTES_DIR"
           mkdir -p "$NOTES_DIR"
 
-          RAW_NOTES=$(if [ "$RANGE" = "HEAD" ]; then
-            git log --max-count=8 --pretty=format:'%s'
-          else
-            git log "$RANGE" --max-count=8 --pretty=format:'%s'
-          fi)
-
-          # Normalize commit subjects into clean bullet points for Google Play.
-          NOTES=$(printf '%s\n' "$RAW_NOTES" \
-            | sed -E 's/[[:space:]]+-[[:space:]]+/\n/g' \
-            | sed -E 's/^[[:space:]]*-[[:space:]]*//' \
-            | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
-            | sed -E '/^<\/?[[:alpha:]]{2}(-[[:alnum:]]{2,8})?>$/d' \
-            | sed -E '/^Enter or paste your release notes for .* here$/d' \
-            | awk 'NF { print "- " $0 }' \
-            | awk '!seen[$0]++')
-
-          if [ -z "$NOTES" ]; then
-            NOTES="- Maintenance updates and bug fixes."
-          fi
+          NOTES="Automated publishing for version ${{ steps.android_meta.outputs.version_name }}+${{ steps.android_meta.outputs.version_code }}."
 
           # Google Play "What's new" has short per-locale limits.
           NOTES=$(printf '%s\n' "$NOTES" | awk -v max=480 '

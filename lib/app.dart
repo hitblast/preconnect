@@ -6,9 +6,40 @@ import 'package:preconnect/api/bracu_auth_manager.dart';
 import 'package:preconnect/pages/home.dart';
 import 'package:preconnect/pages/login.dart';
 import 'package:preconnect/pages/onboarding.dart';
+import 'package:preconnect/tools/token_storage.dart';
+
+class AppBootstrapState {
+  const AppBootstrapState({required this.themeMode, required this.isLoggedIn});
+
+  final ThemeMode themeMode;
+  final bool isLoggedIn;
+}
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.bootstrapState});
+
+  final AppBootstrapState bootstrapState;
+
+  static Future<AppBootstrapState> bootstrap() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedTheme = prefs.getString('themeMode') ?? 'system';
+    final token = await TokenStorage.instance.read(key: 'access_token');
+    return AppBootstrapState(
+      themeMode: _decodeTheme(savedTheme),
+      isLoggedIn: token != null && token.isNotEmpty,
+    );
+  }
+
+  static ThemeMode _decodeTheme(String raw) {
+    switch (raw) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      default:
+        return ThemeMode.system;
+    }
+  }
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -16,9 +47,10 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   late final ValueNotifier<ThemeMode> _themeMode = ValueNotifier<ThemeMode>(
-    ThemeMode.system,
+    widget.bootstrapState.themeMode,
   );
-  late final Future<_StartupState> _startupFuture = _bootstrap();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  late final bool _initialLoggedIn = widget.bootstrapState.isLoggedIn;
   Future<void>? _updateCheckInFlight;
 
   @override
@@ -27,6 +59,9 @@ class _MyAppState extends State<MyApp> {
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _maybeCheckForUpdates();
+      if (_initialLoggedIn) {
+        _validateSessionInBackground();
+      }
     });
   }
 
@@ -40,17 +75,6 @@ class _MyAppState extends State<MyApp> {
     onResumed: _maybeCheckForUpdates,
   );
 
-  ThemeMode _decodeTheme(String raw) {
-    switch (raw) {
-      case 'light':
-        return ThemeMode.light;
-      case 'dark':
-        return ThemeMode.dark;
-      default:
-        return ThemeMode.system;
-    }
-  }
-
   Future<void> _persistTheme(ThemeMode mode) async {
     final prefs = await SharedPreferences.getInstance();
     final value = switch (mode) {
@@ -61,17 +85,17 @@ class _MyAppState extends State<MyApp> {
     await prefs.setString('themeMode', value);
   }
 
-  Future<_StartupState> _bootstrap() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedTheme = prefs.getString('themeMode') ?? 'system';
-    _themeMode.value = _decodeTheme(savedTheme);
-
-    final loggedIn = await BracuAuthManager().ensureSignedIn().timeout(
+  Future<void> _validateSessionInBackground() async {
+    final signedIn = await BracuAuthManager().ensureSignedIn().timeout(
       const Duration(seconds: 10),
-      onTimeout: () => false,
+      onTimeout: () => true,
     );
-
-    return _StartupState(isLoggedIn: loggedIn);
+    if (!signedIn && mounted) {
+      _navigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const OnboardingPage()),
+        (route) => false,
+      );
+    }
   }
 
   Future<void> _maybeCheckForUpdates() async {
@@ -144,51 +168,15 @@ class _MyAppState extends State<MyApp> {
             builder: (context, child) {
               return child ?? const SizedBox.shrink();
             },
+            navigatorKey: _navigatorKey,
             routes: {
               '/login': (context) => const LoginPage(),
               '/home': (context) => const HomePage(),
+              '/onboarding': (context) => const OnboardingPage(),
             },
-            home: _AppGate(startupFuture: _startupFuture),
+            home: _initialLoggedIn ? const HomePage() : const OnboardingPage(),
           ),
         );
-      },
-    );
-  }
-}
-
-class _StartupState {
-  const _StartupState({required this.isLoggedIn});
-
-  final bool isLoggedIn;
-}
-
-class _AppGate extends StatelessWidget {
-  const _AppGate({required this.startupFuture});
-
-  final Future<_StartupState> startupFuture;
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<_StartupState>(
-      future: startupFuture,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const Scaffold(
-            body: Center(
-              child: Text('Startup failed. Please restart the app.'),
-            ),
-          );
-        }
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final isLoggedIn = snapshot.data?.isLoggedIn;
-        if (isLoggedIn == true) {
-          return const HomePage();
-        }
-        return const OnboardingPage();
       },
     );
   }
