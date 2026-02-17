@@ -225,7 +225,7 @@ class _InfoLine extends StatelessWidget {
 
 String _formatPaymentType(String raw) {
   final cleaned = raw.trim();
-  if (cleaned.isEmpty) return 'N/A';
+  if (cleaned.isEmpty) return '';
   final words = cleaned.split('_').where((w) => w.trim().isNotEmpty).toList();
   if (words.isEmpty) return cleaned;
   return words

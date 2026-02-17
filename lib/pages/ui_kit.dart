@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:preconnect/tools/time_utils.dart';
 
 String formatDate(String? input) {
-  if (input == null || input.trim().isEmpty) return 'N/A';
+  if (input == null || input.trim().isEmpty) return '';
   final raw = input.trim();
   final candidates = <DateFormat>[
     DateFormat('yyyy-MM-dd'),
@@ -120,9 +120,9 @@ String formatWeekdayTitle(String? day) {
 }
 
 String formatSemesterTitle(String? raw) {
-  if (raw == null) return 'N/A';
+  if (raw == null) return '';
   final cleaned = raw.trim();
-  if (cleaned.isEmpty || cleaned == 'N/A') return 'N/A';
+  if (cleaned.isEmpty || cleaned == 'N/A' || cleaned == '-') return '';
   final normalized = cleaned.replaceAll(RegExp(r'[_-]+'), ' ');
   final parts = normalized.split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
   final titled = parts
@@ -149,7 +149,7 @@ String formatSemesterFromSessionIdInt(int semesterSessionId) {
 
 String formatSemesterFromSessionId(String raw) {
   final cleaned = raw.trim();
-  if (cleaned.isEmpty || cleaned == 'N/A') return 'N/A';
+  if (cleaned.isEmpty || cleaned == 'N/A' || cleaned == '-') return '';
   final value = int.tryParse(cleaned);
   if (value == null) return formatSemesterTitle(cleaned);
   return formatSemesterFromSessionIdInt(value);

@@ -109,8 +109,8 @@ class _ShareSchedulePageState extends State<ShareSchedulePage> {
       final profile = forceRefresh
           ? await BracuAuthManager().fetchProfile()
           : (cachedProfile ?? await BracuAuthManager().fetchProfile());
-      final fullName = profile?['fullName'] ?? 'N/A';
-      final studentId = profile?['studentId'] ?? 'N/A';
+      final fullName = profile?['fullName'] ?? '';
+      final studentId = profile?['studentId'] ?? '';
       final photoFilePath = profile?['photoFilePath'] ?? '';
 
       if (!forceRefresh) {

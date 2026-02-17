@@ -58,7 +58,7 @@ class _AcademicSummary extends StatelessWidget {
     final cgpa = _displayOrNA(profile['cgpa']);
     final semesterCount = int.tryParse((advising['noOfSemester'] ?? '').trim());
     final semesterCountDisplay = semesterCount == null
-        ? 'N/A'
+        ? ''
         : _ordinal(semesterCount);
     final enrolledSemester = _semesterTitle(
       profile['enrolledSemester'],
@@ -163,7 +163,7 @@ class _AcademicSummary extends StatelessWidget {
             ),
             Text(
               totalNum == 0
-                  ? 'N/A'
+                  ? ''
                   : '${earnedNum.toStringAsFixed(0)} out of ${totalNum.toStringAsFixed(0)} • ${(completionRatio * 100).toStringAsFixed(0)}%',
               style: TextStyle(
                 color: textSecondary,
@@ -187,7 +187,7 @@ class _AcademicSummary extends StatelessWidget {
 
 String _displayOrNA(String? value) {
   final trimmed = (value ?? '').trim();
-  return trimmed.isEmpty ? 'N/A' : trimmed;
+  return trimmed.isEmpty ? '' : trimmed;
 }
 
 double _parseDouble(String? value) {
@@ -200,7 +200,7 @@ String _semesterTitle(String? raw, String? sessionId) {
   if (cleaned.isNotEmpty) {
     return formatSemesterTitle(cleaned);
   }
-  return formatSemesterFromSessionId((sessionId ?? 'N/A').trim());
+  return formatSemesterFromSessionId((sessionId ?? '').trim());
 }
 
 String _ordinal(int value) {

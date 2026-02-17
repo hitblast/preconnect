@@ -496,12 +496,12 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                               ),
                               const SizedBox(height: 18),
                               StudentOverviewCard(
-                                studentId: profile['studentId'] ?? 'N/A',
+                                studentId: profile['studentId'] ?? '',
                                 shortCode: profile['shortCode'] ?? '',
-                                phoneNumber: profile['mobileNo'] ?? 'N/A',
-                                department: profile['departmentName'] ?? 'N/A',
+                                phoneNumber: profile['mobileNo'] ?? '',
+                                department: profile['departmentName'] ?? '',
                                 currentSemester:
-                                    profile['currentSemester'] ?? 'N/A',
+                                    profile['currentSemester'] ?? '',
                                 currentSessionSemesterId:
                                     profile['currentSessionSemesterId'] ?? '',
                                 onLogout: widget.onLogout,

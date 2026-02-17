@@ -302,7 +302,7 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
                         ),
                         Text(
                           widget.friend.id.trim().isEmpty
-                              ? 'ID: N/A'
+                              ? ''
                               : 'ID: ${widget.friend.id}',
                           style: TextStyle(fontSize: 11, color: textSecondary),
                         ),

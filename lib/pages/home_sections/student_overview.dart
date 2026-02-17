@@ -153,9 +153,9 @@ class _OverviewHeader extends StatelessWidget {
     final fallbackSemester = formatSemesterFromSessionId(
       currentSessionSemesterId,
     );
-    final displaySemester = normalizedSemester != 'N/A'
+    final displaySemester = normalizedSemester.isNotEmpty
         ? normalizedSemester
-        : (fallbackSemester.isNotEmpty ? fallbackSemester : 'N/A');
+        : (fallbackSemester.isNotEmpty ? fallbackSemester : '');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -184,7 +184,7 @@ class _OverviewHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  department.isEmpty ? 'N/A' : department,
+                  department.isEmpty ? '' : department,
                   maxLines: 2,
                   overflow: TextOverflow.fade,
                   softWrap: true,
@@ -209,9 +209,9 @@ class _OverviewHeader extends StatelessWidget {
   }) {
     final left = shortCode.isNotEmpty
         ? shortCode
-        : (studentId.isEmpty ? 'N/A' : studentId);
-    final right = semester.isEmpty ? 'N/A' : semester;
-    return '${left.toUpperCase()} ${right.toUpperCase()}';
+        : (studentId.isEmpty ? '' : studentId);
+    final right = semester.isEmpty ? '' : semester;
+    return '${left.toUpperCase()} ${right.toUpperCase()}'.trim();
   }
 }
 

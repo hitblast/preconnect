@@ -38,13 +38,13 @@ class CardSectionState extends State<CardSection> {
       (profile['enrolledSessionSemesterId'] ?? '').trim(),
     );
     final validation = enrolledSession == null
-        ? 'N/A'
+        ? ''
         : '31-12-${(enrolledSession ~/ 10) + 5}';
     final bloodGroup = (profile['bloodGroup'] ?? '').trim();
     final photoUrl = widget.photoUrl;
     final displayName = fullName.isNotEmpty ? fullName : 'BRACU Student';
-    final displayProgram = degreeName.isNotEmpty ? degreeName : 'N/A';
-    final displayStudentId = studentId.isNotEmpty ? studentId : 'N/A';
+    final displayProgram = degreeName.isNotEmpty ? degreeName : '';
+    final displayStudentId = studentId.isNotEmpty ? studentId : '';
     final displayBloodGroup = bloodGroup.isNotEmpty ? bloodGroup : '--';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
