@@ -140,7 +140,6 @@ lib/
 android/             Android configuration (Kotlin)
 ios/                 iOS configuration (Swift)
 macos/               macOS shell
-windows/             Windows shell
 linux/               Linux shell
 web/                 Web shell
 assets/              Icons & SVGs
@@ -154,7 +153,7 @@ scripts/             Build & CI helpers
 - Security: [SECURITY.md](SECURITY.md)
 - Environment Example: [.env.example](.env.example)
 - Android Signing Example: [android/key.properties.example](android/key.properties.example)
-- Workflows: [.github/workflows/release.yml](.github/workflows/release.yml), [.github/workflows/bump-version.yml](.github/workflows/bump-version.yml)
+- Workflows: [.github/workflows/release.yml](.github/workflows/release.yml), [.github/workflows/dependabot-automerge.yml](.github/workflows/dependabot-automerge.yml)
 
 ## Developer Credit
 - NaiveInvestigator — GitHub: [@NaiveInvestigator](https://github.com/NaiveInvestigator)

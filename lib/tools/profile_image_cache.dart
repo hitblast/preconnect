@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -9,7 +8,7 @@ class ProfileImageCache {
   static final instance = ProfileImageCache._();
 
   static const _cachedUrlKey = 'profile_image_cached_url';
-  static const _cachedBytesKey = 'profile_image_cached_bytes';
+  static const _legacyCachedBytesKey = 'profile_image_cached_bytes';
 
   File? _cachedFile;
 
@@ -25,15 +24,7 @@ class ProfileImageCache {
     final prefs = await SharedPreferences.getInstance();
 
     final cachedUrl = prefs.getString(_cachedUrlKey);
-    final cachedBytes = prefs.getString(_cachedBytesKey);
-    if (cachedUrl == photoUrl &&
-        cachedBytes != null &&
-        cachedBytes.isNotEmpty &&
-        !file.existsSync()) {
-      try {
-        await file.writeAsBytes(base64Decode(cachedBytes), flush: true);
-      } catch (_) {}
-    }
+    await prefs.remove(_legacyCachedBytesKey);
 
     if (file.existsSync() &&
         file.lengthSync() > 0 &&
@@ -48,10 +39,6 @@ class ProfileImageCache {
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         await file.writeAsBytes(response.bodyBytes, flush: true);
         await prefs.setString(_cachedUrlKey, photoUrl);
-        await prefs.setString(
-          _cachedBytesKey,
-          base64Encode(response.bodyBytes),
-        );
         _cachedFile = file;
         return file;
       }
@@ -67,10 +54,6 @@ class ProfileImageCache {
         await file.writeAsBytes(response.bodyBytes, flush: true);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_cachedUrlKey, url);
-        await prefs.setString(
-          _cachedBytesKey,
-          base64Encode(response.bodyBytes),
-        );
       }
     } catch (_) {}
   }
@@ -89,7 +72,7 @@ class ProfileImageCache {
     } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_cachedUrlKey);
-    await prefs.remove(_cachedBytesKey);
+    await prefs.remove(_legacyCachedBytesKey);
     _cachedFile = null;
   }
 }
