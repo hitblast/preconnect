@@ -103,15 +103,31 @@ class _MyAppState extends State<MyApp> {
     _updateCheckInFlight = () async {
       final info = await InAppUpdate.checkForUpdate();
       final availability = info.updateAvailability;
+      final installStatus = info.installStatus;
 
-      final shouldRunImmediate =
-          info.immediateUpdateAllowed &&
-          (availability == UpdateAvailability.updateAvailable ||
-              availability ==
-                  UpdateAvailability.developerTriggeredUpdateInProgress);
+      if (installStatus == InstallStatus.downloaded) {
+        await _completeFlexibleUpdate();
+        return;
+      }
 
-      if (shouldRunImmediate) {
+      final shouldResumeImmediate =
+          availability == UpdateAvailability.developerTriggeredUpdateInProgress;
+      if (shouldResumeImmediate && info.immediateUpdateAllowed) {
         await _runImmediateUpdate();
+        return;
+      }
+
+      if (availability != UpdateAvailability.updateAvailable) {
+        return;
+      }
+
+      if (info.immediateUpdateAllowed) {
+        await _runImmediateUpdate();
+        return;
+      }
+
+      if (info.flexibleUpdateAllowed) {
+        await _runFlexibleUpdate();
       }
     }();
 
@@ -126,6 +142,18 @@ class _MyAppState extends State<MyApp> {
   Future<void> _runImmediateUpdate() async {
     try {
       await InAppUpdate.performImmediateUpdate();
+    } catch (_) {}
+  }
+
+  Future<void> _runFlexibleUpdate() async {
+    try {
+      await InAppUpdate.startFlexibleUpdate();
+    } catch (_) {}
+  }
+
+  Future<void> _completeFlexibleUpdate() async {
+    try {
+      await InAppUpdate.completeFlexibleUpdate();
     } catch (_) {}
   }
 
