@@ -304,34 +304,6 @@ class _ClassScheduleState extends State<ClassSchedule> {
           days = days.where((day) => keys.contains(day)).toList();
 
           final children = <Widget>[];
-          if (isRamadan) {
-            children.add(
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: BracuCard(
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.access_time_filled_rounded,
-                        size: 18,
-                        color: BracuPalette.accent,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Ramadan timing is active for mapped class slots.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: BracuPalette.textSecondary(context),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }
           String? highlightToken;
           _highlightKey = null;
           for (var i = 0; i < days.length; i++) {
