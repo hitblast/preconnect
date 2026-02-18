@@ -291,7 +291,7 @@ class _AlarmPageState extends State<AlarmPage> {
                 if (schedules.isEmpty) return const SizedBox.shrink();
 
                 final courseCode = section.courseCode;
-                _minutesBefore.putIfAbsent(courseCode, () => 10);
+                _minutesBefore.putIfAbsent(courseCode, () => 5);
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),

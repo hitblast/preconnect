@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:preconnect/tools/time_utils.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class RamadanTiming {
   RamadanTiming._();
@@ -9,9 +10,13 @@ class RamadanTiming {
   static const String _statusUrl = 'https://ramadan.munafio.com/api/check';
   static const Duration _requestTimeout = Duration(seconds: 2);
   static const Duration _cacheTtl = Duration(hours: 6);
+  static const String _prefsIsRamadanKey = 'ramadan_is_ramadan';
+  static const String _prefsLastCheckKey = 'ramadan_last_check_epoch_ms';
 
   static DateTime? _lastCheckAt;
   static bool? _cachedIsRamadan;
+  static bool _cacheLoaded = false;
+  static Future<void>? _cacheLoadInflight;
   static Future<bool>? _inflight;
 
   // Based on BRACU Ramadan class timing announcement (2026).
@@ -27,6 +32,8 @@ class RamadanTiming {
   };
 
   static Future<bool> isRamadan({bool forceRefresh = false}) async {
+    await _ensureCacheLoaded();
+
     final now = DateTime.now();
     final hasFreshCache =
         !forceRefresh &&
@@ -42,18 +49,74 @@ class RamadanTiming {
       return _inflight!;
     }
 
-    _inflight = _fetchIsRamadan();
+    _inflight = _refreshIsRamadan(now: now);
+    return _inflight!;
+  }
+
+  static Future<bool> _refreshIsRamadan({required DateTime now}) async {
     try {
-      final value = await _inflight!;
-      _cachedIsRamadan = value;
-      _lastCheckAt = now;
-      return value;
+      final result = await _fetchIsRamadan();
+      _cachedIsRamadan = result.value;
+      if (result.fromNetwork) {
+        _lastCheckAt = now;
+        await _persistCache();
+      }
+      return result.value;
     } finally {
       _inflight = null;
     }
   }
 
-  static Future<bool> _fetchIsRamadan() async {
+  static Future<void> _ensureCacheLoaded() async {
+    if (_cacheLoaded) return;
+    if (_cacheLoadInflight != null) {
+      await _cacheLoadInflight!;
+      return;
+    }
+
+    _cacheLoadInflight = _loadCacheFromPrefs();
+    try {
+      await _cacheLoadInflight!;
+    } finally {
+      _cacheLoadInflight = null;
+    }
+  }
+
+  static Future<void> _loadCacheFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final isRamadan = prefs.getBool(_prefsIsRamadanKey);
+      final epochMs = prefs.getInt(_prefsLastCheckKey);
+
+      _cachedIsRamadan = isRamadan;
+      if (epochMs != null) {
+        _lastCheckAt = DateTime.fromMillisecondsSinceEpoch(epochMs);
+      }
+    } catch (_) {
+      // To ignore loading errors and start with empty cache.
+    } finally {
+      _cacheLoaded = true;
+    }
+  }
+
+  static Future<void> _persistCache() async {
+    final cached = _cachedIsRamadan;
+    final lastCheckAt = _lastCheckAt;
+    if (cached == null || lastCheckAt == null) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefsIsRamadanKey, cached);
+      await prefs.setInt(
+        _prefsLastCheckKey,
+        lastCheckAt.millisecondsSinceEpoch,
+      );
+    } catch (_) {
+      // To ignore persistence errors and keep memory cache.
+    }
+  }
+
+  static Future<({bool value, bool fromNetwork})> _fetchIsRamadan() async {
     try {
       final response = await http
           .get(
@@ -63,27 +126,27 @@ class RamadanTiming {
           .timeout(_requestTimeout);
 
       if (response.statusCode != 200 || response.body.trim().isEmpty) {
-        return _cachedIsRamadan ?? false;
+        return (value: _cachedIsRamadan ?? false, fromNetwork: false);
       }
 
       final payload = jsonDecode(response.body);
       if (payload is! Map<String, dynamic>) {
-        return _cachedIsRamadan ?? false;
+        return (value: _cachedIsRamadan ?? false, fromNetwork: false);
       }
 
       final data = payload['data'];
       if (data is! Map<String, dynamic>) {
-        return _cachedIsRamadan ?? false;
+        return (value: _cachedIsRamadan ?? false, fromNetwork: false);
       }
 
       final value = data['isRamadan'];
       if (value is bool) {
-        return value;
+        return (value: value, fromNetwork: true);
       }
 
-      return _cachedIsRamadan ?? false;
+      return (value: _cachedIsRamadan ?? false, fromNetwork: false);
     } catch (_) {
-      return _cachedIsRamadan ?? false;
+      return (value: _cachedIsRamadan ?? false, fromNetwork: false);
     }
   }
 
