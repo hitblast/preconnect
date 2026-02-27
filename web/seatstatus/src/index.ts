@@ -26,16 +26,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function json(status: number, body: unknown, headers: HeadersInit = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      ...headers,
-    },
-  });
-}
-
 function cacheRequest(path: string): Request {
   return new Request(`https://seatstatus-cache.local${path}`);
 }
@@ -278,26 +268,8 @@ async function handleSeatMapSocket(socket: any, env: Env): Promise<void> {
       const currentMap = mapRecord.payload;
       if (previousMap == null) {
         const detailsAll = (await readCacheRecord(CACHE_DETAILS_ALL_KEY))?.payload ?? {};
-        socket.send(
-          JSON.stringify({
-            type: 'status',
-            state: 'connected',
-            mode: 'websocket',
-            frame: 'seat_map_full',
-            count: Object.keys(currentMap).length,
-          }),
-        );
         socket.send(JSON.stringify(currentMap));
         if (Object.keys(detailsAll).length > 0) {
-          socket.send(
-            JSON.stringify({
-              type: 'status',
-              state: 'connected',
-              mode: 'websocket',
-              frame: 'details_full',
-              count: Object.keys(detailsAll).length,
-            }),
-          );
           socket.send(JSON.stringify(detailsAll));
         }
         previousMap = currentMap;
@@ -308,26 +280,8 @@ async function handleSeatMapSocket(socket: any, env: Env): Promise<void> {
           .filter((v) => Number.isFinite(v));
         if (changedIds.length > 0) {
           const detailsPatch = await syncDetailsForIds(env, changedIds, 24);
-          socket.send(
-            JSON.stringify({
-              type: 'status',
-              state: 'connected',
-              mode: 'websocket',
-              frame: 'seat_map_diff',
-              count: Object.keys(mapDiff).length,
-            }),
-          );
           socket.send(JSON.stringify(mapDiff));
           if (Object.keys(detailsPatch).length > 0) {
-            socket.send(
-              JSON.stringify({
-                type: 'status',
-                state: 'connected',
-                mode: 'websocket',
-                frame: 'details_patch',
-                count: Object.keys(detailsPatch).length,
-              }),
-            );
             socket.send(JSON.stringify(detailsPatch));
           }
           previousMap = currentMap;
@@ -344,31 +298,12 @@ async function handleSeatMapSocket(socket: any, env: Env): Promise<void> {
         detailsCursor = picked.next;
         const detailsPatch = await syncDetailsForIds(env, picked.chunk, 4);
         if (Object.keys(detailsPatch).length > 0) {
-          socket.send(
-            JSON.stringify({
-              type: 'status',
-              state: 'connected',
-              mode: 'websocket',
-              frame: 'details_patch',
-              count: Object.keys(detailsPatch).length,
-            }),
-          );
           socket.send(JSON.stringify(detailsPatch));
         }
       }
 
       await sleep(5000);
-    } catch (error) {
-      try {
-        socket.send(
-          JSON.stringify({
-            type: 'status',
-            state: 'error',
-            mode: 'websocket',
-            message: error instanceof Error ? error.message : 'unknown_error',
-          }),
-        );
-      } catch {}
+    } catch {
       open = false;
     }
   }
@@ -407,7 +342,7 @@ export default {
 
       if (path === '/') {
         if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') {
-          return json(426, { error: 'websocket_upgrade_required' });
+          return Response.redirect('https://preconnect.app/seat', 302);
         }
         const pair = new (globalThis as any).WebSocketPair();
         const client = pair[0];
@@ -416,16 +351,12 @@ export default {
         return new Response(null, { status: 101, webSocket: client } as any);
       }
 
-      return json(404, { error: 'not_found' });
-    } catch (error) {
-      return json(
-        500,
-        {
-          error: 'worker_exception',
-          message: error instanceof Error ? error.message : 'unknown',
-        },
-        { 'cache-control': 'no-store' },
-      );
+      return new Response(null, { status: 404 });
+    } catch {
+      return new Response(null, {
+        status: 500,
+        headers: { 'cache-control': 'no-store' },
+      });
     }
   },
 

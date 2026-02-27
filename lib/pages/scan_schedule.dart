@@ -1,11 +1,8 @@
-import 'dart:convert';
-import 'dart:typed_data';
-import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:preconnect/api/friend_schedule_store.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 
@@ -18,6 +15,7 @@ class ScanSchedulePage extends StatefulWidget {
 
 class _ScanSchedulePageState extends State<ScanSchedulePage>
     with WidgetsBindingObserver {
+  final FriendScheduleStore _store = FriendScheduleStore();
   final MobileScannerController _controller = MobileScannerController(
     autoStart: false,
   );
@@ -89,39 +87,7 @@ class _ScanSchedulePageState extends State<ScanSchedulePage>
   }
 
   Future<void> _saveScannedValue(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    List<String> currentList = prefs.getStringList("friendSchedules") ?? [];
-
-    if (!currentList.contains(value)) {
-      final scannedId = _extractFriendId(value);
-      if (scannedId != null && scannedId.trim().isNotEmpty) {
-        currentList = currentList.where((entry) {
-          final existingId = _extractFriendId(entry);
-          if (existingId == null) return true;
-          return existingId.trim() != scannedId.trim();
-        }).toList();
-      }
-      currentList.add(value);
-      await prefs.setStringList("friendSchedules", currentList);
-    }
-
-    await prefs.setStringList("friendSchedules", currentList);
-  }
-
-  String? _extractFriendId(String base64Data) {
-    try {
-      final Uint8List decodeBase64Json = base64.decode(base64Data);
-      final List<int> decodeGzipJson = GZipDecoder().decodeBytes(
-        decodeBase64Json,
-      );
-      final String originalJson = utf8.decode(decodeGzipJson);
-      final parsed = jsonDecode(originalJson);
-      if (parsed is Map<String, dynamic>) {
-        return parsed['id']?.toString();
-      }
-    } catch (_) {}
-    return null;
+    await _store.upsertEncodedSchedule(value);
   }
 
   Future<void> _handleRefresh() async {

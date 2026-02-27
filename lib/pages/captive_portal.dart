@@ -482,8 +482,8 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
   @override
   Widget build(BuildContext context) {
     return BracuPageScaffold(
-      title: 'Captive Portal',
-      subtitle: 'API Auto Login',
+      title: 'Captive',
+      subtitle: 'API Based',
       icon: Icons.wifi_rounded,
       body: ScaffoldMessenger(
         key: _pageMessengerKey,

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
+import 'package:preconnect/api/friend_schedule_store.dart';
 import 'package:preconnect/tools/cached_image.dart';
 import 'package:preconnect/tools/profile_image_cache.dart';
 import 'package:preconnect/tools/token_storage.dart';
@@ -47,6 +48,7 @@ class AuthService {
     await asyncPrefs.clear();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+    await FriendScheduleStore().clearAll();
     await ProfileImageCache.instance.clear();
     CachedImage.clearMemoryCache();
   }

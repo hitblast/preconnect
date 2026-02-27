@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:preconnect/api/friend_schedule_store.dart';
 import 'package:preconnect/model/friend_schedule.dart';
 import 'package:archive/archive.dart';
 import 'package:preconnect/pages/home_tab.dart';
@@ -30,6 +30,7 @@ class FriendSchedulePage extends StatefulWidget {
 class _FriendSchedulePageState extends State<FriendSchedulePage> {
   List<FriendScheduleItem> decodedSchedules = [];
   Map<String, FriendMetadata> _metadata = {};
+  final FriendScheduleStore _store = FriendScheduleStore();
   final MobileScannerController _galleryScanner = MobileScannerController();
   final TextEditingController _searchController = TextEditingController();
   bool _isPicking = false;
@@ -85,28 +86,15 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
     _isLoadingSchedules = true;
     try {
       final ramadanFuture = RamadanTiming.isRamadan();
-      final prefs = await SharedPreferences.getInstance();
-      final List<String>? encodedList = prefs.getStringList("friendSchedules");
-
-      final metadataJson = prefs.getString('friendMetadata');
-      if (metadataJson != null) {
-        try {
-          final Map<String, dynamic> decoded = jsonDecode(metadataJson);
-          _metadata = decoded.map(
-            (key, value) => MapEntry(
-              key,
-              FriendMetadata.fromJson(value as Map<String, dynamic>),
-            ),
-          );
-        } catch (_) {
-          _metadata = {};
-        }
-      }
+      final snapshot = await _store.loadSnapshot();
+      final encodedList = snapshot.encodedSchedules;
+      _metadata = snapshot.metadata;
 
       final isRamadan = await ramadanFuture;
-      if (encodedList == null) {
+      if (encodedList.isEmpty) {
         if (!mounted) return;
         setState(() {
+          decodedSchedules = <FriendScheduleItem>[];
           _isRamadan = isRamadan;
         });
         return;
@@ -138,8 +126,12 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
         } catch (_) {}
       }
 
-      await prefs.setStringList("friendSchedules", validEntries);
-      await prefs.setStringList("friendSchedules_seen", validEntries);
+      final invalidEntries = encodedList
+          .where((entry) => !validEntries.contains(entry))
+          .toList();
+      for (final invalid in invalidEntries) {
+        await _store.removeByEncoded(invalid);
+      }
 
       _sortSchedules(allSchedules);
 
@@ -157,40 +149,8 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
     await _loadSchedules();
   }
 
-  String? _extractFriendId(String base64Data) {
-    try {
-      final Uint8List decodeBase64Json = base64.decode(base64Data);
-      final List<int> decodeGzipJson = GZipDecoder().decodeBytes(
-        decodeBase64Json,
-      );
-      final String originalJson = utf8.decode(decodeGzipJson);
-      final parsed = jsonDecode(originalJson);
-      if (parsed is Map<String, dynamic>) {
-        return parsed['id']?.toString();
-      }
-    } catch (_) {}
-    return null;
-  }
-
   Future<void> _saveScannedValue(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    List<String> currentList = prefs.getStringList("friendSchedules") ?? [];
-
-    if (!currentList.contains(value)) {
-      final scannedId = _extractFriendId(value);
-      if (scannedId != null && scannedId.trim().isNotEmpty) {
-        currentList = currentList.where((entry) {
-          final existingId = _extractFriendId(entry);
-          if (existingId == null) return true;
-          return existingId.trim() != scannedId.trim();
-        }).toList();
-      }
-      currentList.add(value);
-      await prefs.setStringList("friendSchedules", currentList);
-    }
-
-    await prefs.setStringList("friendSchedules", currentList);
+    await _store.upsertEncodedSchedule(value);
   }
 
   Future<void> _scanFromGallery() async {
@@ -366,10 +326,7 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
 
     if (shouldDelete != true) return false;
 
-    final prefs = await SharedPreferences.getInstance();
-    final List<String> current = prefs.getStringList("friendSchedules") ?? [];
-    final updated = current.where((e) => e != item.encoded).toList();
-    await prefs.setStringList("friendSchedules", updated);
+    await _store.removeByEncoded(item.encoded);
 
     setState(() {
       decodedSchedules.removeWhere((e) => e.encoded == item.encoded);
@@ -400,11 +357,7 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
   }
 
   Future<void> _saveMetadata() async {
-    final prefs = await SharedPreferences.getInstance();
-    final json = jsonEncode(
-      _metadata.map((key, value) => MapEntry(key, value.toJson())),
-    );
-    await prefs.setString('friendMetadata', json);
+    await _store.saveAllMetadata(_metadata);
   }
 
   void _applyMetadataToDecodedSchedules() {
