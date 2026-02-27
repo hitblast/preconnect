@@ -133,6 +133,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 
     // Instant paint from local cache.
     if (cachedSeatMap.isNotEmpty && mounted) {
+      _latestSeatMap = Map<int, int>.from(cachedSeatMap);
       final cachedCards = _buildCardsFromSeatMap(cachedSeatMap);
       _applyCardsSnapshot(cachedCards, isInitialLoading: false);
     }
@@ -157,7 +158,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   Future<void> _applySeatMapUpdate(Map<int, int> seatMap) async {
     if (!mounted || seatMap.isEmpty) return;
     _latestSeatMap = Map<int, int>.from(seatMap);
-    unawaited(_service.saveSeatMapCacheIfChanged(seatMap));
 
     final nextIds = seatMap.keys.toSet();
     final existingIds = _cards.map((c) => c.sectionId).toSet();
@@ -261,59 +261,29 @@ class _SeatStatusPageState extends State<SeatStatusPage>
               child: const BracuLoading(label: 'Loading seats...'),
             )
           : _cards.isEmpty
-          ? BracuRefreshPlaceholder(
+          ? BracuRefreshListBuilder(
               onRefresh: _handleRefresh,
-              child: const BracuEmptyState(
-                message: 'No section data available',
-              ),
+              itemCount: 3,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return _buildSearchField(context);
+                }
+                if (index == 1) {
+                  return const SizedBox(height: 12);
+                }
+                return const BracuCard(
+                  child: BracuEmptyState(
+                    message: 'No section data available',
+                  ),
+                );
+              },
             )
           : BracuRefreshListBuilder(
               onRefresh: _handleRefresh,
               itemCount: _visibleCards.isEmpty ? 3 : _visibleCards.length + 2,
               itemBuilder: (context, index) {
                 if (index == 0) {
-                  return TextField(
-                    controller: _searchController,
-                    style: TextStyle(color: BracuPalette.textPrimary(context)),
-                    textInputAction: TextInputAction.search,
-                    decoration: InputDecoration(
-                      hintText: 'Search by course, faculty, etc.',
-                      hintStyle: TextStyle(
-                        color: BracuPalette.textSecondary(context),
-                      ),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        color: BracuPalette.textSecondary(context),
-                      ),
-                      suffixIcon: _searchQuery.trim().isEmpty
-                          ? null
-                          : IconButton(
-                              onPressed: () => _searchController.clear(),
-                              icon: Icon(
-                                Icons.close,
-                                color: BracuPalette.textSecondary(context),
-                              ),
-                            ),
-                      isDense: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: BracuPalette.textSecondary(
-                            context,
-                          ).withValues(alpha: 0.24),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: BracuPalette.primary,
-                        ),
-                      ),
-                    ),
-                  );
+                  return _buildSearchField(context);
                 }
                 if (index == 1) {
                   return const SizedBox(height: 12);
@@ -332,6 +302,51 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                 );
               },
             ),
+    );
+  }
+
+  Widget _buildSearchField(BuildContext context) {
+    return TextField(
+      controller: _searchController,
+      style: TextStyle(color: BracuPalette.textPrimary(context)),
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: 'Search by course, faculty, etc.',
+        hintStyle: TextStyle(
+          color: BracuPalette.textSecondary(context),
+        ),
+        prefixIcon: Icon(
+          Icons.search,
+          color: BracuPalette.textSecondary(context),
+        ),
+        suffixIcon: _searchQuery.trim().isEmpty
+            ? null
+            : IconButton(
+                onPressed: () => _searchController.clear(),
+                icon: Icon(
+                  Icons.close,
+                  color: BracuPalette.textSecondary(context),
+                ),
+              ),
+        isDense: true,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: BracuPalette.textSecondary(
+              context,
+            ).withValues(alpha: 0.24),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(
+            color: BracuPalette.primary,
+          ),
+        ),
+      ),
     );
   }
 
@@ -530,10 +545,10 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       return;
     }
 
-    final seatMap = _parseSeatMap(decoded);
-    if (seatMap.isEmpty) return;
-    _latestSeatMap = Map<int, int>.from(seatMap);
-    await _applySeatMapUpdate(seatMap);
+    final seatMapPatch = _parseSeatMap(decoded);
+    if (seatMapPatch.isEmpty) return;
+    final mergedSeatMap = await _service.applySeatMapPatchAndSave(seatMapPatch);
+    await _applySeatMapUpdate(mergedSeatMap);
   }
 
   Map<int, SeatStatusDetailsResponse> _parseDetailsPatch(dynamic rawMap) {

@@ -267,6 +267,12 @@ async function handleSeatMapSocket(socket: any, env: Env): Promise<void> {
 
       const currentMap = mapRecord.payload;
       if (previousMap == null) {
+        const allIds = Object.keys(currentMap)
+          .map((id) => Number.parseInt(id, 10))
+          .filter((v) => Number.isFinite(v));
+        if (allIds.length > 0) {
+          await syncDetailsForIds(env, allIds, 24);
+        }
         const detailsAll = (await readCacheRecord(CACHE_DETAILS_ALL_KEY))?.payload ?? {};
         socket.send(JSON.stringify(currentMap));
         if (Object.keys(detailsAll).length > 0) {

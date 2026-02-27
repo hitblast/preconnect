@@ -1148,8 +1148,8 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                       _QuickActionCard(
                                         width: width,
                                         icon: Icons.insights_outlined,
-                                        title: 'Seats',
-                                        subtitle: 'Live Sections',
+                                        title: 'Seat',
+                                        subtitle: 'Status',
                                         color: const Color(0xFF00A8E8),
                                         onTap: () => widget.onNavigate(
                                           HomeTab.seatStatus,

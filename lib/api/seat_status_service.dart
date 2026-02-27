@@ -92,34 +92,44 @@ class SeatStatusService {
     }
   }
 
-  Future<void> saveSeatMapCacheIfChanged(Map<int, int> seatMap) async {
-    if (seatMap.isEmpty) return;
+  Future<Map<int, int>> applySeatMapPatchAndSave(
+    Map<int, int> seatMapPatch,
+  ) async {
+    if (seatMapPatch.isEmpty) {
+      final cached = _seatMapSnapshot;
+      if (cached != null) return Map<int, int>.from(cached);
+      return const <int, int>{};
+    }
     try {
       final db = await _openDb();
       final existing = await _getSeatMapSnapshot(db);
+      final merged = Map<int, int>.from(existing);
+      merged.addAll(seatMapPatch);
 
       final changed = <MapEntry<int, int>>[];
-      for (final entry in seatMap.entries) {
+      for (final entry in seatMapPatch.entries) {
         if (existing[entry.key] != entry.value) {
           changed.add(entry);
         }
       }
-      final removed = existing.keys
-          .where((key) => !seatMap.containsKey(key))
-          .toList();
-      if (changed.isEmpty && removed.isEmpty) return;
+      if (changed.isEmpty) {
+        return merged;
+      }
 
       await db.transaction((txn) async {
         for (final entry in changed) {
           await _seatMapStore.record(entry.key).put(txn, entry.value);
         }
-        for (final key in removed) {
-          await _seatMapStore.record(key).delete(txn);
-        }
         await _metaStore.record(_seatMapTsKey).put(txn, _nowMs());
       });
-      _seatMapSnapshot = Map<int, int>.from(seatMap);
-    } catch (_) {}
+      _seatMapSnapshot = merged;
+      return merged;
+    } catch (_) {
+      final fallback = Map<int, int>.from(_seatMapSnapshot ?? const <int, int>{});
+      fallback.addAll(seatMapPatch);
+      _seatMapSnapshot = fallback;
+      return fallback;
+    }
   }
 
   Future<void> saveDetailsCache(
