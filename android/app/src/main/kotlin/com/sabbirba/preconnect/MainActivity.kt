@@ -516,7 +516,53 @@ class MainActivity : FlutterFragmentActivity() {
                 payload["ssid"] = ssid
             }
         }
+        val captivePortal = currentCaptivePortalData(caps)
+        if (captivePortal.isNotEmpty()) {
+            payload.putAll(captivePortal)
+        }
         return payload
+    }
+
+    private fun currentCaptivePortalData(caps: NetworkCapabilities?): Map<String, Any> {
+        if (caps == null) return emptyMap()
+        return try {
+            val getCaptivePortalData = NetworkCapabilities::class.java.methods.firstOrNull { method ->
+                method.name == "getCaptivePortalData" && method.parameterTypes.isEmpty()
+            } ?: return emptyMap()
+            val captivePortalData = getCaptivePortalData.invoke(caps) ?: return emptyMap()
+
+            val payload = mutableMapOf<String, Any>()
+
+            val getUserPortalUrl = captivePortalData.javaClass.methods.firstOrNull { method ->
+                method.name == "getUserPortalUrl" && method.parameterTypes.isEmpty()
+            }
+            val rawUrl = getUserPortalUrl
+                ?.invoke(captivePortalData)
+                ?.toString()
+                ?.trim()
+                .orEmpty()
+            if (rawUrl.isNotEmpty()) {
+                payload["captivePortalUrl"] = rawUrl
+            }
+
+            val isSessionExtendable = captivePortalData.javaClass.methods.firstOrNull { method ->
+                method.name == "isSessionExtendable" && method.parameterTypes.isEmpty()
+            }?.invoke(captivePortalData) as? Boolean
+            if (isSessionExtendable != null) {
+                payload["canExtendSession"] = isSessionExtendable
+            }
+
+            val expiryMillis = (captivePortalData.javaClass.methods.firstOrNull { method ->
+                method.name == "getExpiryTimeMillis" && method.parameterTypes.isEmpty()
+            }?.invoke(captivePortalData) as? Long) ?: -1L
+            if (expiryMillis > 0L) {
+                payload["sessionExpiryTimeMillis"] = expiryMillis
+            }
+
+            payload
+        } catch (_: Exception) {
+            emptyMap()
+        }
     }
 
     private fun currentWifiSsid(): String? {

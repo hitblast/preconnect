@@ -11,6 +11,9 @@ class AndroidNetworkStatus {
     required this.transport,
     required this.androidApi,
     required this.ssid,
+    required this.captivePortalUrl,
+    required this.canExtendSession,
+    required this.sessionExpiryTimeMillis,
   });
 
   final bool connected;
@@ -19,6 +22,9 @@ class AndroidNetworkStatus {
   final String transport;
   final int androidApi;
   final String? ssid;
+  final String? captivePortalUrl;
+  final bool? canExtendSession;
+  final int? sessionExpiryTimeMillis;
 
   factory AndroidNetworkStatus.fromMap(Map<dynamic, dynamic> map) {
     return AndroidNetworkStatus(
@@ -30,6 +36,13 @@ class AndroidNetworkStatus {
       ssid: (map['ssid'] as String?)?.trim().isEmpty == true
           ? null
           : (map['ssid'] as String?),
+      captivePortalUrl:
+          (map['captivePortalUrl'] as String?)?.trim().isEmpty == true
+          ? null
+          : (map['captivePortalUrl'] as String?),
+      canExtendSession: map['canExtendSession'] as bool?,
+      sessionExpiryTimeMillis: (map['sessionExpiryTimeMillis'] as num?)
+          ?.toInt(),
     );
   }
 }

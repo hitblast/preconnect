@@ -167,7 +167,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   child: const ListTile(
                     leading: Icon(Icons.wifi_rounded, size: 20),
-                    title: Text('Captive API Settings'),
+                    title: Text('Wi-Fi Auto Login Setup'),
                     trailing: Icon(Icons.chevron_right_rounded, size: 20),
                   ),
                 ),

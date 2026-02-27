@@ -504,9 +504,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     if (!mounted || creds == null) return;
     final currentSsid = (status.ssid ?? '').trim();
     if (currentSsid.isEmpty) return;
-    if (currentSsid.toLowerCase() != creds.ssid.toLowerCase()) {
-      return;
-    }
     _autoOpenedWifiAssistant = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -521,11 +518,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     if (!pending) return;
     final creds = await CaptiveLoginStore.instance.read();
     if (!mounted || creds == null) return;
-    final eventSsid = (event['ssid'] as String? ?? '').trim();
-    if (eventSsid.isNotEmpty &&
-        eventSsid.toLowerCase() != creds.ssid.toLowerCase()) {
-      return;
-    }
     _autoOpenedWifiAssistant = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;

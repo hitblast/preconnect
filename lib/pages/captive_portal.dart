@@ -22,42 +22,49 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
   static final Uri _probeUri = Uri.parse(
     'http://connectivitycheck.gstatic.com/generate_204',
   );
-  static const Duration _passwordRevealDuration = Duration(milliseconds: 900);
   static const Duration _apiLoginTimeout = Duration(seconds: 18);
+  static const Duration _autoSessionCheckInterval = Duration(seconds: 30);
+  static const Duration _autoExtendCooldown = Duration(seconds: 60);
+  static const int _autoExtendThresholdSeconds = 21600;
 
   final TextEditingController _ssidController = TextEditingController(
     text: CaptiveLoginStore.defaultCampusSsid,
   );
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final FocusNode _passwordFocusNode = FocusNode();
   final GlobalKey<ScaffoldMessengerState> _pageMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
 
-  bool _showPasswordWhileTyping = false;
   bool _isConnecting = false;
-  Timer? _passwordRevealTimer;
+  bool _isCheckingSession = false;
+  bool _isAutoExtending = false;
+  bool _autoExtendEnabled = true;
+  CaptivePortalApiStatus? _sessionStatus;
+  Timer? _autoSessionTimer;
+  Timer? _liveSessionTimer;
+  DateTime? _lastAutoExtendAt;
+  int? _liveRemainingSeconds;
 
   @override
   void initState() {
     super.initState();
-    _passwordFocusNode.addListener(() {
-      if (!_passwordFocusNode.hasFocus) _hidePasswordReveal();
-    });
     _loadStoredCredentials();
   }
 
   Future<void> _loadStoredCredentials() async {
+    final autoExtendEnabled = await CaptiveLoginStore.instance
+        .readAutoExtendEnabled();
     final creds = await CaptiveLoginStore.instance.read();
     if (!mounted) return;
+    _autoExtendEnabled = autoExtendEnabled;
     if (creds != null) {
       setState(() {
-        _ssidController.text = creds.ssid;
         _usernameController.text = creds.username;
         _passwordController.text = creds.password;
       });
     }
     await _autofillSsidFromSystem();
+    _restartAutoSessionMonitor();
     unawaited(_checkPostConnectionEvent());
     if (widget.autoOpenPortalOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -65,24 +72,6 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
         unawaited(_runOneTapConnect());
       });
     }
-  }
-
-  void _hidePasswordReveal() {
-    _passwordRevealTimer?.cancel();
-    if (!_showPasswordWhileTyping || !mounted) return;
-    setState(() {
-      _showPasswordWhileTyping = false;
-    });
-  }
-
-  void _showPasswordTemporarily() {
-    _passwordRevealTimer?.cancel();
-    if (!_showPasswordWhileTyping && mounted) {
-      setState(() {
-        _showPasswordWhileTyping = true;
-      });
-    }
-    _passwordRevealTimer = Timer(_passwordRevealDuration, _hidePasswordReveal);
   }
 
   Future<void> _autofillSsidFromSystem({bool force = false}) async {
@@ -184,12 +173,10 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     });
 
     try {
-      final ssid = _ssidController.text.trim();
       final username = _usernameController.text.trim();
       final password = _passwordController.text;
 
       await CaptiveLoginStore.instance.save(
-        ssid: ssid,
         username: username,
         password: password,
       );
@@ -208,6 +195,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
       if (!mounted) return;
       if (loggedIn) {
         _showLocalSnackBar('Login success. Internet validated.');
+        await _refreshSessionStatus(showSuccessSnackBar: false);
       } else {
         _showLocalSnackBar('Login failed or timed out.');
       }
@@ -218,6 +206,292 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
         });
       }
     }
+  }
+
+  Future<void> _refreshSessionStatus({
+    bool showSuccessSnackBar = true,
+    bool showErrorSnackBar = true,
+    bool allowAutoExtend = true,
+  }) async {
+    final networkStatus = await AndroidNetworkAssist.getNetworkStatus();
+    final status = _statusFromNetwork(networkStatus);
+    if (status == null) {
+      if (showSuccessSnackBar) {
+        _showLocalSnackBar(
+          'Captive portal session data unavailable on current network.',
+        );
+      }
+      return;
+    }
+    _restartAutoSessionMonitor();
+
+    if (mounted) {
+      setState(() {
+        _isCheckingSession = true;
+      });
+    }
+    try {
+      if (!mounted) return;
+      setState(() {
+        _sessionStatus = status;
+        _liveRemainingSeconds = status.secondsRemaining;
+      });
+      _restartLiveSessionTicker();
+      if (allowAutoExtend) {
+        await _maybeAutoExtend(status);
+      }
+      if (showSuccessSnackBar) {
+        _showLocalSnackBar('Session status updated.');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      if (showErrorSnackBar) {
+        _showLocalSnackBar('Unable to read captive portal session status.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCheckingSession = false;
+        });
+      }
+    }
+  }
+
+  CaptivePortalApiStatus? _statusFromNetwork(AndroidNetworkStatus? status) {
+    if (status == null) return null;
+    final rawUrl = (status.captivePortalUrl ?? '').trim();
+    if (rawUrl.isEmpty) return null;
+    final parsedUrl = _validatedHttpUri(rawUrl);
+    if (parsedUrl == null) return null;
+
+    final expiry = status.sessionExpiryTimeMillis;
+    int? secondsRemaining;
+    if (expiry != null && expiry > 0) {
+      final nowMillis = DateTime.now().millisecondsSinceEpoch;
+      final diff = ((expiry - nowMillis) / 1000).floor();
+      secondsRemaining = diff < 0 ? 0 : diff;
+    }
+    return CaptivePortalApiStatus(
+      secondsRemaining: secondsRemaining,
+      canExtendSession: status.canExtendSession == true,
+      userPortalUrl: parsedUrl,
+    );
+  }
+
+  Uri? _validatedHttpUri(String raw) {
+    if (raw.isEmpty) return null;
+    final uri = Uri.tryParse(raw);
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority) return null;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+    return uri;
+  }
+
+  Future<void> _openExtendSession(CaptivePortalApiStatus status) async {
+    if (!status.canExtendSession || status.userPortalUrl == null) return;
+    try {
+      await _requestSessionExtension(status.userPortalUrl!);
+      if (!mounted) return;
+      _showLocalSnackBar('Session extended.');
+      await _refreshSessionStatus(
+        showSuccessSnackBar: false,
+        showErrorSnackBar: false,
+        allowAutoExtend: false,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _showLocalSnackBar('Session extend failed.');
+    }
+  }
+
+  void _restartAutoSessionMonitor() {
+    _autoSessionTimer?.cancel();
+    if (!_autoExtendEnabled) return;
+    _autoSessionTimer = Timer.periodic(_autoSessionCheckInterval, (_) {
+      if (!mounted || _isCheckingSession || _isConnecting) return;
+      unawaited(
+        _refreshSessionStatus(
+          showSuccessSnackBar: false,
+          showErrorSnackBar: false,
+          allowAutoExtend: true,
+        ),
+      );
+    });
+  }
+
+  void _restartLiveSessionTicker() {
+    _liveSessionTimer?.cancel();
+    final seconds = _liveRemainingSeconds;
+    if (seconds == null || seconds <= 0) return;
+    _liveSessionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      final current = _liveRemainingSeconds;
+      if (current == null || current <= 0) {
+        _liveSessionTimer?.cancel();
+        return;
+      }
+      setState(() {
+        _liveRemainingSeconds = current - 1;
+      });
+    });
+  }
+
+  Future<void> _setAutoExtendEnabled(bool value) async {
+    await CaptiveLoginStore.instance.saveAutoExtendEnabled(value);
+    if (!mounted) return;
+    setState(() {
+      _autoExtendEnabled = value;
+    });
+    _restartAutoSessionMonitor();
+    if (value) {
+      unawaited(
+        _refreshSessionStatus(
+          showSuccessSnackBar: false,
+          showErrorSnackBar: false,
+          allowAutoExtend: true,
+        ),
+      );
+    }
+  }
+
+  Future<void> _maybeAutoExtend(CaptivePortalApiStatus status) async {
+    if (!_autoExtendEnabled) return;
+    if (_isAutoExtending) return;
+    if (!status.canExtendSession || status.userPortalUrl == null) return;
+    final remaining = status.secondsRemaining;
+    if (remaining == null) return;
+    if (remaining > _autoExtendThresholdSeconds) return;
+
+    final now = DateTime.now();
+    if (_lastAutoExtendAt != null &&
+        now.difference(_lastAutoExtendAt!) < _autoExtendCooldown) {
+      return;
+    }
+
+    _isAutoExtending = true;
+    _lastAutoExtendAt = now;
+    try {
+      await _requestSessionExtension(status.userPortalUrl!);
+      if (!mounted) return;
+      _showLocalSnackBar('Session extended automatically.');
+      await _refreshSessionStatus(
+        showSuccessSnackBar: false,
+        showErrorSnackBar: false,
+        allowAutoExtend: false,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _showLocalSnackBar('Auto-extend failed. Tap Extend Session manually.');
+    } finally {
+      _isAutoExtending = false;
+    }
+  }
+
+  Future<void> _requestSessionExtension(Uri uri) async {
+    final client = HttpClient()..userAgent = kPreconnectUserAgent;
+    client.connectionTimeout = const Duration(seconds: 10);
+    try {
+      final request = await client.getUrl(uri);
+      final response = await request.close();
+      await response.drain<void>();
+      if (response.statusCode < 200 || response.statusCode >= 400) {
+        throw HttpException('HTTP ${response.statusCode}', uri: uri);
+      }
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Widget _sessionInfoCard(BuildContext context) {
+    final status = _sessionStatus;
+    if (status == null && !_isCheckingSession) {
+      return const SizedBox.shrink();
+    }
+    final textPrimary = BracuPalette.textPrimary(context);
+    final textSecondary = BracuPalette.textSecondary(context);
+    final expiresIn = _liveRemainingSeconds ?? status?.secondsRemaining;
+    final expired = expiresIn != null && expiresIn <= 0;
+    final canExtend = status?.canExtendSession == true;
+    final showExtend = canExtend && status?.userPortalUrl != null;
+    final remainingLabel = expiresIn == null
+        ? 'Unknown'
+        : expiresIn <= 0
+        ? 'Expired'
+        : _formatSeconds(expiresIn);
+
+    return BracuCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.timer_outlined, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Portal Session',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: textPrimary,
+                ),
+              ),
+              const Spacer(),
+              if (_isCheckingSession)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Remaining: $remainingLabel',
+            style: TextStyle(fontSize: 13, color: textPrimary),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            canExtend
+                ? 'Session can be extended from the portal.'
+                : 'Session extension is not available.',
+            style: TextStyle(fontSize: 12, color: textSecondary),
+          ),
+          if (expired) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Session has expired. Re-login or extend to continue internet access.',
+              style: TextStyle(fontSize: 12, color: textSecondary),
+            ),
+          ],
+          if (showExtend) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 34,
+              child: ElevatedButton.icon(
+                onPressed: _isCheckingSession
+                    ? null
+                    : () => unawaited(_openExtendSession(status!)),
+                icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                label: const Text('Extend Session'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatSeconds(int seconds) {
+    final safeSeconds = seconds < 0 ? 0 : seconds;
+    final hours = safeSeconds ~/ 3600;
+    final mins = (safeSeconds % 3600) ~/ 60;
+    final secs = safeSeconds % 60;
+    if (hours > 0) {
+      return '${hours}h ${mins}m ${secs}s';
+    }
+    if (mins > 0) {
+      return '${mins}m ${secs}s';
+    }
+    return '${secs}s';
   }
 
   Future<bool> _loginViaCaptiveApi({
@@ -483,8 +757,8 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
   @override
   Widget build(BuildContext context) {
     return BracuPageScaffold(
-      title: 'Captive',
-      subtitle: 'API Based',
+      title: 'Captive Portal',
+      subtitle: 'API Based Session',
       icon: Icons.wifi_rounded,
       body: ScaffoldMessenger(
         key: _pageMessengerKey,
@@ -523,9 +797,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
                           const SizedBox(height: 10),
                           TextField(
                             controller: _passwordController,
-                            focusNode: _passwordFocusNode,
-                            onChanged: (_) => _showPasswordTemporarily(),
-                            obscureText: !_showPasswordWhileTyping,
+                            obscureText: true,
                             autofillHints: const <String>[
                               AutofillHints.password,
                             ],
@@ -549,9 +821,37 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: (_isCheckingSession || _isConnecting)
+                            ? null
+                            : () => unawaited(_refreshSessionStatus()),
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: Text(
+                          _isCheckingSession
+                              ? 'Checking...'
+                              : 'Check Session Time',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Auto Extend Session'),
+                      subtitle: Text(
+                        'Extend when time is <= ${_autoExtendThresholdSeconds}s',
+                      ),
+                      value: _autoExtendEnabled,
+                      onChanged: _setAutoExtendEnabled,
+                      activeThumbColor: BracuPalette.primary,
+                    ),
                   ],
                 ),
               ),
+              const SizedBox(height: 10),
+              _sessionInfoCard(context),
             ],
           ),
         ),
@@ -561,13 +861,25 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
 
   @override
   void dispose() {
-    _hidePasswordReveal();
+    _autoSessionTimer?.cancel();
+    _liveSessionTimer?.cancel();
     _ssidController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
-    _passwordFocusNode.dispose();
     super.dispose();
   }
+}
+
+class CaptivePortalApiStatus {
+  const CaptivePortalApiStatus({
+    required this.secondsRemaining,
+    required this.canExtendSession,
+    required this.userPortalUrl,
+  });
+
+  final int? secondsRemaining;
+  final bool canExtendSession;
+  final Uri? userPortalUrl;
 }
 
 class _HttpResult {
