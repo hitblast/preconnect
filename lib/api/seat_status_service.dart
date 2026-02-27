@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/api_config.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:preconnect/model/seat_status_info.dart';
 import 'package:sembast/sembast_io.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,13 +16,11 @@ class SeatStatusService {
 
   Database? _db;
   Map<int, int>? _seatMapSnapshot;
-  Map<String, SeatFacultyProfile>? _facultySnapshot;
   final ApiClient _client = ApiClient();
 
   static const String _dbName = 'seat_status_cache.db';
   static const String _detailsTsKey = 'details_ts';
   static const String _seatMapTsKey = 'seat_map_ts';
-  static const String _facultyTsKey = 'faculty_ts';
   static const String _seatMapEtagKey = 'seat_map_etag';
   static const String _detailsEtagPrefix = 'details_etag_';
   static const String _legacyCleanupDoneKey = 'seat_status_sp_cleanup_done_v1';
@@ -41,9 +39,6 @@ class SeatStatusService {
   );
   final StoreRef<int, Object?> _detailsStore = intMapStoreFactory.store(
     'seat_status_details',
-  );
-  final StoreRef<String, Object?> _facultyStore = StoreRef<String, Object?>(
-    'seat_status_faculty',
   );
 
   Future<Map<int, int>> loadCachedSeatMap({
@@ -105,38 +100,6 @@ class SeatStatusService {
     }
   }
 
-  Future<Map<String, SeatFacultyProfile>> loadCachedFacultyProfiles({
-    Duration maxAge = const Duration(days: 30),
-  }) async {
-    try {
-      final db = await _openDb();
-      final ts = await _metaStore.record(_facultyTsKey).get(db) as int?;
-      if (ts == null) return const <String, SeatFacultyProfile>{};
-      final age = DateTime.now().difference(
-        DateTime.fromMillisecondsSinceEpoch(ts),
-      );
-      if (age > maxAge) return const <String, SeatFacultyProfile>{};
-      final snapshots = await _facultyStore.find(db);
-      if (snapshots.isEmpty) return const <String, SeatFacultyProfile>{};
-      final result = <String, SeatFacultyProfile>{};
-      for (final snap in snapshots) {
-        final raw = snap.value;
-        if (raw is! Map) continue;
-        final key = snap.key.trim().toUpperCase();
-        if (key.isEmpty) continue;
-        try {
-          result[key] = SeatFacultyProfile.fromJson(
-            raw.cast<String, dynamic>(),
-          );
-        } catch (_) {}
-      }
-      _facultySnapshot = Map<String, SeatFacultyProfile>.from(result);
-      return result;
-    } catch (_) {
-      return const <String, SeatFacultyProfile>{};
-    }
-  }
-
   Future<Map<int, int>> replaceSeatMapSnapshotAndSave(
     Map<int, int> fullSeatMap,
   ) async {
@@ -190,28 +153,6 @@ class SeatStatusService {
         }
         await _metaStore.record(_detailsTsKey).put(txn, _nowMs());
       });
-    } catch (_) {}
-  }
-
-  Future<void> saveFacultyProfiles(
-    Map<String, SeatFacultyProfile> profiles,
-  ) async {
-    if (profiles.isEmpty) return;
-    try {
-      final db = await _openDb();
-      await db.transaction((txn) async {
-        for (final entry in profiles.entries) {
-          final key = entry.key.trim().toUpperCase();
-          if (key.isEmpty) continue;
-          await _facultyStore.record(key).put(txn, entry.value.toJson());
-        }
-        await _metaStore.record(_facultyTsKey).put(txn, _nowMs());
-      });
-      final merged = <String, SeatFacultyProfile>{
-        ...?_facultySnapshot,
-        ...profiles.map((k, v) => MapEntry(k.trim().toUpperCase(), v)),
-      };
-      _facultySnapshot = merged;
     } catch (_) {}
   }
 
@@ -305,109 +246,6 @@ class SeatStatusService {
     return result;
   }
 
-  Future<Map<String, SeatFacultyProfile>> fetchMissingFacultyProfiles(
-    Set<String> initials, {
-    int concurrency = 6,
-  }) async {
-    if (initials.isEmpty) return const <String, SeatFacultyProfile>{};
-    final existing = _facultySnapshot ?? await loadCachedFacultyProfiles();
-
-    final targets = initials
-        .map((e) => e.trim().toUpperCase())
-        .where((e) => e.isNotEmpty)
-        .where(_isMeaningfulFacultyToken)
-        .where((e) => !existing.containsKey(e))
-        .toList()
-      ..sort();
-    if (targets.isEmpty) return const <String, SeatFacultyProfile>{};
-
-    final fetched = <String, SeatFacultyProfile>{};
-    final laneCount = concurrency <= 0 ? 1 : concurrency;
-    var index = 0;
-    while (index < targets.length) {
-      final end = (index + laneCount > targets.length)
-          ? targets.length
-          : index + laneCount;
-      final batch = targets.sublist(index, end);
-      final batchResults = await Future.wait<MapEntry<String, SeatFacultyProfile>?>(
-        batch.map((initial) async {
-          final staffId = await _resolveStaffIdByInitial(initial);
-          if (staffId == null || staffId.isEmpty) return null;
-          final profile = await _fetchFacultyProfileByStaffId(staffId, initial);
-          if (profile == null) return null;
-          return MapEntry(initial, profile);
-        }),
-      );
-      for (final entry in batchResults) {
-        if (entry == null) continue;
-        fetched[entry.key] = entry.value;
-      }
-      index = end;
-    }
-    if (fetched.isNotEmpty) {
-      await saveFacultyProfiles(fetched);
-    }
-    return fetched;
-  }
-
-  Future<String?> _resolveStaffIdByInitial(String initial) async {
-    try {
-      final normalized = initial.trim().toUpperCase();
-      if (normalized.isEmpty) return null;
-      for (var page = 1; page <= 3; page++) {
-        final query = Uri.encodeQueryComponent(normalized.toLowerCase());
-        final url =
-            '${ApiConfig.connectApiBase}/data/autocomplete'
-            '?q=$query&page=$page&field_name=staffId&type=staff';
-        final response = await _client.authenticatedGet(url);
-        final raw = jsonDecode(response.body);
-        if (raw is! Map<String, dynamic>) continue;
-        final results = raw['results'];
-        if (results is! List) continue;
-        final more = raw['more'] == true;
-
-        for (final item in results.whereType<Map>()) {
-          final map = item.cast<String, dynamic>();
-          final id = '${map['id'] ?? ''}'.trim();
-          final text = '${map['text'] ?? ''}'.trim();
-          if (id.isEmpty || text.isEmpty) continue;
-
-          final token = _extractFacultyInitialToken(text);
-          if (token == normalized) {
-            return id;
-          }
-        }
-        if (!more) break;
-      }
-      return null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<SeatFacultyProfile?> _fetchFacultyProfileByStaffId(
-    String staffId,
-    String initial,
-  ) async {
-    final url =
-        '${ApiConfig.connectApiBase}/reg/v1/consultation-hours/$staffId';
-    try {
-      final response = await _client.authenticatedGet(url);
-      final raw = jsonDecode(response.body);
-      if (raw is! Map<String, dynamic>) return null;
-      return SeatFacultyProfile(
-        staffId: '${raw['id'] ?? staffId}'.trim(),
-        shortName: initial,
-        name: '${raw['staffName'] ?? ''}'.trim(),
-        email: '${raw['email'] ?? ''}'.trim(),
-        phone: '${raw['phone'] ?? ''}'.trim(),
-        designation: '${raw['designation'] ?? ''}'.trim(),
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<Database> _openDb() async {
     final existing = _db;
     if (existing != null) return existing;
@@ -495,61 +333,6 @@ String? _extractEtag(http.Response response) {
     }
   } catch (_) {}
   return null;
-}
-
-String _extractFacultyInitialToken(String text) {
-  final match = RegExp(r'^\s*([A-Za-z0-9]+)').firstMatch(text);
-  if (match == null) return '';
-  return (match.group(1) ?? '').trim().toUpperCase();
-}
-
-bool _isMeaningfulFacultyToken(String value) {
-  final v = value.trim().toUpperCase();
-  if (v.isEmpty) return false;
-  if (v == 'TBA') return false;
-  if (v == 'TO BE ANNOUNCED') return false;
-  if (v == 'N/A') return false;
-  if (v == 'NULL') return false;
-  if (v == '--') return false;
-  return true;
-}
-
-class SeatFacultyProfile {
-  const SeatFacultyProfile({
-    required this.staffId,
-    required this.shortName,
-    required this.name,
-    required this.email,
-    required this.phone,
-    required this.designation,
-  });
-
-  final String staffId;
-  final String shortName;
-  final String name;
-  final String email;
-  final String phone;
-  final String designation;
-
-  factory SeatFacultyProfile.fromJson(Map<String, dynamic> json) {
-    return SeatFacultyProfile(
-      staffId: '${json['staffId'] ?? ''}'.trim(),
-      shortName: '${json['shortName'] ?? ''}'.trim(),
-      name: '${json['name'] ?? ''}'.trim(),
-      email: '${json['email'] ?? ''}'.trim(),
-      phone: '${json['phone'] ?? ''}'.trim(),
-      designation: '${json['designation'] ?? ''}'.trim(),
-    );
-  }
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-    'staffId': staffId,
-    'shortName': shortName,
-    'name': name,
-    'email': email,
-    'phone': phone,
-    'designation': designation,
-  };
 }
 
 Map<int, SeatStatusDetailsResponse> _parseCachedDetailsFromMap(

@@ -41,10 +41,6 @@ class SeatStatusSection {
     required this.capacity,
     required this.consumedSeat,
     required this.faculties,
-    required this.facultyName,
-    required this.facultyEmail,
-    required this.facultyDesignation,
-    required this.facultyPhone,
     required this.roomName,
     required this.roomNumber,
     required this.sectionSchedule,
@@ -58,10 +54,6 @@ class SeatStatusSection {
   final int capacity;
   final int consumedSeat;
   final String faculties;
-  final String facultyName;
-  final String facultyEmail;
-  final String facultyDesignation;
-  final String facultyPhone;
   final String roomName;
   final String roomNumber;
   final SeatStatusSchedule sectionSchedule;
@@ -75,7 +67,6 @@ class SeatStatusSection {
       Map<String, dynamic> m => m,
       _ => const <String, dynamic>{},
     };
-    final facultyInfo = _extractFacultyInfo(json);
 
     return SeatStatusSection(
       sectionId: _toInt(json['sectionId']),
@@ -85,11 +76,7 @@ class SeatStatusSection {
       courseCredit: _toInt(json['courseCredit']),
       capacity: _toInt(json['capacity']),
       consumedSeat: _toInt(json['consumedSeat']),
-      faculties: facultyInfo.initial,
-      facultyName: facultyInfo.name,
-      facultyEmail: facultyInfo.email,
-      facultyDesignation: facultyInfo.designation,
-      facultyPhone: facultyInfo.phone,
+      faculties: _toFacultyInitial(json),
       roomName: _toString(json['roomName']),
       roomNumber: _toString(json['roomNumber']),
       sectionSchedule: SeatStatusSchedule.fromJson(scheduleJson),
@@ -106,10 +93,6 @@ class SeatStatusSection {
       'capacity': capacity,
       'consumedSeat': consumedSeat,
       'faculties': faculties,
-      'facultyName': facultyName,
-      'facultyEmail': facultyEmail,
-      'facultyDesignation': facultyDesignation,
-      'facultyPhone': facultyPhone,
       'roomName': roomName,
       'roomNumber': roomNumber,
       'sectionSchedule': sectionSchedule.toJson(),
@@ -213,105 +196,7 @@ String? _toNullableString(dynamic value) {
   return parsed;
 }
 
-class _FacultyInfo {
-  const _FacultyInfo({
-    required this.initial,
-    required this.name,
-    required this.email,
-    required this.designation,
-    required this.phone,
-  });
-
-  final String initial;
-  final String name;
-  final String email;
-  final String designation;
-  final String phone;
-}
-
-_FacultyInfo _extractFacultyInfo(Map<String, dynamic> json) {
-  final initial = _toFacultyString(json);
-  final name = _pickDirect(json, const <String>[
-    'facultyName',
-    'instructorName',
-    'teacherName',
-    'facultyFullName',
-    'facultyMemberName',
-  ]);
-  final email = _pickDirect(json, const <String>[
-    'facultyEmail',
-    'instructorEmail',
-    'teacherEmail',
-    'email',
-  ]);
-  final designation = _pickDirect(json, const <String>[
-    'facultyDesignation',
-    'instructorDesignation',
-    'designation',
-  ]);
-  final phone = _pickDirect(json, const <String>[
-    'facultyPhone',
-    'instructorPhone',
-    'phone',
-    'mobile',
-  ]);
-
-  final listItem = _firstFacultyListItem(json);
-  final resolvedName = _isMeaningful(name)
-      ? name
-      : _pickFromMap(
-          listItem,
-          const <String>[
-            'fullName',
-            'name',
-            'facultyName',
-            'instructorName',
-            'teacherName',
-          ],
-        );
-  final resolvedEmail = _isMeaningful(email)
-      ? email
-      : _pickFromMap(
-          listItem,
-          const <String>[
-            'email',
-            'facultyEmail',
-            'instructorEmail',
-            'teacherEmail',
-          ],
-        );
-  final resolvedDesignation = _isMeaningful(designation)
-      ? designation
-      : _pickFromMap(
-          listItem,
-          const <String>[
-            'designation',
-            'facultyDesignation',
-            'instructorDesignation',
-          ],
-        );
-  final resolvedPhone = _isMeaningful(phone)
-      ? phone
-      : _pickFromMap(
-          listItem,
-          const <String>[
-            'phone',
-            'mobile',
-            'facultyPhone',
-            'instructorPhone',
-          ],
-        );
-
-  return _FacultyInfo(
-    initial: initial,
-    name: resolvedName,
-    email: resolvedEmail,
-    designation: resolvedDesignation,
-    phone: resolvedPhone,
-  );
-}
-
-String _toFacultyString(Map<String, dynamic> json) {
+String _toFacultyInitial(Map<String, dynamic> json) {
   const directKeys = <String>[
     'faculties',
     'faculty',
@@ -323,7 +208,7 @@ String _toFacultyString(Map<String, dynamic> json) {
   ];
   for (final key in directKeys) {
     final value = _toString(json[key]);
-    if (_isMeaningful(value)) return value;
+    if (_isMeaningfulFacultyToken(value)) return value;
   }
 
   const listKeys = <String>[
@@ -338,66 +223,21 @@ String _toFacultyString(Map<String, dynamic> json) {
     if (raw is! List) continue;
     for (final item in raw.whereType<Map>()) {
       final map = item.cast<dynamic, dynamic>();
-      final value = _pickFromMap(
-        map.cast<String, dynamic>(),
-        const <String>[
-          'initial',
-          'shortName',
-          'facultyInitial',
-          'instructorInitial',
-          'teacherInitial',
-          'faculties',
-        ],
-      );
-      if (_isMeaningful(value)) return value;
+      for (final tokenKey in directKeys) {
+        final value = _toString(map[tokenKey]);
+        if (_isMeaningfulFacultyToken(value)) return value;
+      }
     }
-  }
-
-  return 'TBA';
-}
-
-String _pickDirect(Map<String, dynamic> map, List<String> keys) {
-  for (final key in keys) {
-    final value = _toString(map[key]);
-    if (_isMeaningful(value)) return value;
   }
   return '';
 }
 
-Map<String, dynamic>? _firstFacultyListItem(Map<String, dynamic> json) {
-  const listKeys = <String>[
-    'facultyDetails',
-    'facultyProfiles',
-    'instructors',
-    'teachers',
-    'sectionFacultyProfiles',
-  ];
-  for (final key in listKeys) {
-    final raw = json[key];
-    if (raw is! List) continue;
-    for (final item in raw.whereType<Map>()) {
-      return item.cast<String, dynamic>();
-    }
-  }
-  return null;
-}
-
-String _pickFromMap(Map<String, dynamic>? map, List<String> keys) {
-  if (map == null) return '';
-  for (final key in keys) {
-    final value = _toString(map[key]);
-    if (_isMeaningful(value)) return value;
-  }
-  return '';
-}
-
-bool _isMeaningful(String value) {
+bool _isMeaningfulFacultyToken(String value) {
   if (value.isEmpty) return false;
   final normalized = value.trim().toUpperCase();
   if (normalized == 'NULL') return false;
   if (normalized == 'N/A') return false;
   if (normalized == 'TBA') return false;
-  if (normalized == 'TO BE ANNOUNCED') return false;
   if (normalized == '--') return false;
   return true;
 }

@@ -25,8 +25,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   final List<_SeatStatusCardData> _visibleCards = <_SeatStatusCardData>[];
   final Map<int, SeatStatusDetailsResponse> _detailsCache =
       <int, SeatStatusDetailsResponse>{};
-  final Map<String, SeatFacultyProfile> _facultyProfiles =
-      <String, SeatFacultyProfile>{};
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
   Timer? _apiRefreshTimer;
@@ -117,21 +115,13 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       maxAge: const Duration(hours: 1),
     );
     if (!_cacheLoaded) {
-      final results = await Future.wait<dynamic>([
-        _service.loadCachedDetails(maxAge: const Duration(hours: 1)),
-        _service.loadCachedFacultyProfiles(),
-      ]);
-      final cached = results[0] as Map<int, SeatStatusDetailsResponse>;
+      final cached = await _service.loadCachedDetails(
+        maxAge: const Duration(hours: 1),
+      );
       if (cached.isNotEmpty) {
         _detailsCache
           ..clear()
           ..addAll(cached);
-      }
-      final cachedFaculty = results[1] as Map<String, SeatFacultyProfile>;
-      if (cachedFaculty.isNotEmpty) {
-        _facultyProfiles
-          ..clear()
-          ..addAll(cachedFaculty);
       }
       _cacheLoaded = true;
     }
@@ -145,9 +135,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 
     await _refreshSeatMapFromApi();
     await _syncMissingDetailsChunk(chunkSize: 36, concurrency: 8);
-    if (await _syncMissingFacultyProfiles()) {
-      await _applySeatMapUpdate(_latestSeatMap);
-    }
     if (!mounted) return;
     if (_isInitialLoading) {
       setState(() {
@@ -221,35 +208,12 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     final total = main.capacity;
     final resolvedRemaining = remaining ?? (total - main.consumedSeat);
     final resolvedConsumed = (total - resolvedRemaining).clamp(0, total);
-    final initial = _normalizeFacultyInitial(main.faculties);
-    final profile = initial.isEmpty ? null : _facultyProfiles[initial];
-    final facultyName = _pickMeaningful(
-      main.facultyName,
-      _pickMeaningful(profile?.name, ''),
-    );
-    final facultyEmail = _pickMeaningful(
-      main.facultyEmail,
-      _pickMeaningful(profile?.email, ''),
-    );
-    final facultyDesignation = _pickMeaningful(
-      main.facultyDesignation,
-      _pickMeaningful(profile?.designation, ''),
-    );
-    final facultyPhone = _pickMeaningful(
-      main.facultyPhone,
-      _pickMeaningful(profile?.phone, ''),
-    );
     return _SeatStatusCardData(
       sectionId: sectionId,
       courseCode: _pickNonEmpty(main.courseCode, 'SEC$sectionId'),
       sectionName: _pickNonEmpty(main.sectionName, '--'),
       courseName: _pickNonEmpty(main.name, 'Section $sectionId'),
       credits: main.courseCredit,
-      faculty: _pickNonEmpty(main.faculties, 'TBA'),
-      facultyName: facultyName,
-      facultyEmail: facultyEmail,
-      facultyDesignation: facultyDesignation,
-      facultyPhone: facultyPhone,
       room: _pickNonEmpty(main.roomNumber, ''),
       classSchedule: main.sectionSchedule.classSchedules,
       labSchedule:
@@ -270,10 +234,9 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         courseCode: _pickNonEmpty(main.courseCode, 'SEC$sectionId'),
         sectionName: _pickNonEmpty(main.sectionName, '--'),
         courseName: _pickNonEmpty(main.name, 'Section $sectionId'),
-        faculty:
-            '${_pickNonEmpty(main.faculties, 'TBA')} '
-            '$facultyName $facultyEmail $facultyDesignation $facultyPhone',
+        facultyInitial: _pickNonEmpty(main.faculties, ''),
         room: _pickNonEmpty(main.roomNumber, ''),
+        labRoom: _pickNonEmpty(lab?.roomNumber, ''),
       ),
     );
   }
@@ -283,10 +246,11 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     required String courseCode,
     required String sectionName,
     required String courseName,
-    required String faculty,
+    required String facultyInitial,
     required String room,
+    required String labRoom,
   }) {
-    return '$courseCode $sectionName $courseName $faculty $room $sectionId'
+    return '$courseCode $sectionName $courseName $facultyInitial $room $labRoom $sectionId'
         .toLowerCase();
   }
 
@@ -313,9 +277,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                   return const SizedBox(height: 12);
                 }
                 return const BracuCard(
-                  child: BracuEmptyState(
-                    message: 'No section data available',
-                  ),
+                  child: BracuEmptyState(message: 'No section data available'),
                 );
               },
             )
@@ -352,10 +314,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       style: TextStyle(color: BracuPalette.textPrimary(context)),
       textInputAction: TextInputAction.search,
       decoration: InputDecoration(
-        hintText: 'Search by course, faculty, etc.',
-        hintStyle: TextStyle(
-          color: BracuPalette.textSecondary(context),
-        ),
+        hintText: 'Search by course, faculty initial, room, etc.',
+        hintStyle: TextStyle(color: BracuPalette.textSecondary(context)),
         prefixIcon: Icon(
           Icons.search,
           color: BracuPalette.textSecondary(context),
@@ -370,22 +330,16 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                 ),
               ),
         isDense: true,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-            color: BracuPalette.textSecondary(
-              context,
-            ).withValues(alpha: 0.24),
+            color: BracuPalette.textSecondary(context).withValues(alpha: 0.24),
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: BracuPalette.primary,
-          ),
+          borderSide: const BorderSide(color: BracuPalette.primary),
         ),
       ),
     );
@@ -476,11 +430,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     if (x.sectionName != y.sectionName) return false;
     if (x.courseName != y.courseName) return false;
     if (x.credits != y.credits) return false;
-    if (x.faculty != y.faculty) return false;
-    if (x.facultyName != y.facultyName) return false;
-    if (x.facultyEmail != y.facultyEmail) return false;
-    if (x.facultyDesignation != y.facultyDesignation) return false;
-    if (x.facultyPhone != y.facultyPhone) return false;
     if (x.room != y.room) return false;
     if (x.labRoom != y.labRoom) return false;
     if (x.midExamDate != y.midExamDate) return false;
@@ -545,13 +494,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       if (seatMap.isNotEmpty) {
         await _applySeatMapUpdate(seatMap);
       }
-      unawaited(
-        _syncMissingFacultyProfiles().then((updated) async {
-          if (updated) {
-            await _applySeatMapUpdate(_latestSeatMap);
-          }
-        }),
-      );
     } catch (_) {
       if (_isInitialLoading && mounted) {
         setState(() {
@@ -569,10 +511,11 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   }) async {
     if (_isDetailsSyncing) return;
     if (_latestSeatMap.isEmpty) return;
-    final missing = _latestSeatMap.keys
-        .where((id) => !_detailsCache.containsKey(id))
-        .toList()
-      ..sort((a, b) => a.compareTo(b));
+    final missing =
+        _latestSeatMap.keys
+            .where((id) => !_detailsCache.containsKey(id))
+            .toList()
+          ..sort((a, b) => a.compareTo(b));
     if (missing.isEmpty) return;
 
     _isDetailsSyncing = true;
@@ -595,37 +538,10 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       );
       if (fetched.isEmpty) return;
       _detailsCache.addAll(fetched);
-      await _syncMissingFacultyProfiles();
       await _applySeatMapUpdate(_latestSeatMap);
     } catch (_) {
     } finally {
       _isDetailsSyncing = false;
-    }
-  }
-
-  Future<bool> _syncMissingFacultyProfiles() async {
-    if (_detailsCache.isEmpty) return false;
-    final initials = <String>{};
-    for (final details in _detailsCache.values) {
-      final section = details.section;
-      if (_hasCompleteFacultyInfo(section)) continue;
-      final initial = _normalizeFacultyInitial(section.faculties);
-      if (initial.isEmpty) continue;
-      if (_facultyProfiles.containsKey(initial)) continue;
-      initials.add(initial);
-    }
-    if (initials.isEmpty) return false;
-
-    try {
-      final fetched = await _service.fetchMissingFacultyProfiles(
-        initials,
-        concurrency: 6,
-      );
-      if (fetched.isEmpty) return false;
-      _facultyProfiles.addAll(fetched);
-      return true;
-    } catch (_) {
-      return false;
     }
   }
 }
@@ -676,57 +592,9 @@ class _SeatStatusCard extends StatelessWidget {
                           fontWeight: FontWeight.w500,
                           color: textSecondary,
                         ),
-                        children: [
-                          TextSpan(
-                            text: item.faculty.isEmpty ? 'TBA' : item.faculty,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: textSecondary,
-                            ),
-                          ),
-                          TextSpan(text: '  •  ${item.credits} credits'),
-                        ],
+                        children: [TextSpan(text: '${item.credits} credits')],
                       ),
                     ),
-                    if (_shouldShowFacultyInfoLine(item.facultyName)) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        item.facultyName.trim(),
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: textPrimary,
-                        ),
-                      ),
-                    ],
-                    if (_shouldShowFacultyInfoLine(item.facultyEmail))
-                      Text(
-                        item.facultyEmail.trim(),
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: textSecondary,
-                        ),
-                      ),
-                    if (_shouldShowFacultyInfoLine(item.facultyDesignation))
-                      Text(
-                        item.facultyDesignation.trim(),
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: textSecondary,
-                        ),
-                      ),
-                    if (_shouldShowFacultyInfoLine(item.facultyPhone))
-                      Text(
-                        item.facultyPhone.trim(),
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: textSecondary,
-                        ),
-                      ),
                   ],
                 ),
               ),
@@ -1020,11 +888,6 @@ class _SeatStatusCardData {
     required this.sectionName,
     required this.courseName,
     required this.credits,
-    required this.faculty,
-    required this.facultyName,
-    required this.facultyEmail,
-    required this.facultyDesignation,
-    required this.facultyPhone,
     required this.room,
     required this.classSchedule,
     required this.labSchedule,
@@ -1046,11 +909,6 @@ class _SeatStatusCardData {
   final String sectionName;
   final String courseName;
   final int credits;
-  final String faculty;
-  final String facultyName;
-  final String facultyEmail;
-  final String facultyDesignation;
-  final String facultyPhone;
   final String room;
   final List<SeatStatusClassSchedule> classSchedule;
   final List<SeatStatusClassSchedule> labSchedule;
@@ -1073,11 +931,6 @@ class _SeatStatusCardData {
       sectionName: sectionName,
       courseName: courseName,
       credits: credits,
-      faculty: faculty,
-      facultyName: facultyName,
-      facultyEmail: facultyEmail,
-      facultyDesignation: facultyDesignation,
-      facultyPhone: facultyPhone,
       room: room,
       classSchedule: classSchedule,
       labSchedule: labSchedule,
@@ -1106,40 +959,4 @@ String _pickNonEmpty(String? primary, String fallback) {
   final value = (primary ?? '').trim();
   if (value.isNotEmpty) return value;
   return fallback.trim();
-}
-
-String _pickMeaningful(String? primary, String fallback) {
-  final value = (primary ?? '').trim();
-  if (_shouldShowFacultyInfoLine(value)) return value;
-  final next = fallback.trim();
-  if (_shouldShowFacultyInfoLine(next)) return next;
-  return '';
-}
-
-bool _shouldShowFacultyInfoLine(String value) {
-  final trimmed = value.trim();
-  if (trimmed.isEmpty) return false;
-  final normalized = trimmed.toUpperCase();
-  if (normalized == 'TBA') return false;
-  if (normalized == 'TO BE ANNOUNCED') return false;
-  if (normalized == 'N/A') return false;
-  if (normalized == 'NULL') return false;
-  if (normalized == '--') return false;
-  return true;
-}
-
-String _normalizeFacultyInitial(String? value) {
-  final raw = (value ?? '').trim().toUpperCase();
-  if (!_shouldShowFacultyInfoLine(raw)) return '';
-  final parts = raw.split(RegExp(r'[,/&;]'));
-  for (final part in parts) {
-    final candidate = part.trim();
-    if (_shouldShowFacultyInfoLine(candidate)) return candidate;
-  }
-  return '';
-}
-
-bool _hasCompleteFacultyInfo(SeatStatusSection section) {
-  return _shouldShowFacultyInfoLine(section.facultyName) &&
-      _shouldShowFacultyInfoLine(section.facultyEmail);
 }
