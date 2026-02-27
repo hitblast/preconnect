@@ -229,7 +229,7 @@ String _toFacultyInitial(Map<String, dynamic> json) {
       }
     }
   }
-  return '';
+  return 'TBA';
 }
 
 bool _isMeaningfulFacultyToken(String value) {

@@ -271,8 +271,9 @@ class SeatStatusService {
       final db = await _openDb();
       final existingDetails = await _detailsStore.findKeys(db);
       final cachedIds = existingDetails.toSet();
-      final missing = seatMap.keys.where((id) => !cachedIds.contains(id)).toList()
-        ..sort((a, b) => a.compareTo(b));
+      final missing =
+          seatMap.keys.where((id) => !cachedIds.contains(id)).toList()
+            ..sort((a, b) => a.compareTo(b));
       if (missing.isEmpty) return;
 
       final chunk = detailChunkSize <= 0 ? 40 : detailChunkSize;

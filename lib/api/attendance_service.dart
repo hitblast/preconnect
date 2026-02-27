@@ -33,9 +33,8 @@ class AttendanceService {
       fromGet: fromGet,
       prefs: asyncPrefs,
       cacheKey: _cacheKey,
-      readCache: ({required bool fromFetch}) => getAttendanceInfo(
-        fromFetch: fromFetch,
-      ),
+      readCache: ({required bool fromFetch}) =>
+          getAttendanceInfo(fromFetch: fromFetch),
     );
   }
 

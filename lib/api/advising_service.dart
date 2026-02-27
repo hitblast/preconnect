@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
+import 'package:preconnect/api/prefs_cache_utils.dart';
 
 class AdvisingService {
   static final AdvisingService _instance = AdvisingService._internal();
@@ -37,25 +38,15 @@ class AdvisingService {
       fromGet: fromGet,
       cacheResponse: (response) async {
         final data = jsonDecode(response.body)[0];
-        await asyncPrefs.setString('advisingStartDate', data['startDate']);
-        await asyncPrefs.setString('advisingEndDate', data['endDate']);
-        await asyncPrefs.setString(
-          'activeSemesterSessionId',
-          data['activeSemesterSessionId'].toString(),
-        );
-        await asyncPrefs.setString('advisingPhase', data['advisingPhase']);
-        await asyncPrefs.setString(
-          'totalCredit',
-          data['totalCredit'].toString(),
-        );
-        await asyncPrefs.setString(
-          'earnedCredit',
-          data['earnedCredit'].toString(),
-        );
-        await asyncPrefs.setString(
-          'noOfSemester',
-          data['noOfSemester'].toString(),
-        );
+        await writeStringMap(asyncPrefs, <String, String>{
+          'advisingStartDate': '${data['startDate'] ?? ''}',
+          'advisingEndDate': '${data['endDate'] ?? ''}',
+          'activeSemesterSessionId': '${data['activeSemesterSessionId'] ?? ''}',
+          'advisingPhase': '${data['advisingPhase'] ?? ''}',
+          'totalCredit': '${data['totalCredit'] ?? ''}',
+          'earnedCredit': '${data['earnedCredit'] ?? ''}',
+          'noOfSemester': '${data['noOfSemester'] ?? ''}',
+        });
       },
       readCache: ({required bool fromFetch}) =>
           getAdvisingInfo(fromFetch: fromFetch),
@@ -65,26 +56,10 @@ class AdvisingService {
   Future<Map<String, String?>?> getAdvisingInfo({
     bool fromFetch = false,
   }) async {
-    final prefsWithCache = await SharedPreferencesWithCache.create(
-      cacheOptions: SharedPreferencesWithCacheOptions(
-        allowList: cacheKeys.toSet(),
-      ),
+    return readRequiredStringMapWithFallback(
+      keys: cacheKeys.toSet(),
+      fromFetch: fromFetch,
+      onCacheMiss: () => fetchAdvisingInfo(fromGet: true),
     );
-
-    if (fromFetch) await prefsWithCache.reloadCache();
-
-    final Map<String, String?> advisingData = {};
-    for (final key in cacheKeys) {
-      advisingData[key] = prefsWithCache.getString(key);
-    }
-
-    bool isIncomplete = advisingData.values.any(
-      (value) => value == null || value == '',
-    );
-    if (isIncomplete) {
-      if (fromFetch) return null;
-      return await fetchAdvisingInfo(fromGet: true);
-    }
-    return advisingData;
   }
 }

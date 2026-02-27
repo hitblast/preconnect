@@ -16,9 +16,7 @@ Future<String?> readCachedStringWithFallback({
   required Future<String?> Function() onCacheMiss,
 }) async {
   final prefsWithCache = await SharedPreferencesWithCache.create(
-    cacheOptions: SharedPreferencesWithCacheOptions(
-      allowList: <String>{key},
-    ),
+    cacheOptions: SharedPreferencesWithCacheOptions(allowList: <String>{key}),
   );
 
   if (fromFetch) await prefsWithCache.reloadCache();
@@ -42,4 +40,37 @@ Future<String?> resolvePortfolioId({
   }
   if (id == null || id.isEmpty) return null;
   return id;
+}
+
+Future<void> writeStringMap(
+  SharedPreferencesAsync prefs,
+  Map<String, String> values,
+) async {
+  for (final entry in values.entries) {
+    await prefs.setString(entry.key, entry.value);
+  }
+}
+
+Future<Map<String, String?>?> readRequiredStringMapWithFallback({
+  required Set<String> keys,
+  required bool fromFetch,
+  required Future<Map<String, String?>?> Function() onCacheMiss,
+}) async {
+  final prefsWithCache = await SharedPreferencesWithCache.create(
+    cacheOptions: SharedPreferencesWithCacheOptions(allowList: keys),
+  );
+
+  if (fromFetch) await prefsWithCache.reloadCache();
+
+  final data = <String, String?>{};
+  for (final key in keys) {
+    data[key] = prefsWithCache.getString(key);
+  }
+
+  final isIncomplete = data.values.any((value) => value == null || value == '');
+  if (isIncomplete) {
+    if (fromFetch) return null;
+    return onCacheMiss();
+  }
+  return data;
 }

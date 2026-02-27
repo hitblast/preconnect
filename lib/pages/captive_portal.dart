@@ -136,9 +136,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
         permission: Permission.nearbyWifiDevices,
       );
       if (!nearbyOk) return false;
-      return _requestPermissionWithUx(
-        permission: Permission.locationWhenInUse,
-      );
+      return _requestPermissionWithUx(permission: Permission.locationWhenInUse);
     }
     return _requestPermissionWithUx(permission: Permission.locationWhenInUse);
   }
@@ -252,12 +250,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
       };
 
       final encoded = Uri(queryParameters: payload).query;
-      final response = await _postOnce(
-        client,
-        form.action,
-        encoded,
-        cookies,
-      );
+      final response = await _postOnce(client, form.action, encoded, cookies);
 
       if (response.location != null) {
         final redirected = response.location!.isAbsolute
@@ -342,10 +335,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     );
   }
 
-  void _captureCookies(
-    HttpClientResponse response,
-    Map<String, Cookie> jar,
-  ) {
+  void _captureCookies(HttpClientResponse response, Map<String, Cookie> jar) {
     for (final cookie in response.cookies) {
       jar[cookie.name] = cookie;
     }
@@ -396,8 +386,10 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
 
         final type = (_attrValue(tag, 'type') ?? 'text').trim().toLowerCase();
         final id = (_attrValue(tag, 'id') ?? '').toLowerCase();
-        final placeholder = (_attrValue(tag, 'placeholder') ?? '').toLowerCase();
-        final autocomplete = (_attrValue(tag, 'autocomplete') ?? '').toLowerCase();
+        final placeholder = (_attrValue(tag, 'placeholder') ?? '')
+            .toLowerCase();
+        final autocomplete = (_attrValue(tag, 'autocomplete') ?? '')
+            .toLowerCase();
         final hint = '$name $id $placeholder $autocomplete'.toLowerCase();
 
         if (type == 'hidden') {
@@ -412,9 +404,16 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
 
         var score = 0;
         final wantsEmail = username.contains('@');
-        final looksEmail = hint.contains('email') || hint.contains('mail') || type == 'email';
-        final looksId = hint.contains('id') || hint.contains('student') || hint.contains('roll');
-        final looksUser = hint.contains('user') || hint.contains('username') || hint.contains('login');
+        final looksEmail =
+            hint.contains('email') || hint.contains('mail') || type == 'email';
+        final looksId =
+            hint.contains('id') ||
+            hint.contains('student') ||
+            hint.contains('roll');
+        final looksUser =
+            hint.contains('user') ||
+            hint.contains('username') ||
+            hint.contains('login');
 
         if (wantsEmail) {
           if (looksEmail) score += 100;
@@ -463,7 +462,9 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     messenger.showSnackBar(
       SnackBar(
         content: Text(message, style: const TextStyle(color: Colors.white)),
-        backgroundColor: isDark ? const Color(0xFF1E6BE3) : BracuPalette.primary,
+        backgroundColor: isDark
+            ? const Color(0xFF1E6BE3)
+            : BracuPalette.primary,
         duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -525,7 +526,9 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
                             focusNode: _passwordFocusNode,
                             onChanged: (_) => _showPasswordTemporarily(),
                             obscureText: !_showPasswordWhileTyping,
-                            autofillHints: const <String>[AutofillHints.password],
+                            autofillHints: const <String>[
+                              AutofillHints.password,
+                            ],
                             decoration: const InputDecoration(
                               labelText: 'Password',
                               border: OutlineInputBorder(),

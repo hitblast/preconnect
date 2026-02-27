@@ -144,7 +144,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   }
 
   List<_SeatStatusCardData> _buildCardsFromSeatMap(Map<int, int> seatMap) {
-    final sectionIds = seatMap.keys.toList()
+    final sectionIds = _visibleSectionIds(seatMap).toList()
       ..sort((a, b) => _compareSectionIdsByNaming(a, b));
     return sectionIds
         .where((sectionId) => _detailsCache.containsKey(sectionId))
@@ -163,7 +163,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     if (!mounted || seatMap.isEmpty) return;
     _latestSeatMap = Map<int, int>.from(seatMap);
 
-    final nextIds = seatMap.keys.toSet();
+    final nextIds = _visibleSectionIds(seatMap);
     final existingIds = _cards.map((c) => c.sectionId).toSet();
 
     final updated = _cards.where((c) => nextIds.contains(c.sectionId)).map((c) {
@@ -198,6 +198,15 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     }
   }
 
+  Set<int> _visibleSectionIds(Map<int, int> seatMap) {
+    final childIds = <int>{};
+    for (final details in _detailsCache.values) {
+      final childId = details.childSection?.sectionId ?? 0;
+      if (childId > 0) childIds.add(childId);
+    }
+    return seatMap.keys.where((id) => !childIds.contains(id)).toSet();
+  }
+
   _SeatStatusCardData _buildCardFromDetails({
     required int sectionId,
     required SeatStatusDetailsResponse details,
@@ -213,6 +222,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       courseCode: _pickNonEmpty(main.courseCode, 'SEC$sectionId'),
       sectionName: _pickNonEmpty(main.sectionName, '--'),
       courseName: _pickNonEmpty(main.name, 'Section $sectionId'),
+      facultyInitial: _pickNonEmpty(main.faculties, 'TBA'),
       credits: main.courseCredit,
       room: _pickNonEmpty(main.roomNumber, ''),
       classSchedule: main.sectionSchedule.classSchedules,
@@ -234,7 +244,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         courseCode: _pickNonEmpty(main.courseCode, 'SEC$sectionId'),
         sectionName: _pickNonEmpty(main.sectionName, '--'),
         courseName: _pickNonEmpty(main.name, 'Section $sectionId'),
-        facultyInitial: _pickNonEmpty(main.faculties, ''),
+        facultyInitial: _pickNonEmpty(main.faculties, 'TBA'),
         room: _pickNonEmpty(main.roomNumber, ''),
         labRoom: _pickNonEmpty(lab?.roomNumber, ''),
       ),
@@ -429,6 +439,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     if (x.courseCode != y.courseCode) return false;
     if (x.sectionName != y.sectionName) return false;
     if (x.courseName != y.courseName) return false;
+    if (x.facultyInitial != y.facultyInitial) return false;
     if (x.credits != y.credits) return false;
     if (x.room != y.room) return false;
     if (x.labRoom != y.labRoom) return false;
@@ -592,7 +603,11 @@ class _SeatStatusCard extends StatelessWidget {
                           fontWeight: FontWeight.w500,
                           color: textSecondary,
                         ),
-                        children: [TextSpan(text: '${item.credits} credits')],
+                        children: [
+                          TextSpan(text: item.facultyInitial),
+                          const TextSpan(text: '  •  '),
+                          TextSpan(text: '${item.credits} credits'),
+                        ],
                       ),
                     ),
                   ],
@@ -611,14 +626,10 @@ class _SeatStatusCard extends StatelessWidget {
                       child: Container(
                         width: 38,
                         height: 38,
-                        decoration: const BoxDecoration(
-                          color: BracuPalette.primary,
-                          shape: BoxShape.circle,
-                        ),
                         alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.notifications_none_rounded,
-                          color: Colors.white,
+                        child: Icon(
+                          Icons.notifications_outlined,
+                          color: BracuPalette.textPrimary(context),
                           size: 20,
                         ),
                       ),
@@ -887,6 +898,7 @@ class _SeatStatusCardData {
     required this.courseCode,
     required this.sectionName,
     required this.courseName,
+    required this.facultyInitial,
     required this.credits,
     required this.room,
     required this.classSchedule,
@@ -908,6 +920,7 @@ class _SeatStatusCardData {
   final String courseCode;
   final String sectionName;
   final String courseName;
+  final String facultyInitial;
   final int credits;
   final String room;
   final List<SeatStatusClassSchedule> classSchedule;
@@ -930,6 +943,7 @@ class _SeatStatusCardData {
       courseCode: courseCode,
       sectionName: sectionName,
       courseName: courseName,
+      facultyInitial: facultyInitial,
       credits: credits,
       room: room,
       classSchedule: classSchedule,

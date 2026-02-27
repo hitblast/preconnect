@@ -115,9 +115,7 @@ class ApiClient {
     Map<String, String> additionalHeaders = const <String, String>{},
     Set<int> acceptedStatusCodes = const <int>{200, 304},
   }) {
-    final headers = <String, String>{
-      ...additionalHeaders,
-    };
+    final headers = <String, String>{...additionalHeaders};
     final normalized = (etag ?? '').trim();
     if (normalized.isNotEmpty) {
       headers['If-None-Match'] = normalized;
