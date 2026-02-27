@@ -36,7 +36,6 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
     super.initState();
     _future = _load().then((info) {
       _latestInfo = info;
-      // If cached data exists, refresh silently in the background.
       if (info != null) {
         unawaited(_refreshFromNetworkSilent());
       }
@@ -830,7 +829,6 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
       final seen = <String>{};
       for (final raw in decoded.whereType<Map<String, dynamic>>()) {
         final item = section.Section.fromJson(raw);
-        // Deduplicate true repeats while keeping distinct lecture/lab sections.
         final key =
             '${item.sectionId}|${item.courseCode}|${item.sectionName}|${item.roomNumber}';
         if (!seen.add(key)) continue;

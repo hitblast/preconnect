@@ -87,7 +87,6 @@ class _ShareSchedulePageState extends State<ShareSchedulePage> {
         _base64Data = cachedBase64;
         isLoading = false;
       });
-      // Keep cached UI stable and refresh silently in background.
       unawaited(_refreshIfOnline(notify: false));
       return;
     }

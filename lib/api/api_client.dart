@@ -109,6 +109,26 @@ class ApiClient {
     throw ApiException(response.statusCode, response.body);
   }
 
+  Future<http.Response> authenticatedGetWithEtag(
+    String url, {
+    String? etag,
+    Map<String, String> additionalHeaders = const <String, String>{},
+    Set<int> acceptedStatusCodes = const <int>{200, 304},
+  }) {
+    final headers = <String, String>{
+      ...additionalHeaders,
+    };
+    final normalized = (etag ?? '').trim();
+    if (normalized.isNotEmpty) {
+      headers['If-None-Match'] = normalized;
+    }
+    return authenticatedGet(
+      url,
+      additionalHeaders: headers,
+      acceptedStatusCodes: acceptedStatusCodes,
+    );
+  }
+
   Future<T?> fetchWithFallback<T>({
     required String url,
     required Future<void> Function(http.Response response) cacheResponse,

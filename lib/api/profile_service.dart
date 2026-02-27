@@ -356,7 +356,6 @@ class ProfileService {
         return value == null || value.isEmpty;
       });
       if (anyMiscMissing) {
-        // Keep instant cached load, and silently backfill missing misc fields.
         unawaited(fetchProfile(fromGet: true));
       }
     }

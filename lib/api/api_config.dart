@@ -4,7 +4,6 @@ class ApiConfig {
   ApiConfig._();
   static const String playIntegrityCloudProjectNumberEnv =
       String.fromEnvironment('PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER');
-  static const String _seatWorkerWsUrl = 'wss://seatstatus.preconnect.app';
 
   static const String ssoBase =
       'https://sso.bracu.ac.bd/realms/bracu/protocol/openid-connect';
@@ -56,12 +55,6 @@ class ApiConfig {
     final value = playIntegrityCloudProjectNumberEnv.trim();
     if (value.isEmpty) return null;
     return int.tryParse(value);
-  }
-
-  static String? get seatWorkerWsUrl {
-    final value = _seatWorkerWsUrl.trim();
-    if (value.isEmpty) return null;
-    return value.endsWith('/') ? value.substring(0, value.length - 1) : value;
   }
 
   static const List<String> paymentTypes = [

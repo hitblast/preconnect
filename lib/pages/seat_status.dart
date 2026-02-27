@@ -1,11 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/model/seat_status_info.dart';
@@ -13,7 +10,6 @@ import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
 import 'package:preconnect/tools/time_utils.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
 class SeatStatusPage extends StatefulWidget {
   const SeatStatusPage({super.key});
@@ -29,16 +25,19 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   final List<_SeatStatusCardData> _visibleCards = <_SeatStatusCardData>[];
   final Map<int, SeatStatusDetailsResponse> _detailsCache =
       <int, SeatStatusDetailsResponse>{};
+  final Map<String, SeatFacultyProfile> _facultyProfiles =
+      <String, SeatFacultyProfile>{};
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
-  Timer? _wsReconnectTimer;
-  WebSocketChannel? _seatMapChannel;
-  StreamSubscription<dynamic>? _seatMapSubscription;
+  Timer? _apiRefreshTimer;
+  Timer? _detailsSyncTimer;
   bool _isInitialLoading = true;
   String _searchQuery = '';
   bool _cacheLoaded = false;
   bool _isAppForeground = true;
-  int _wsReconnectAttempt = 0;
+  int _detailsSyncCursor = 0;
+  bool _isSeatMapRefreshing = false;
+  bool _isDetailsSyncing = false;
   Map<int, int> _latestSeatMap = <int, int>{};
 
   @override
@@ -64,8 +63,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     WidgetsBinding.instance.removeObserver(this);
     HomeTabRegistry.activeTab.removeListener(_onActiveTabChanged);
     _searchDebounce?.cancel();
-    _wsReconnectTimer?.cancel();
-    _closeSeatMapSocket();
+    _stopLocalPolling();
     _searchController.dispose();
     RefreshBus.instance.removeListener(_onRefreshSignal);
     super.dispose();
@@ -103,8 +101,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     if (!await ensureOnline(context, notify: notify)) {
       return;
     }
-    _closeSeatMapSocket();
-    _updatePollingStrategy();
+    await _refreshSeatMapFromApi();
     if (notify) {
       RefreshBus.instance.notify(reason: 'seat_status');
     }
@@ -116,26 +113,46 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         _isInitialLoading = true;
       });
     }
-    final cachedSeatMap = await _service.loadCachedSeatMap(
+    final cachedSeatMapFuture = _service.loadCachedSeatMap(
       maxAge: const Duration(hours: 1),
     );
     if (!_cacheLoaded) {
-      final cached = await _service.loadCachedDetails(
-        maxAge: const Duration(hours: 1),
-      );
+      final results = await Future.wait<dynamic>([
+        _service.loadCachedDetails(maxAge: const Duration(hours: 1)),
+        _service.loadCachedFacultyProfiles(),
+      ]);
+      final cached = results[0] as Map<int, SeatStatusDetailsResponse>;
       if (cached.isNotEmpty) {
         _detailsCache
           ..clear()
           ..addAll(cached);
       }
+      final cachedFaculty = results[1] as Map<String, SeatFacultyProfile>;
+      if (cachedFaculty.isNotEmpty) {
+        _facultyProfiles
+          ..clear()
+          ..addAll(cachedFaculty);
+      }
       _cacheLoaded = true;
     }
+    final cachedSeatMap = await cachedSeatMapFuture;
 
-    // Instant paint from local cache.
     if (cachedSeatMap.isNotEmpty && mounted) {
       _latestSeatMap = Map<int, int>.from(cachedSeatMap);
       final cachedCards = _buildCardsFromSeatMap(cachedSeatMap);
       _applyCardsSnapshot(cachedCards, isInitialLoading: false);
+    }
+
+    await _refreshSeatMapFromApi();
+    await _syncMissingDetailsChunk(chunkSize: 36, concurrency: 8);
+    if (await _syncMissingFacultyProfiles()) {
+      await _applySeatMapUpdate(_latestSeatMap);
+    }
+    if (!mounted) return;
+    if (_isInitialLoading) {
+      setState(() {
+        _isInitialLoading = false;
+      });
     }
   }
 
@@ -204,13 +221,35 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     final total = main.capacity;
     final resolvedRemaining = remaining ?? (total - main.consumedSeat);
     final resolvedConsumed = (total - resolvedRemaining).clamp(0, total);
+    final initial = _normalizeFacultyInitial(main.faculties);
+    final profile = initial.isEmpty ? null : _facultyProfiles[initial];
+    final facultyName = _pickMeaningful(
+      main.facultyName,
+      _pickMeaningful(profile?.name, ''),
+    );
+    final facultyEmail = _pickMeaningful(
+      main.facultyEmail,
+      _pickMeaningful(profile?.email, ''),
+    );
+    final facultyDesignation = _pickMeaningful(
+      main.facultyDesignation,
+      _pickMeaningful(profile?.designation, ''),
+    );
+    final facultyPhone = _pickMeaningful(
+      main.facultyPhone,
+      _pickMeaningful(profile?.phone, ''),
+    );
     return _SeatStatusCardData(
       sectionId: sectionId,
       courseCode: _pickNonEmpty(main.courseCode, 'SEC$sectionId'),
       sectionName: _pickNonEmpty(main.sectionName, '--'),
       courseName: _pickNonEmpty(main.name, 'Section $sectionId'),
       credits: main.courseCredit,
-      faculty: _pickNonEmpty(main.faculties, ''),
+      faculty: _pickNonEmpty(main.faculties, 'TBA'),
+      facultyName: facultyName,
+      facultyEmail: facultyEmail,
+      facultyDesignation: facultyDesignation,
+      facultyPhone: facultyPhone,
       room: _pickNonEmpty(main.roomNumber, ''),
       classSchedule: main.sectionSchedule.classSchedules,
       labSchedule:
@@ -231,7 +270,9 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         courseCode: _pickNonEmpty(main.courseCode, 'SEC$sectionId'),
         sectionName: _pickNonEmpty(main.sectionName, '--'),
         courseName: _pickNonEmpty(main.name, 'Section $sectionId'),
-        faculty: _pickNonEmpty(main.faculties, ''),
+        faculty:
+            '${_pickNonEmpty(main.faculties, 'TBA')} '
+            '$facultyName $facultyEmail $facultyDesignation $facultyPhone',
         room: _pickNonEmpty(main.roomNumber, ''),
       ),
     );
@@ -436,6 +477,10 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     if (x.courseName != y.courseName) return false;
     if (x.credits != y.credits) return false;
     if (x.faculty != y.faculty) return false;
+    if (x.facultyName != y.facultyName) return false;
+    if (x.facultyEmail != y.facultyEmail) return false;
+    if (x.facultyDesignation != y.facultyDesignation) return false;
+    if (x.facultyPhone != y.facultyPhone) return false;
     if (x.room != y.room) return false;
     if (x.labRoom != y.labRoom) return false;
     if (x.midExamDate != y.midExamDate) return false;
@@ -468,135 +513,120 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   }
 
   void _updatePollingStrategy() {
-    final active = _isAppForeground;
-    final wsUrl = ApiConfig.seatWorkerWsUrl;
-    if (active && wsUrl != null && wsUrl.isNotEmpty) {
-      _startSeatMapSocket(wsUrl);
+    if (_isAppForeground) {
+      _startLocalPolling();
       return;
     }
-    _closeSeatMapSocket();
+    _stopLocalPolling();
   }
 
-  void _startSeatMapSocket(String wsUrl) {
-    if (_seatMapSubscription != null) return;
-    try {
-      final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
-      _seatMapChannel = channel;
-      _seatMapSubscription = channel.stream.listen(
-        (payload) => unawaited(_onSeatMapSocketPayload(payload)),
-        onDone: _scheduleSocketReconnect,
-        onError: (_) => _scheduleSocketReconnect(),
-      );
-      _wsReconnectAttempt = 0;
-    } catch (_) {
-      _scheduleSocketReconnect();
-    }
-  }
-
-  void _closeSeatMapSocket() {
-    _wsReconnectTimer?.cancel();
-    _wsReconnectTimer = null;
-    _seatMapSubscription?.cancel();
-    _seatMapSubscription = null;
-    _seatMapChannel?.sink.close();
-    _seatMapChannel = null;
-    _wsReconnectAttempt = 0;
-  }
-
-  void _scheduleSocketReconnect() {
-    _seatMapSubscription?.cancel();
-    _seatMapSubscription = null;
-    _seatMapChannel?.sink.close();
-    _seatMapChannel = null;
-
-    if (!_isAppForeground) return;
-    final wsUrl = ApiConfig.seatWorkerWsUrl;
-    if (wsUrl == null || wsUrl.isEmpty) return;
-
-    _wsReconnectTimer?.cancel();
-    final backoffSeconds = math.min(30, math.max(1, 1 << _wsReconnectAttempt));
-    _wsReconnectAttempt = math.min(6, _wsReconnectAttempt + 1);
-    _wsReconnectTimer = Timer(Duration(seconds: backoffSeconds), () {
-      if (!mounted) return;
-      _startSeatMapSocket(wsUrl);
+  void _startLocalPolling() {
+    _apiRefreshTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+      unawaited(_refreshSeatMapFromApi());
     });
+    _detailsSyncTimer ??= Timer.periodic(const Duration(seconds: 6), (_) {
+      unawaited(_syncMissingDetailsChunk(chunkSize: 10));
+    });
+    unawaited(_refreshSeatMapFromApi());
   }
 
-  Future<void> _onSeatMapSocketPayload(dynamic payload) async {
-    if (!mounted) return;
-    final text = _decodeSocketPayload(payload);
-    if (text == null || text.isEmpty) return;
-    Map<String, dynamic> decoded;
+  void _stopLocalPolling() {
+    _apiRefreshTimer?.cancel();
+    _apiRefreshTimer = null;
+    _detailsSyncTimer?.cancel();
+    _detailsSyncTimer = null;
+  }
+
+  Future<void> _refreshSeatMapFromApi() async {
+    if (_isSeatMapRefreshing) return;
+    _isSeatMapRefreshing = true;
     try {
-      final raw = jsonDecode(text);
-      if (raw is! Map) return;
-      decoded = raw.cast<String, dynamic>();
+      final seatMap = await _service.fetchSeatMapFromApi();
+      if (seatMap.isNotEmpty) {
+        await _applySeatMapUpdate(seatMap);
+      }
+      unawaited(
+        _syncMissingFacultyProfiles().then((updated) async {
+          if (updated) {
+            await _applySeatMapUpdate(_latestSeatMap);
+          }
+        }),
+      );
     } catch (_) {
-      return;
-    }
-
-    final detailsPatch = _parseDetailsPatch(decoded);
-    if (detailsPatch.isNotEmpty) {
-      _detailsCache.addAll(detailsPatch);
-      unawaited(_service.saveDetailsCache(detailsPatch));
-      if (_latestSeatMap.isNotEmpty) {
-        await _applySeatMapUpdate(_latestSeatMap);
+      if (_isInitialLoading && mounted) {
+        setState(() {
+          _isInitialLoading = false;
+        });
       }
-      return;
+    } finally {
+      _isSeatMapRefreshing = false;
     }
-
-    final seatMapPatch = _parseSeatMap(decoded);
-    if (seatMapPatch.isEmpty) return;
-    final mergedSeatMap = await _service.applySeatMapPatchAndSave(seatMapPatch);
-    await _applySeatMapUpdate(mergedSeatMap);
   }
 
-  Map<int, SeatStatusDetailsResponse> _parseDetailsPatch(dynamic rawMap) {
-    if (rawMap is! Map) return const <int, SeatStatusDetailsResponse>{};
-    final changed = <int, SeatStatusDetailsResponse>{};
-    for (final entry in rawMap.entries) {
-      final sectionId = int.tryParse('${entry.key}');
-      final value = entry.value;
-      if (sectionId == null || value is! Map) continue;
-      try {
-        changed[sectionId] = SeatStatusDetailsResponse.fromJson(
-          value.cast<String, dynamic>(),
-        );
-      } catch (_) {}
+  Future<void> _syncMissingDetailsChunk({
+    int chunkSize = 10,
+    int concurrency = 4,
+  }) async {
+    if (_isDetailsSyncing) return;
+    if (_latestSeatMap.isEmpty) return;
+    final missing = _latestSeatMap.keys
+        .where((id) => !_detailsCache.containsKey(id))
+        .toList()
+      ..sort((a, b) => a.compareTo(b));
+    if (missing.isEmpty) return;
+
+    _isDetailsSyncing = true;
+    try {
+      final take = math.min(chunkSize, missing.length);
+      if (_detailsSyncCursor >= missing.length) {
+        _detailsSyncCursor = 0;
+      }
+      final picked = <int>[];
+      var idx = _detailsSyncCursor;
+      for (var i = 0; i < take; i++) {
+        picked.add(missing[idx]);
+        idx = (idx + 1) % missing.length;
+      }
+      _detailsSyncCursor = idx;
+
+      final fetched = await _service.fetchDetailsForSectionIdsFromApi(
+        picked,
+        concurrency: concurrency,
+      );
+      if (fetched.isEmpty) return;
+      _detailsCache.addAll(fetched);
+      await _syncMissingFacultyProfiles();
+      await _applySeatMapUpdate(_latestSeatMap);
+    } catch (_) {
+    } finally {
+      _isDetailsSyncing = false;
     }
-    return changed;
   }
 
-  String? _decodeSocketPayload(dynamic payload) {
-    if (payload is String) return payload;
-    if (payload is Uint8List) {
-      try {
-        return utf8.decode(payload);
-      } catch (_) {
-        return null;
-      }
+  Future<bool> _syncMissingFacultyProfiles() async {
+    if (_detailsCache.isEmpty) return false;
+    final initials = <String>{};
+    for (final details in _detailsCache.values) {
+      final section = details.section;
+      if (_hasCompleteFacultyInfo(section)) continue;
+      final initial = _normalizeFacultyInitial(section.faculties);
+      if (initial.isEmpty) continue;
+      if (_facultyProfiles.containsKey(initial)) continue;
+      initials.add(initial);
     }
-    if (payload is List<int>) {
-      try {
-        return utf8.decode(payload);
-      } catch (_) {
-        return null;
-      }
-    }
-    return null;
-  }
+    if (initials.isEmpty) return false;
 
-  Map<int, int> _parseSeatMap(dynamic rawMap) {
-    if (rawMap is! Map) return const <int, int>{};
-    final seatMap = <int, int>{};
-    for (final entry in rawMap.entries) {
-      final sectionId = int.tryParse('${entry.key}');
-      final remaining = int.tryParse('${entry.value}');
-      if (sectionId != null && remaining != null) {
-        seatMap[sectionId] = remaining;
-      }
+    try {
+      final fetched = await _service.fetchMissingFacultyProfiles(
+        initials,
+        concurrency: 6,
+      );
+      if (fetched.isEmpty) return false;
+      _facultyProfiles.addAll(fetched);
+      return true;
+    } catch (_) {
+      return false;
     }
-    return seatMap;
   }
 }
 
@@ -659,6 +689,44 @@ class _SeatStatusCard extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (_shouldShowFacultyInfoLine(item.facultyName)) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        item.facultyName.trim(),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ],
+                    if (_shouldShowFacultyInfoLine(item.facultyEmail))
+                      Text(
+                        item.facultyEmail.trim(),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: textSecondary,
+                        ),
+                      ),
+                    if (_shouldShowFacultyInfoLine(item.facultyDesignation))
+                      Text(
+                        item.facultyDesignation.trim(),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: textSecondary,
+                        ),
+                      ),
+                    if (_shouldShowFacultyInfoLine(item.facultyPhone))
+                      Text(
+                        item.facultyPhone.trim(),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: textSecondary,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -953,6 +1021,10 @@ class _SeatStatusCardData {
     required this.courseName,
     required this.credits,
     required this.faculty,
+    required this.facultyName,
+    required this.facultyEmail,
+    required this.facultyDesignation,
+    required this.facultyPhone,
     required this.room,
     required this.classSchedule,
     required this.labSchedule,
@@ -975,6 +1047,10 @@ class _SeatStatusCardData {
   final String courseName;
   final int credits;
   final String faculty;
+  final String facultyName;
+  final String facultyEmail;
+  final String facultyDesignation;
+  final String facultyPhone;
   final String room;
   final List<SeatStatusClassSchedule> classSchedule;
   final List<SeatStatusClassSchedule> labSchedule;
@@ -998,6 +1074,10 @@ class _SeatStatusCardData {
       courseName: courseName,
       credits: credits,
       faculty: faculty,
+      facultyName: facultyName,
+      facultyEmail: facultyEmail,
+      facultyDesignation: facultyDesignation,
+      facultyPhone: facultyPhone,
       room: room,
       classSchedule: classSchedule,
       labSchedule: labSchedule,
@@ -1026,4 +1106,40 @@ String _pickNonEmpty(String? primary, String fallback) {
   final value = (primary ?? '').trim();
   if (value.isNotEmpty) return value;
   return fallback.trim();
+}
+
+String _pickMeaningful(String? primary, String fallback) {
+  final value = (primary ?? '').trim();
+  if (_shouldShowFacultyInfoLine(value)) return value;
+  final next = fallback.trim();
+  if (_shouldShowFacultyInfoLine(next)) return next;
+  return '';
+}
+
+bool _shouldShowFacultyInfoLine(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return false;
+  final normalized = trimmed.toUpperCase();
+  if (normalized == 'TBA') return false;
+  if (normalized == 'TO BE ANNOUNCED') return false;
+  if (normalized == 'N/A') return false;
+  if (normalized == 'NULL') return false;
+  if (normalized == '--') return false;
+  return true;
+}
+
+String _normalizeFacultyInitial(String? value) {
+  final raw = (value ?? '').trim().toUpperCase();
+  if (!_shouldShowFacultyInfoLine(raw)) return '';
+  final parts = raw.split(RegExp(r'[,/&;]'));
+  for (final part in parts) {
+    final candidate = part.trim();
+    if (_shouldShowFacultyInfoLine(candidate)) return candidate;
+  }
+  return '';
+}
+
+bool _hasCompleteFacultyInfo(SeatStatusSection section) {
+  return _shouldShowFacultyInfoLine(section.facultyName) &&
+      _shouldShowFacultyInfoLine(section.facultyEmail);
 }

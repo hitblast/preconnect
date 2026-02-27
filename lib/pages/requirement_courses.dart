@@ -80,7 +80,6 @@ class _RequirementCoursesPageState extends State<RequirementCoursesPage> {
         final ap = _pinnedCodes.contains(aCode) ? 0 : 1;
         final bp = _pinnedCodes.contains(bCode) ? 0 : 1;
         if (ap != bp) {
-          // Starred stays highest priority.
           return ap.compareTo(bp);
         }
         final aTop =
@@ -94,7 +93,6 @@ class _RequirementCoursesPageState extends State<RequirementCoursesPage> {
             ? 0
             : 1;
         if (aTop != bTop) {
-          // Then keep completed/taken-this-semester items at top.
           return aTop.compareTo(bTop);
         }
         return compareNaturalText(a.code, b.code);
