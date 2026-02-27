@@ -8,6 +8,7 @@ import 'package:preconnect/api/auth_service.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/api/progress_service.dart';
 import 'package:preconnect/api/schedule_service.dart';
+import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/app.dart';
 import 'package:preconnect/pages/class_schedule.dart';
 import 'package:preconnect/pages/exam_schedule.dart';
@@ -314,6 +315,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     }
     unawaited(_refreshCaptiveStatus());
     unawaited(_preloadDegreeProgress());
+    unawaited(_preloadSeatStatus());
     RefreshBus.instance.addListener(_onRefreshSignal);
   }
 
@@ -428,13 +430,16 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     await ProgressService().getProgress();
   }
 
+  Future<void> _preloadSeatStatus() async {
+    await SeatStatusService().preloadSeatStatusCache();
+  }
+
   Future<void> _handleRefresh({bool notify = true}) async {
     if (_isRefreshing) return;
     if (!await ensureOnline(context, notify: notify)) {
       return;
     }
     _isRefreshing = true;
-    unawaited(_preloadDegreeProgress(forceRefresh: true));
     try {
       final fresh = await _loadData(forceRefresh: true);
       if (!mounted) return;

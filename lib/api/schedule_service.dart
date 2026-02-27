@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
+import 'package:preconnect/api/fetch_cache_utils.dart';
+import 'package:preconnect/api/prefs_cache_utils.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 
@@ -154,7 +156,7 @@ class ScheduleService {
       }
     }
     available.sort((a, b) => b.compareTo(a));
-    await asyncPrefs.setString(_validSemestersCacheKey, jsonEncode(available));
+    await writeJsonToPrefs(asyncPrefs, _validSemestersCacheKey, available);
     return available;
   }
 
@@ -231,11 +233,10 @@ class ScheduleService {
   }) async {
     final asyncPrefs = SharedPreferencesAsync();
     final cacheKey = _cacheKeyForSemester(semesterSessionId);
-    String? id = await asyncPrefs.getString('id');
-    if (id == null || id.isEmpty) {
-      await ProfileService().fetchProfile(fromGet: true);
-      id = await asyncPrefs.getString('id');
-    }
+    final id = await resolvePortfolioId(
+      prefs: asyncPrefs,
+      refreshProfile: () => ProfileService().fetchProfile(fromGet: true),
+    );
     if (id == null || id.isEmpty) {
       if (fromGet) return null;
       return getStudentScheduleForSemester(
@@ -248,13 +249,12 @@ class ScheduleService {
         '${ApiConfig.connectApiBase}'
         '${ApiConfig.schedulePath(id, semesterSessionId: semesterSessionId)}';
 
-    return _client.fetchWithFallback<String>(
+    return fetchJsonStringWithFallback(
+      client: _client,
       url: url,
       fromGet: fromGet,
-      cacheResponse: (response) async {
-        final data = jsonDecode(response.body);
-        await asyncPrefs.setString(cacheKey, jsonEncode(data));
-      },
+      prefs: asyncPrefs,
+      cacheKey: cacheKey,
       readCache: ({required bool fromFetch}) => getStudentScheduleForSemester(
         semesterSessionId: semesterSessionId,
         fromFetch: fromFetch,
@@ -274,22 +274,13 @@ class ScheduleService {
     bool fromFetch = false,
   }) async {
     final cacheKey = _cacheKeyForSemester(semesterSessionId);
-    final prefsWithCache = await SharedPreferencesWithCache.create(
-      cacheOptions: SharedPreferencesWithCacheOptions(
-        allowList: <String>{cacheKey},
-      ),
-    );
-
-    if (fromFetch) await prefsWithCache.reloadCache();
-
-    final String scheduleJson = prefsWithCache.getString(cacheKey) ?? '';
-    if (scheduleJson == '') {
-      if (fromFetch) return null;
-      return await fetchStudentScheduleForSemester(
+    return readCachedStringWithFallback(
+      key: cacheKey,
+      fromFetch: fromFetch,
+      onCacheMiss: () => fetchStudentScheduleForSemester(
         semesterSessionId: semesterSessionId,
         fromGet: true,
-      );
-    }
-    return scheduleJson;
+      ),
+    );
   }
 }

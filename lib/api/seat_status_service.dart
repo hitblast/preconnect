@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/api_config.dart';
+import 'package:preconnect/api/http_cache_utils.dart';
 import 'package:preconnect/model/seat_status_info.dart';
 import 'package:sembast/sembast_io.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -148,10 +148,25 @@ class SeatStatusService {
     try {
       final db = await _openDb();
       await db.transaction((txn) async {
+        var wroteAny = false;
         for (final entry in detailsBySection.entries) {
-          await _detailsStore.record(entry.key).put(txn, entry.value.toJson());
+          final nextJson = entry.value.toJson();
+          final existingRaw = await _detailsStore.record(entry.key).get(txn);
+          Map<String, dynamic>? existingJson;
+          if (existingRaw is Map<String, dynamic>) {
+            existingJson = existingRaw;
+          } else if (existingRaw is Map) {
+            existingJson = existingRaw.cast<String, dynamic>();
+          }
+          if (existingJson != null && _jsonDeepEqual(existingJson, nextJson)) {
+            continue;
+          }
+          await _detailsStore.record(entry.key).put(txn, nextJson);
+          wroteAny = true;
         }
-        await _metaStore.record(_detailsTsKey).put(txn, _nowMs());
+        if (wroteAny) {
+          await _metaStore.record(_detailsTsKey).put(txn, _nowMs());
+        }
       });
     } catch (_) {}
   }
@@ -176,7 +191,7 @@ class SeatStatusService {
     }
     if (map.isEmpty) return const <int, int>{};
     final saved = await replaceSeatMapSnapshotAndSave(map);
-    final nextEtag = _extractEtag(response);
+    final nextEtag = extractEtagFromResponse(response);
     if (nextEtag != null) {
       await _metaStore.record(_seatMapEtagKey).put(db, nextEtag);
     }
@@ -219,7 +234,7 @@ class SeatStatusService {
               final retryRaw = jsonDecode(retry.body);
               if (retryRaw is! Map<String, dynamic>) return;
               result[sectionId] = SeatStatusDetailsResponse.fromJson(retryRaw);
-              final retryEtag = _extractEtag(retry);
+              final retryEtag = extractEtagFromResponse(retry);
               if (retryEtag != null) {
                 nextEtags[sectionId] = retryEtag;
               }
@@ -228,7 +243,7 @@ class SeatStatusService {
             final raw = jsonDecode(response.body);
             if (raw is! Map<String, dynamic>) return;
             result[sectionId] = SeatStatusDetailsResponse.fromJson(raw);
-            final nextEtag = _extractEtag(response);
+            final nextEtag = extractEtagFromResponse(response);
             if (nextEtag != null) {
               nextEtags[sectionId] = nextEtag;
             }
@@ -244,6 +259,36 @@ class SeatStatusService {
       await _saveDetailsEtags(nextEtags);
     }
     return result;
+  }
+
+  Future<void> preloadSeatStatusCache({
+    int detailChunkSize = 40,
+    int detailConcurrency = 8,
+  }) async {
+    try {
+      final seatMap = await fetchSeatMapFromApi();
+      if (seatMap.isEmpty) return;
+      final db = await _openDb();
+      final existingDetails = await _detailsStore.findKeys(db);
+      final cachedIds = existingDetails.toSet();
+      final missing = seatMap.keys.where((id) => !cachedIds.contains(id)).toList()
+        ..sort((a, b) => a.compareTo(b));
+      if (missing.isEmpty) return;
+
+      final chunk = detailChunkSize <= 0 ? 40 : detailChunkSize;
+      var index = 0;
+      while (index < missing.length) {
+        final end = (index + chunk > missing.length)
+            ? missing.length
+            : index + chunk;
+        final batch = missing.sublist(index, end);
+        await fetchDetailsForSectionIdsFromApi(
+          batch,
+          concurrency: detailConcurrency,
+        );
+        index = end;
+      }
+    } catch (_) {}
   }
 
   Future<Database> _openDb() async {
@@ -321,18 +366,8 @@ class SeatStatusService {
   }
 }
 
-String? _extractEtag(http.Response response) {
-  try {
-    final headers = response.headers;
-    for (final entry in headers.entries) {
-      final key = entry.key.trim().toLowerCase();
-      if (key != 'etag') continue;
-      final value = entry.value.trim();
-      if (value.isEmpty) return null;
-      return value;
-    }
-  } catch (_) {}
-  return null;
+bool _jsonDeepEqual(Map<String, dynamic> a, Map<String, dynamic> b) {
+  return jsonEncode(a) == jsonEncode(b);
 }
 
 Map<int, SeatStatusDetailsResponse> _parseCachedDetailsFromMap(

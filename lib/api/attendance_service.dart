@@ -1,7 +1,8 @@
-import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
+import 'package:preconnect/api/fetch_cache_utils.dart';
+import 'package:preconnect/api/prefs_cache_utils.dart';
 import 'package:preconnect/api/profile_service.dart';
 
 class AttendanceService {
@@ -15,11 +16,10 @@ class AttendanceService {
 
   Future<String?> fetchAttendanceInfo({bool fromGet = false}) async {
     final asyncPrefs = SharedPreferencesAsync();
-    String? id = await asyncPrefs.getString('id');
-    if (id == null || id.isEmpty) {
-      await ProfileService().fetchProfile(fromGet: true);
-      id = await asyncPrefs.getString('id');
-    }
+    final id = await resolvePortfolioId(
+      prefs: asyncPrefs,
+      refreshProfile: () => ProfileService().fetchProfile(fromGet: true),
+    );
     if (id == null || id.isEmpty) {
       if (fromGet) return null;
       return getAttendanceInfo(fromFetch: true);
@@ -27,32 +27,23 @@ class AttendanceService {
 
     final url = '${ApiConfig.connectApiBase}${ApiConfig.attendancePath(id)}';
 
-    return _client.fetchWithFallback<String>(
+    return fetchJsonStringWithFallback(
+      client: _client,
       url: url,
       fromGet: fromGet,
-      cacheResponse: (response) async {
-        final data = jsonDecode(response.body);
-        await asyncPrefs.setString(_cacheKey, jsonEncode(data));
-      },
-      readCache: ({required bool fromFetch}) =>
-          getAttendanceInfo(fromFetch: fromFetch),
+      prefs: asyncPrefs,
+      cacheKey: _cacheKey,
+      readCache: ({required bool fromFetch}) => getAttendanceInfo(
+        fromFetch: fromFetch,
+      ),
     );
   }
 
   Future<String?> getAttendanceInfo({bool fromFetch = false}) async {
-    final prefsWithCache = await SharedPreferencesWithCache.create(
-      cacheOptions: const SharedPreferencesWithCacheOptions(
-        allowList: <String>{_cacheKey},
-      ),
+    return readCachedStringWithFallback(
+      key: _cacheKey,
+      fromFetch: fromFetch,
+      onCacheMiss: () => fetchAttendanceInfo(fromGet: true),
     );
-
-    if (fromFetch) await prefsWithCache.reloadCache();
-
-    final String attendanceJson = prefsWithCache.getString(_cacheKey) ?? '';
-    if (attendanceJson == '') {
-      if (fromFetch) return null;
-      return await fetchAttendanceInfo(fromGet: true);
-    }
-    return attendanceJson;
   }
 }

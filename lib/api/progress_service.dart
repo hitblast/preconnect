@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/api_config.dart';
+import 'package:preconnect/api/http_cache_utils.dart';
+import 'package:preconnect/api/prefs_cache_utils.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/model/progress_info.dart';
 
@@ -43,11 +45,10 @@ class ProgressService {
 
   Future<ProgressInfo?> _fetchProgressInternal({required bool fromGet}) async {
     final asyncPrefs = SharedPreferencesAsync();
-    String? portfolioId = await asyncPrefs.getString('id');
-    if (portfolioId == null || portfolioId.isEmpty) {
-      await ProfileService().fetchProfile(fromGet: true);
-      portfolioId = await asyncPrefs.getString('id');
-    }
+    final portfolioId = await resolvePortfolioId(
+      prefs: asyncPrefs,
+      refreshProfile: () => ProfileService().fetchProfile(fromGet: true),
+    );
 
     if (portfolioId == null || portfolioId.isEmpty) {
       if (fromGet) return null;
@@ -75,17 +76,17 @@ class ProgressService {
       final responses = await Future.wait([
         _client.authenticatedGet(
           majorMinorsUrl,
-          additionalHeaders: _ifNoneMatchHeader(majorEtag),
+          additionalHeaders: ifNoneMatchHeader(majorEtag),
           acceptedStatusCodes: const <int>{200, 304},
         ),
         _client.authenticatedGet(
           completedCoursesUrl,
-          additionalHeaders: _ifNoneMatchHeader(completedEtag),
+          additionalHeaders: ifNoneMatchHeader(completedEtag),
           acceptedStatusCodes: const <int>{200, 304},
         ),
         _client.authenticatedGet(
           curriculumUrl,
-          additionalHeaders: _ifNoneMatchHeader(curriculumEtag),
+          additionalHeaders: ifNoneMatchHeader(curriculumEtag),
           acceptedStatusCodes: const <int>{200, 304},
         ),
       ]);
@@ -123,11 +124,8 @@ class ProgressService {
       };
       final info = ProgressInfo.fromPayload(payload);
       final summary = ProgressSummary.fromProgressInfo(info);
-      await asyncPrefs.setString(_cacheKey, jsonEncode(payload));
-      await asyncPrefs.setString(
-        _summaryCacheKey,
-        jsonEncode(summary.toJson()),
-      );
+      await writeJsonToPrefs(asyncPrefs, _cacheKey, payload);
+      await writeJsonToPrefs(asyncPrefs, _summaryCacheKey, summary.toJson());
       return info;
     } catch (_) {
       if (fromGet) return null;
@@ -148,45 +146,28 @@ class ProgressService {
     }
     if (response.statusCode != 200) return null;
     final decoded = jsonDecode(response.body);
-    await prefs.setString(dataKey, jsonEncode(decoded));
-    final etag = _extractEtag(response.headers);
+    await writeJsonToPrefs(prefs, dataKey, decoded);
+    final etag = extractEtagFromHeaders(response.headers);
     if (etag != null && etag.isNotEmpty) {
       await prefs.setString(etagKey, etag);
     }
     return decoded;
   }
 
-  Map<String, String> _ifNoneMatchHeader(String? etag) {
-    final value = (etag ?? '').trim();
-    if (value.isEmpty) return const <String, String>{};
-    return <String, String>{'If-None-Match': value};
-  }
-
-  String? _extractEtag(Map<String, String> headers) {
-    for (final entry in headers.entries) {
-      if (entry.key.toLowerCase() == 'etag') {
-        final value = entry.value.trim();
-        if (value.isNotEmpty) return value;
-      }
-    }
-    return null;
-  }
-
   Future<ProgressInfo?> getProgress({bool fromFetch = false}) async {
-    final prefsWithCache = await SharedPreferencesWithCache.create(
-      cacheOptions: const SharedPreferencesWithCacheOptions(
-        allowList: <String>{_cacheKey},
-      ),
+    final cached = await readCachedStringWithFallback(
+      key: _cacheKey,
+      fromFetch: fromFetch,
+      onCacheMiss: () async {
+        final fetched = await fetchProgress(fromGet: true);
+        if (fetched == null) return null;
+        final asyncPrefs = SharedPreferencesAsync();
+        final raw = await asyncPrefs.getString(_cacheKey);
+        return raw;
+      },
     );
-
-    if (fromFetch) {
-      await prefsWithCache.reloadCache();
-    }
-
-    final cached = prefsWithCache.getString(_cacheKey) ?? '';
-    if (cached.isEmpty) {
-      if (fromFetch) return null;
-      return fetchProgress(fromGet: true);
+    if (cached == null || cached.isEmpty) {
+      return null;
     }
 
     try {
@@ -203,21 +184,17 @@ class ProgressService {
   }
 
   Future<ProgressSummary?> getProgressSummary({bool fromFetch = false}) async {
-    final prefsWithCache = await SharedPreferencesWithCache.create(
-      cacheOptions: const SharedPreferencesWithCacheOptions(
-        allowList: <String>{_summaryCacheKey},
-      ),
+    final cached = await readCachedStringWithFallback(
+      key: _summaryCacheKey,
+      fromFetch: fromFetch,
+      onCacheMiss: () async {
+        await fetchProgress(fromGet: true);
+        final asyncPrefs = SharedPreferencesAsync();
+        return await asyncPrefs.getString(_summaryCacheKey);
+      },
     );
-
-    if (fromFetch) {
-      await prefsWithCache.reloadCache();
-    }
-
-    final cached = prefsWithCache.getString(_summaryCacheKey) ?? '';
-    if (cached.isEmpty) {
-      if (fromFetch) return null;
-      await fetchProgress(fromGet: true);
-      return getProgressSummary(fromFetch: true);
+    if (cached == null || cached.isEmpty) {
+      return null;
     }
 
     try {
