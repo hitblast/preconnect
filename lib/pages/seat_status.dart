@@ -21,6 +21,16 @@ class SeatStatusPage extends StatefulWidget {
 
 class _SeatStatusPageState extends State<SeatStatusPage>
     with WidgetsBindingObserver {
+  static const List<String> _weekdayOrder = <String>[
+    'SUNDAY',
+    'MONDAY',
+    'TUESDAY',
+    'WEDNESDAY',
+    'THURSDAY',
+    'FRIDAY',
+    'SATURDAY',
+  ];
+
   final SeatStatusService _service = SeatStatusService();
   final List<_SeatStatusCardData> _cards = <_SeatStatusCardData>[];
   final List<_SeatStatusCardData> _visibleCards = <_SeatStatusCardData>[];
@@ -37,6 +47,9 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   bool _isSeatMapRefreshing = false;
   bool _isDetailsSyncing = false;
   bool _isResolvingStaffInfo = false;
+  bool _availableOnly = false;
+  String _selectedDayFilter = '';
+  String _selectedTimeFilter = '';
   final Set<String> _pendingInitials = <String>{};
   Map<int, int> _latestSeatMap = <int, int>{};
 
@@ -175,7 +188,16 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     final existingIds = _cards.map((c) => c.sectionId).toSet();
 
     final updated = _cards.where((c) => nextIds.contains(c.sectionId)).map((c) {
-      final remaining = seatMap[c.sectionId] ?? c.remaining;
+      final seatMapValue = seatMap[c.sectionId];
+      final detailsConsumed =
+          _detailsCache[c.sectionId]?.section.consumedSeat ?? c.consumed;
+      final remaining = seatMapValue == null
+          ? c.remaining
+          : _resolveRemainingFromSeatMap(
+              total: c.total,
+              seatMapValue: seatMapValue,
+              detailsConsumed: detailsConsumed,
+            );
       final consumed = c.total > 0
           ? (c.total - remaining).clamp(0, c.total)
           : c.consumed;
@@ -223,7 +245,14 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     final main = details.section;
     final lab = details.childSection;
     final total = main.capacity;
-    final resolvedRemaining = remaining ?? (total - main.consumedSeat);
+    final fallbackRemaining = (total - main.consumedSeat).clamp(0, total);
+    final resolvedRemaining = remaining == null
+        ? fallbackRemaining
+        : _resolveRemainingFromSeatMap(
+            total: total,
+            seatMapValue: remaining,
+            detailsConsumed: main.consumedSeat,
+          );
     final resolvedConsumed = (total - resolvedRemaining).clamp(0, total);
     return _SeatStatusCardData(
       sectionId: sectionId,
@@ -263,6 +292,22 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     );
   }
 
+  int _resolveRemainingFromSeatMap({
+    required int total,
+    required int seatMapValue,
+    required int detailsConsumed,
+  }) {
+    if (total <= 0) return 0;
+    final normalized = seatMapValue.clamp(0, total);
+    final asRemaining = normalized;
+    final asConsumed = (total - normalized).clamp(0, total);
+    final fallbackRemaining = (total - detailsConsumed).clamp(0, total);
+    final remainingDiff = (asRemaining - fallbackRemaining).abs();
+    final consumedDiff = (asConsumed - fallbackRemaining).abs();
+    if (consumedDiff < remainingDiff) return asConsumed;
+    return asRemaining;
+  }
+
   String _buildSearchToken({
     required int sectionId,
     required String courseCode,
@@ -291,13 +336,10 @@ class _SeatStatusPageState extends State<SeatStatusPage>
           : _cards.isEmpty
           ? BracuRefreshListBuilder(
               onRefresh: _handleRefresh,
-              itemCount: 3,
+              itemCount: 2,
               itemBuilder: (context, index) {
                 if (index == 0) {
-                  return _buildSearchField(context);
-                }
-                if (index == 1) {
-                  return const SizedBox(height: 12);
+                  return _buildFilterHeader(context);
                 }
                 return const BracuCard(
                   child: BracuEmptyState(message: 'No section data available'),
@@ -306,13 +348,10 @@ class _SeatStatusPageState extends State<SeatStatusPage>
             )
           : BracuRefreshListBuilder(
               onRefresh: _handleRefresh,
-              itemCount: _visibleCards.isEmpty ? 3 : _visibleCards.length + 2,
+              itemCount: _visibleCards.isEmpty ? 2 : _visibleCards.length + 1,
               itemBuilder: (context, index) {
                 if (index == 0) {
-                  return _buildSearchField(context);
-                }
-                if (index == 1) {
-                  return const SizedBox(height: 12);
+                  return _buildFilterHeader(context);
                 }
                 if (_visibleCards.isEmpty) {
                   return const BracuCard(
@@ -321,13 +360,27 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                     ),
                   );
                 }
-                final item = _visibleCards[index - 2];
+                final item = _visibleCards[index - 1];
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _SeatStatusCard(item: item),
                 );
               },
             ),
+    );
+  }
+
+  Widget _buildFilterHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSearchField(context),
+          const SizedBox(height: 10),
+          _buildFilterActions(context),
+        ],
+      ),
     );
   }
 
@@ -368,31 +421,214 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     );
   }
 
-  List<_SeatStatusCardData> _filterCards(
-    List<_SeatStatusCardData> source,
-    String query,
-  ) {
-    final q = query.trim().toLowerCase();
-    if (q.isEmpty) return source;
-    return source.where((card) => card.searchToken.contains(q)).toList();
+  Widget _buildFilterActions(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _buildAvailabilityFilterAction(),
+        _buildDayFilterAction(context),
+        _buildTimeFilterAction(context),
+      ],
+    );
   }
 
-  void _updateSearchQuery(String nextQuery) {
-    if (nextQuery == _searchQuery) return;
-    final nextVisible = _filterCards(_cards, nextQuery);
+  Widget _buildAvailabilityFilterAction() {
+    return _FilterChip(
+      icon: Icons.event_available_outlined,
+      label: 'Available',
+      selected: _availableOnly,
+      onTap: () => _setAvailableFilter(!_availableOnly),
+      showArrow: false,
+    );
+  }
+
+  Widget _buildDayFilterAction(BuildContext context) {
+    final label = _selectedDayFilter.isEmpty
+        ? 'Any Day'
+        : formatWeekdayTitle(_selectedDayFilter);
+    final labels = <String>[
+      'Any Day',
+      ..._weekdayOrder.map(formatWeekdayTitle),
+    ];
+    final menuWidth = _popupMenuWidth(
+      context,
+      labels,
+      minWidth: 170,
+      maxWidth: 320,
+    );
+    return PopupMenuButton<String>(
+      tooltip: 'Filter by day',
+      initialValue: _selectedDayFilter,
+      constraints: BoxConstraints(minWidth: menuWidth, maxWidth: menuWidth),
+      onSelected: _setDayFilter,
+      itemBuilder: (context) => <PopupMenuEntry<String>>[
+        CheckedPopupMenuItem<String>(
+          value: '',
+          checked: _selectedDayFilter.isEmpty,
+          child: _menuItemLabel('Any Day'),
+        ),
+        ..._weekdayOrder.map(
+          (day) => CheckedPopupMenuItem<String>(
+            value: day,
+            checked: day == _selectedDayFilter,
+            child: _menuItemLabel(formatWeekdayTitle(day)),
+          ),
+        ),
+      ],
+      child: _FilterChip(
+        icon: Icons.calendar_today_outlined,
+        label: label,
+        selected: _selectedDayFilter.isNotEmpty,
+      ),
+    );
+  }
+
+  Widget _buildTimeFilterAction(BuildContext context) {
+    final options = _buildTimeFilterOptions(_cards);
+    final label = _selectedTimeFilter.isEmpty
+        ? 'Any Time'
+        : _selectedTimeFilter;
+    final labels = <String>[
+      'Any Time',
+      ...options.map((option) => option.label),
+    ];
+    final menuWidth = _popupMenuWidth(
+      context,
+      labels,
+      minWidth: 190,
+      maxWidth: 560,
+    );
+    return PopupMenuButton<String>(
+      tooltip: 'Filter by time',
+      initialValue: _selectedTimeFilter,
+      constraints: BoxConstraints(minWidth: menuWidth, maxWidth: menuWidth),
+      onSelected: _setTimeFilter,
+      itemBuilder: (context) => <PopupMenuEntry<String>>[
+        CheckedPopupMenuItem<String>(
+          value: '',
+          checked: _selectedTimeFilter.isEmpty,
+          child: _menuItemLabel('Any Time'),
+        ),
+        ...options.map(
+          (option) => CheckedPopupMenuItem<String>(
+            value: option.label,
+            checked: option.label == _selectedTimeFilter,
+            child: _menuItemLabel(option.label),
+          ),
+        ),
+      ],
+      child: _FilterChip(
+        icon: Icons.access_time_rounded,
+        label: label,
+        selected: _selectedTimeFilter.isNotEmpty,
+      ),
+    );
+  }
+
+  void _setAvailableFilter(bool next) {
+    if (next == _availableOnly) return;
+    _refreshVisibleCards(availableOnly: next);
+  }
+
+  void _setDayFilter(String next) {
+    if (next == _selectedDayFilter) return;
+    _refreshVisibleCards(dayFilter: next);
+  }
+
+  void _setTimeFilter(String next) {
+    if (next == _selectedTimeFilter) return;
+    _refreshVisibleCards(timeFilter: next);
+  }
+
+  void _refreshVisibleCards({
+    bool? availableOnly,
+    String? dayFilter,
+    String? timeFilter,
+    String? query,
+  }) {
+    final resolvedAvailableOnly = availableOnly ?? _availableOnly;
+    final resolvedDayFilter = dayFilter ?? _selectedDayFilter;
+    final resolvedTimeFilter = timeFilter ?? _selectedTimeFilter;
+    final resolvedQuery = query ?? _searchQuery;
+    final nextVisible = _filterCards(
+      _cards,
+      resolvedQuery,
+      availableOnly: resolvedAvailableOnly,
+      dayFilter: resolvedDayFilter,
+      timeFilter: resolvedTimeFilter,
+    );
     setState(() {
-      _searchQuery = nextQuery;
+      _availableOnly = resolvedAvailableOnly;
+      _selectedDayFilter = resolvedDayFilter;
+      _selectedTimeFilter = resolvedTimeFilter;
+      _searchQuery = resolvedQuery;
       _visibleCards
         ..clear()
         ..addAll(nextVisible);
     });
   }
 
+  List<_SeatStatusCardData> _filterCards(
+    List<_SeatStatusCardData> source,
+    String query, {
+    required bool availableOnly,
+    required String dayFilter,
+    required String timeFilter,
+  }) {
+    final q = query.trim().toLowerCase();
+    return source.where((card) {
+      if (q.isNotEmpty && !card.searchToken.contains(q)) return false;
+      if (availableOnly && card.remaining <= 0) return false;
+
+      if (dayFilter.isNotEmpty || timeFilter.isNotEmpty) {
+        final schedules = <SeatStatusClassSchedule>[
+          ...card.classSchedule,
+          ...card.labSchedule,
+        ];
+        if (dayFilter.isNotEmpty) {
+          final hasDay = schedules.any(
+            (entry) => normalizeWeekday(entry.day) == dayFilter,
+          );
+          if (!hasDay) return false;
+        }
+        if (timeFilter.isNotEmpty) {
+          final hasTime = schedules.any(
+            (entry) =>
+                _scheduleTimeLabel(entry.startTime, entry.endTime) ==
+                timeFilter,
+          );
+          if (!hasTime) return false;
+        }
+      }
+      return true;
+    }).toList();
+  }
+
+  void _updateSearchQuery(String nextQuery) {
+    if (nextQuery == _searchQuery) return;
+    _refreshVisibleCards(query: nextQuery);
+  }
+
   void _applyCardsSnapshot(
     List<_SeatStatusCardData> nextCards, {
     bool? isInitialLoading,
   }) {
-    final nextVisible = _filterCards(nextCards, _searchQuery);
+    final availableTimeLabels = _buildTimeFilterOptions(
+      nextCards,
+    ).map((entry) => entry.label).toSet();
+    final nextTimeFilter =
+        _selectedTimeFilter.isNotEmpty &&
+            !availableTimeLabels.contains(_selectedTimeFilter)
+        ? ''
+        : _selectedTimeFilter;
+    final nextVisible = _filterCards(
+      nextCards,
+      _searchQuery,
+      availableOnly: _availableOnly,
+      dayFilter: _selectedDayFilter,
+      timeFilter: nextTimeFilter,
+    );
     if (!mounted) return;
     setState(() {
       _cards
@@ -401,10 +637,83 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       _visibleCards
         ..clear()
         ..addAll(nextVisible);
+      _selectedTimeFilter = nextTimeFilter;
       if (isInitialLoading != null) {
         _isInitialLoading = isInitialLoading;
       }
     });
+  }
+
+  String _scheduleTimeLabel(String startTime, String endTime) {
+    final label = formatTimeRange(startTime, endTime).trim();
+    if (label.isNotEmpty) return label;
+    final fallback = '${startTime.trim()} - ${endTime.trim()}'.trim();
+    return fallback == '-' ? '' : fallback;
+  }
+
+  List<_SeatStatusTimeFilterOption> _buildTimeFilterOptions(
+    List<_SeatStatusCardData> cards,
+  ) {
+    final deduped = <String, _SeatStatusTimeFilterOption>{};
+    for (final card in cards) {
+      final schedules = <SeatStatusClassSchedule>[
+        ...card.classSchedule,
+        ...card.labSchedule,
+      ];
+      for (final entry in schedules) {
+        final label = _scheduleTimeLabel(entry.startTime, entry.endTime);
+        if (label.isEmpty) continue;
+        deduped.putIfAbsent(
+          label,
+          () => _SeatStatusTimeFilterOption(
+            label: label,
+            startMinutes: BracuTime.toMinutes(entry.startTime) ?? 9999,
+            endMinutes: BracuTime.toMinutes(entry.endTime) ?? 9999,
+          ),
+        );
+      }
+    }
+    final result = deduped.values.toList();
+    result.sort((a, b) {
+      final byStart = a.startMinutes.compareTo(b.startMinutes);
+      if (byStart != 0) return byStart;
+      final byEnd = a.endMinutes.compareTo(b.endMinutes);
+      if (byEnd != 0) return byEnd;
+      return a.label.compareTo(b.label);
+    });
+    return result;
+  }
+
+  double _popupMenuWidth(
+    BuildContext context,
+    List<String> labels, {
+    required double minWidth,
+    required double maxWidth,
+  }) {
+    const style = TextStyle(fontSize: 16, fontWeight: FontWeight.w400);
+    var maxTextWidth = 0.0;
+    for (final label in labels) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: style),
+        textDirection: Directionality.of(context),
+        maxLines: 1,
+      )..layout();
+      if (painter.width > maxTextWidth) {
+        maxTextWidth = painter.width;
+      }
+    }
+    final screenMax = MediaQuery.sizeOf(context).width - 20;
+    final effectiveMax = math.min(maxWidth, screenMax);
+    return (maxTextWidth + 110).clamp(minWidth, effectiveMax);
+  }
+
+  Widget _menuItemLabel(String label) {
+    return Text(
+      label,
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.fade,
+    );
   }
 
   void _sortCardsByCourseAndSection(List<_SeatStatusCardData> cards) {
@@ -940,6 +1249,73 @@ class _SeatStatusCard extends StatelessWidget {
   }
 }
 
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.icon,
+    required this.label,
+    this.selected = false,
+    this.onTap,
+    this.showArrow = true,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+  final bool showArrow;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected
+              ? BracuPalette.primary.withValues(alpha: 0.14)
+              : BracuPalette.card(context).withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected
+                ? BracuPalette.primary.withValues(alpha: 0.45)
+                : BracuPalette.textSecondary(context).withValues(alpha: 0.32),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: selected
+                  ? BracuPalette.primary
+                  : BracuPalette.textSecondary(context),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: BracuPalette.textPrimary(context),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (showArrow) ...[
+              const SizedBox(width: 4),
+              Icon(
+                Icons.expand_more_rounded,
+                size: 16,
+                color: BracuPalette.textSecondary(context),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SeatScheduleBlock extends StatelessWidget {
   const _SeatScheduleBlock({required this.title, required this.lines});
 
@@ -1155,6 +1531,18 @@ class _SeatStatusCardData {
       searchToken: searchToken,
     );
   }
+}
+
+class _SeatStatusTimeFilterOption {
+  const _SeatStatusTimeFilterOption({
+    required this.label,
+    required this.startMinutes,
+    required this.endMinutes,
+  });
+
+  final String label;
+  final int startMinutes;
+  final int endMinutes;
 }
 
 int _sectionOrder(String sectionName) {
