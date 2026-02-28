@@ -126,18 +126,11 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     final cachedSeatMapFuture = _service.loadCachedSeatMap(
       maxAge: const Duration(hours: 1),
     );
+    Future<Map<int, SeatStatusDetailsResponse>>? cachedDetailsFuture;
     if (!_cacheLoaded) {
-      final cached = await _service.loadCachedDetails(
+      cachedDetailsFuture = _service.loadCachedDetails(
         maxAge: const Duration(hours: 1),
       );
-      if (cached.isNotEmpty) {
-        _detailsCache
-          ..clear()
-          ..addAll(cached);
-        await _loadCachedStaffInfoForDetails(cached.values);
-        _queueStaffInfoResolve(cached.values);
-      }
-      _cacheLoaded = true;
     }
     final cachedSeatMap = await cachedSeatMapFuture;
 
@@ -146,9 +139,25 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       final cachedCards = _buildCardsFromSeatMap(cachedSeatMap);
       _applyCardsSnapshot(cachedCards, isInitialLoading: false);
     }
+    if (cachedDetailsFuture != null) {
+      final cached = await cachedDetailsFuture;
+      if (cached.isNotEmpty) {
+        _detailsCache
+          ..clear()
+          ..addAll(cached);
+        await _loadCachedStaffInfoForDetails(cached.values);
+        _queueStaffInfoResolve(cached.values);
+        if (_latestSeatMap.isNotEmpty) {
+          final refreshed = _buildCardsFromSeatMap(_latestSeatMap);
+          _sortCardsByCourseAndSection(refreshed);
+          _applyCardsSnapshot(refreshed, isInitialLoading: false);
+        }
+      }
+      _cacheLoaded = true;
+    }
 
     await _refreshSeatMapFromApi();
-    unawaited(_syncMissingDetails(chunkSize: 36, concurrency: 8));
+    unawaited(_syncMissingDetails(chunkSize: 64, concurrency: 12));
     if (!mounted) return;
     if (_isInitialLoading) {
       setState(() {
@@ -160,17 +169,20 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   List<_SeatStatusCardData> _buildCardsFromSeatMap(Map<int, int> seatMap) {
     final sectionIds = _visibleSectionIds(seatMap).toList()
       ..sort((a, b) => _compareSectionIdsByNaming(a, b));
-    return sectionIds
-        .where((sectionId) => _detailsCache.containsKey(sectionId))
-        .map((sectionId) {
-          final cached = _detailsCache[sectionId];
-          return _buildCardFromDetails(
-            sectionId: sectionId,
-            details: cached!,
-            remaining: seatMap[sectionId],
-          );
-        })
-        .toList();
+    return sectionIds.map((sectionId) {
+      final cached = _detailsCache[sectionId];
+      if (cached == null) {
+        return _buildFallbackCard(
+          sectionId: sectionId,
+          remaining: seatMap[sectionId] ?? 0,
+        );
+      }
+      return _buildCardFromDetails(
+        sectionId: sectionId,
+        details: cached,
+        remaining: seatMap[sectionId],
+      );
+    }).toList();
   }
 
   Future<void> _applySeatMapUpdate(Map<int, int> seatMap) async {
@@ -187,6 +199,14 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 
     final updated = _cards.where((c) => nextIds.contains(c.sectionId)).map((c) {
       final seatMapValue = seatMap[c.sectionId];
+      final details = _detailsCache[c.sectionId];
+      if (details != null) {
+        return _buildCardFromDetails(
+          sectionId: c.sectionId,
+          details: details,
+          remaining: seatMapValue,
+        );
+      }
       final detailsConsumed =
           _detailsCache[c.sectionId]?.section.consumedSeat ?? c.consumed;
       final remaining = seatMapValue == null
@@ -206,7 +226,15 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       ..sort((a, b) => _compareSectionIdsByNaming(a, b));
     for (final sectionId in addedIds) {
       final cached = _detailsCache[sectionId];
-      if (cached == null) continue;
+      if (cached == null) {
+        updated.add(
+          _buildFallbackCard(
+            sectionId: sectionId,
+            remaining: seatMap[sectionId] ?? 0,
+          ),
+        );
+        continue;
+      }
       updated.add(
         _buildCardFromDetails(
           sectionId: sectionId,
@@ -224,6 +252,37 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         _isInitialLoading = false;
       });
     }
+  }
+
+  _SeatStatusCardData _buildFallbackCard({
+    required int sectionId,
+    required int remaining,
+  }) {
+    return _SeatStatusCardData(
+      sectionId: sectionId,
+      courseCode: 'SEC$sectionId',
+      sectionName: '--',
+      courseName: 'Loading section details...',
+      facultyInitial: 'TBA',
+      facultyName: '',
+      facultyEmail: '',
+      facultyMeta: '',
+      credits: 0,
+      room: '',
+      classSchedule: const <SeatStatusClassSchedule>[],
+      labSchedule: const <SeatStatusClassSchedule>[],
+      labRoom: '',
+      midExamDate: null,
+      midExamStartTime: null,
+      midExamEndTime: null,
+      finalExamDate: null,
+      finalExamStartTime: null,
+      finalExamEndTime: null,
+      remaining: 0,
+      consumed: 0,
+      total: 0,
+      searchToken: 'sec$sectionId loading tba $remaining',
+    );
   }
 
   Set<int> _visibleSectionIds(Map<int, int> seatMap) {
@@ -346,8 +405,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   }) {
     final scheduleToken = _buildScheduleSearchToken(classSchedule, labSchedule);
     final examToken =
-        '${formatDate(midExamDate)} ${formatTimeRange(midExamStartTime, midExamEndTime)} '
-        '${formatDate(finalExamDate)} ${formatTimeRange(finalExamStartTime, finalExamEndTime)}';
+        '${midExamDate ?? ''} ${midExamStartTime ?? ''} ${midExamEndTime ?? ''} '
+        '${finalExamDate ?? ''} ${finalExamStartTime ?? ''} ${finalExamEndTime ?? ''}';
     return '$courseCode $sectionName $courseName '
             '$facultyInitial $facultyName $facultyEmail $facultyMeta '
             '$room $labRoom $sectionId $total $consumed $remaining '
@@ -366,10 +425,9 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     ]) {
       final dayRaw = item.day.trim();
       final dayPretty = formatWeekdayTitle(item.day);
-      final start = formatTime(item.startTime);
-      final end = formatTime(item.endTime);
-      final range = formatTimeRange(item.startTime, item.endTime);
-      chunks.add('$dayRaw $dayPretty $start $end $range');
+      final startRaw = item.startTime.trim();
+      final endRaw = item.endTime.trim();
+      chunks.add('$dayRaw $dayPretty $startRaw $endRaw');
     }
     return chunks.join(' ');
   }
@@ -437,50 +495,53 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   }
 
   Widget _buildSearchField(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final hintColor = scheme.onSurface.withValues(alpha: 0.64);
+    final textColor = scheme.onSurface;
+    final borderColor = scheme.onSurface.withValues(alpha: 0.24);
     return TextField(
+      key: ValueKey<String>('seat-search-${Theme.of(context).brightness.name}'),
       controller: _searchController,
-      style: TextStyle(color: BracuPalette.textPrimary(context)),
+      style: TextStyle(color: textColor),
       textInputAction: TextInputAction.search,
       decoration: InputDecoration(
         hintText: 'Search by anything...',
-        hintStyle: TextStyle(color: BracuPalette.textSecondary(context)),
-        prefixIcon: Icon(
-          Icons.search,
-          color: BracuPalette.textSecondary(context),
-        ),
+        hintStyle: TextStyle(color: hintColor),
+        prefixIcon: Icon(Icons.search, color: hintColor),
         suffixIcon: _searchQuery.trim().isEmpty
             ? null
             : IconButton(
                 onPressed: () => _searchController.clear(),
-                icon: Icon(
-                  Icons.close,
-                  color: BracuPalette.textSecondary(context),
-                ),
+                icon: Icon(Icons.close, color: hintColor),
               ),
+        filled: true,
+        fillColor: BracuPalette.card(context).withValues(alpha: 0.92),
         isDense: true,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: BracuPalette.textSecondary(context).withValues(alpha: 0.24),
-          ),
+          borderSide: BorderSide(color: borderColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: BracuPalette.primary),
+          borderSide: BorderSide(color: scheme.primary),
         ),
       ),
     );
   }
 
   Widget _buildFilterActions(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        _buildAvailabilityFilterAction(),
-        _buildDayFilterAction(context),
-      ],
+    return SizedBox(
+      width: double.infinity,
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _buildAvailabilityFilterAction(),
+          _buildDayFilterAction(context),
+        ],
+      ),
     );
   }
 
@@ -740,7 +801,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     if (!_isAppForeground) return;
     if (HomeTabRegistry.activeTab.value != HomeTab.seatStatus) return;
     unawaited(_refreshSeatMapFromApi());
-    unawaited(_syncMissingDetails(chunkSize: 24, concurrency: 6));
+    unawaited(_syncMissingDetails(chunkSize: 48, concurrency: 10));
   }
 
   Future<void> _refreshSeatMapFromApi() async {
@@ -755,7 +816,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         if (previousMap.isNotEmpty && changedIds.isNotEmpty) {
           await _refreshChangedDetails(changedIds, concurrency: 8);
         }
-        unawaited(_syncMissingDetails(chunkSize: 24, concurrency: 6));
+        unawaited(_syncMissingDetails(chunkSize: 48, concurrency: 10));
       }
     } catch (_) {
       if (_isInitialLoading && mounted) {
