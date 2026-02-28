@@ -261,9 +261,16 @@ class _DevGridTile extends StatelessWidget {
   final String githubUrl;
   final String facebookUrl;
 
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.parse(url);
-    await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+  Future<void> _openUrl(BuildContext context, String rawUrl) async {
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+      showAppSnackBar(context, 'Unable to open link.');
+      return;
+    }
+    final launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+    if (!launched && context.mounted) {
+      showAppSnackBar(context, 'Unable to open link.');
+    }
   }
 
   Widget _avatarPlaceholder(BuildContext context) {
@@ -286,7 +293,7 @@ class _DevGridTile extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           InkWell(
-            onTap: () => _openUrl(githubUrl),
+            onTap: () => _openUrl(context, githubUrl),
             borderRadius: BorderRadius.circular(24),
             child: SizedBox(
               width: 44,
@@ -319,11 +326,14 @@ class _DevGridTile extends StatelessWidget {
             spacing: 4,
             runSpacing: 4,
             children: [
-              _LinkChip(label: 'GitHub', onTap: () => _openUrl(githubUrl)),
+              _LinkChip(
+                label: 'GitHub',
+                onTap: () => _openUrl(context, githubUrl),
+              ),
               if (facebookUrl.isNotEmpty)
                 _LinkChip(
                   label: 'Facebook',
-                  onTap: () => _openUrl(facebookUrl),
+                  onTap: () => _openUrl(context, facebookUrl),
                 ),
             ],
           ),
@@ -365,7 +375,10 @@ class _LinkChip extends StatelessWidget {
 
 Future<void> _openRepo(BuildContext context) async {
   final uri = Uri.parse('https://github.com/sabbirba/preconnect');
-  await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+  final launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+  if (!launched && context.mounted) {
+    showAppSnackBar(context, 'Unable to open link.');
+  }
 }
 
 class _SupportNumberRow extends StatelessWidget {

@@ -10,6 +10,7 @@ import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
 import 'package:preconnect/tools/time_utils.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SeatStatusPage extends StatefulWidget {
   const SeatStatusPage({super.key});
@@ -682,6 +683,31 @@ class _SeatStatusCard extends StatelessWidget {
 
   final _SeatStatusCardData item;
 
+  Future<void> _openFacultyEmail(BuildContext context) async {
+    final email = item.facultyEmail.trim();
+    if (email.isEmpty) return;
+    final mailtoUri = Uri(scheme: 'mailto', path: email);
+    final openedMailClient = await launchUrl(
+      mailtoUri,
+      mode: LaunchMode.platformDefault,
+    );
+    if (openedMailClient) return;
+
+    final gmailComposeUri = Uri.https('mail.google.com', '/mail/u/0/', {
+      'view': 'cm',
+      'fs': '1',
+      'tf': '1',
+      'to': email,
+    });
+    final openedGmailWeb = await launchUrl(
+      gmailComposeUri,
+      mode: LaunchMode.platformDefault,
+    );
+    if (!openedGmailWeb && context.mounted) {
+      showAppSnackBar(context, 'Unable to open email compose');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final textPrimary = BracuPalette.textPrimary(context);
@@ -745,12 +771,15 @@ class _SeatStatusCard extends StatelessWidget {
                     if (item.facultyEmail.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 1),
-                        child: Text(
-                          item.facultyEmail,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: textSecondary,
+                        child: GestureDetector(
+                          onTap: () => _openFacultyEmail(context),
+                          child: Text(
+                            item.facultyEmail,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: textSecondary,
+                            ),
                           ),
                         ),
                       ),
