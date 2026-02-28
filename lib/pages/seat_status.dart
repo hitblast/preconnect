@@ -10,7 +10,6 @@ import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
 import 'package:preconnect/tools/time_utils.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class SeatStatusPage extends StatefulWidget {
   const SeatStatusPage({super.key});
@@ -49,7 +48,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   bool _isResolvingStaffInfo = false;
   bool _availableOnly = false;
   String _selectedDayFilter = '';
-  String _selectedTimeFilter = '';
   final Set<String> _pendingInitials = <String>{};
   Map<int, int> _latestSeatMap = <int, int>{};
 
@@ -286,8 +284,23 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         courseName: _pickNonEmpty(main.name, 'Section $sectionId'),
         facultyInitial: _pickNonEmpty(main.faculties, 'TBA'),
         facultyName: _facultyNameForInitial(main.faculties),
+        facultyEmail: _facultyEmailForInitial(main.faculties),
+        facultyMeta: _facultyMetaForInitial(main.faculties),
         room: _pickNonEmpty(main.roomNumber, ''),
         labRoom: _pickNonEmpty(lab?.roomNumber, ''),
+        classSchedule: main.sectionSchedule.classSchedules,
+        labSchedule:
+            lab?.sectionSchedule.classSchedules ??
+            const <SeatStatusClassSchedule>[],
+        midExamDate: main.sectionSchedule.midExamDate,
+        midExamStartTime: main.sectionSchedule.midExamStartTime,
+        midExamEndTime: main.sectionSchedule.midExamEndTime,
+        finalExamDate: main.sectionSchedule.finalExamDate,
+        finalExamStartTime: main.sectionSchedule.finalExamStartTime,
+        finalExamEndTime: main.sectionSchedule.finalExamEndTime,
+        total: total,
+        consumed: resolvedConsumed,
+        remaining: resolvedRemaining,
       ),
     );
   }
@@ -315,11 +328,50 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     required String courseName,
     required String facultyInitial,
     required String facultyName,
+    required String facultyEmail,
+    required String facultyMeta,
     required String room,
     required String labRoom,
+    required List<SeatStatusClassSchedule> classSchedule,
+    required List<SeatStatusClassSchedule> labSchedule,
+    required String? midExamDate,
+    required String? midExamStartTime,
+    required String? midExamEndTime,
+    required String? finalExamDate,
+    required String? finalExamStartTime,
+    required String? finalExamEndTime,
+    required int total,
+    required int consumed,
+    required int remaining,
   }) {
-    return '$courseCode $sectionName $courseName $facultyInitial $facultyName $room $labRoom $sectionId'
+    final scheduleToken = _buildScheduleSearchToken(classSchedule, labSchedule);
+    final examToken =
+        '${formatDate(midExamDate)} ${formatTimeRange(midExamStartTime, midExamEndTime)} '
+        '${formatDate(finalExamDate)} ${formatTimeRange(finalExamStartTime, finalExamEndTime)}';
+    return '$courseCode $sectionName $courseName '
+            '$facultyInitial $facultyName $facultyEmail $facultyMeta '
+            '$room $labRoom $sectionId $total $consumed $remaining '
+            '$scheduleToken $examToken'
         .toLowerCase();
+  }
+
+  String _buildScheduleSearchToken(
+    List<SeatStatusClassSchedule> classSchedule,
+    List<SeatStatusClassSchedule> labSchedule,
+  ) {
+    final chunks = <String>[];
+    for (final item in <SeatStatusClassSchedule>[
+      ...classSchedule,
+      ...labSchedule,
+    ]) {
+      final dayRaw = item.day.trim();
+      final dayPretty = formatWeekdayTitle(item.day);
+      final start = formatTime(item.startTime);
+      final end = formatTime(item.endTime);
+      final range = formatTimeRange(item.startTime, item.endTime);
+      chunks.add('$dayRaw $dayPretty $start $end $range');
+    }
+    return chunks.join(' ');
   }
 
   @override
@@ -428,7 +480,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       children: [
         _buildAvailabilityFilterAction(),
         _buildDayFilterAction(context),
-        _buildTimeFilterAction(context),
       ],
     );
   }
@@ -484,48 +535,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     );
   }
 
-  Widget _buildTimeFilterAction(BuildContext context) {
-    final options = _buildTimeFilterOptions(_cards);
-    final label = _selectedTimeFilter.isEmpty
-        ? 'Any Time'
-        : _selectedTimeFilter;
-    final labels = <String>[
-      'Any Time',
-      ...options.map((option) => option.label),
-    ];
-    final menuWidth = _popupMenuWidth(
-      context,
-      labels,
-      minWidth: 190,
-      maxWidth: 560,
-    );
-    return PopupMenuButton<String>(
-      tooltip: 'Filter by time',
-      initialValue: _selectedTimeFilter,
-      constraints: BoxConstraints(minWidth: menuWidth, maxWidth: menuWidth),
-      onSelected: _setTimeFilter,
-      itemBuilder: (context) => <PopupMenuEntry<String>>[
-        CheckedPopupMenuItem<String>(
-          value: '',
-          checked: _selectedTimeFilter.isEmpty,
-          child: _menuItemLabel('Any Time'),
-        ),
-        ...options.map(
-          (option) => CheckedPopupMenuItem<String>(
-            value: option.label,
-            checked: option.label == _selectedTimeFilter,
-            child: _menuItemLabel(option.label),
-          ),
-        ),
-      ],
-      child: _FilterChip(
-        icon: Icons.access_time_rounded,
-        label: label,
-        selected: _selectedTimeFilter.isNotEmpty,
-      ),
-    );
-  }
-
   void _setAvailableFilter(bool next) {
     if (next == _availableOnly) return;
     _refreshVisibleCards(availableOnly: next);
@@ -536,32 +545,23 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     _refreshVisibleCards(dayFilter: next);
   }
 
-  void _setTimeFilter(String next) {
-    if (next == _selectedTimeFilter) return;
-    _refreshVisibleCards(timeFilter: next);
-  }
-
   void _refreshVisibleCards({
     bool? availableOnly,
     String? dayFilter,
-    String? timeFilter,
     String? query,
   }) {
     final resolvedAvailableOnly = availableOnly ?? _availableOnly;
     final resolvedDayFilter = dayFilter ?? _selectedDayFilter;
-    final resolvedTimeFilter = timeFilter ?? _selectedTimeFilter;
     final resolvedQuery = query ?? _searchQuery;
     final nextVisible = _filterCards(
       _cards,
       resolvedQuery,
       availableOnly: resolvedAvailableOnly,
       dayFilter: resolvedDayFilter,
-      timeFilter: resolvedTimeFilter,
     );
     setState(() {
       _availableOnly = resolvedAvailableOnly;
       _selectedDayFilter = resolvedDayFilter;
-      _selectedTimeFilter = resolvedTimeFilter;
       _searchQuery = resolvedQuery;
       _visibleCards
         ..clear()
@@ -574,32 +574,21 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     String query, {
     required bool availableOnly,
     required String dayFilter,
-    required String timeFilter,
   }) {
     final q = query.trim().toLowerCase();
     return source.where((card) {
       if (q.isNotEmpty && !card.searchToken.contains(q)) return false;
       if (availableOnly && card.remaining <= 0) return false;
 
-      if (dayFilter.isNotEmpty || timeFilter.isNotEmpty) {
+      if (dayFilter.isNotEmpty) {
         final schedules = <SeatStatusClassSchedule>[
           ...card.classSchedule,
           ...card.labSchedule,
         ];
-        if (dayFilter.isNotEmpty) {
-          final hasDay = schedules.any(
-            (entry) => normalizeWeekday(entry.day) == dayFilter,
-          );
-          if (!hasDay) return false;
-        }
-        if (timeFilter.isNotEmpty) {
-          final hasTime = schedules.any(
-            (entry) =>
-                _scheduleTimeLabel(entry.startTime, entry.endTime) ==
-                timeFilter,
-          );
-          if (!hasTime) return false;
-        }
+        final hasDay = schedules.any(
+          (entry) => normalizeWeekday(entry.day) == dayFilter,
+        );
+        if (!hasDay) return false;
       }
       return true;
     }).toList();
@@ -614,20 +603,11 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     List<_SeatStatusCardData> nextCards, {
     bool? isInitialLoading,
   }) {
-    final availableTimeLabels = _buildTimeFilterOptions(
-      nextCards,
-    ).map((entry) => entry.label).toSet();
-    final nextTimeFilter =
-        _selectedTimeFilter.isNotEmpty &&
-            !availableTimeLabels.contains(_selectedTimeFilter)
-        ? ''
-        : _selectedTimeFilter;
     final nextVisible = _filterCards(
       nextCards,
       _searchQuery,
       availableOnly: _availableOnly,
       dayFilter: _selectedDayFilter,
-      timeFilter: nextTimeFilter,
     );
     if (!mounted) return;
     setState(() {
@@ -637,51 +617,10 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       _visibleCards
         ..clear()
         ..addAll(nextVisible);
-      _selectedTimeFilter = nextTimeFilter;
       if (isInitialLoading != null) {
         _isInitialLoading = isInitialLoading;
       }
     });
-  }
-
-  String _scheduleTimeLabel(String startTime, String endTime) {
-    final label = formatTimeRange(startTime, endTime).trim();
-    if (label.isNotEmpty) return label;
-    final fallback = '${startTime.trim()} - ${endTime.trim()}'.trim();
-    return fallback == '-' ? '' : fallback;
-  }
-
-  List<_SeatStatusTimeFilterOption> _buildTimeFilterOptions(
-    List<_SeatStatusCardData> cards,
-  ) {
-    final deduped = <String, _SeatStatusTimeFilterOption>{};
-    for (final card in cards) {
-      final schedules = <SeatStatusClassSchedule>[
-        ...card.classSchedule,
-        ...card.labSchedule,
-      ];
-      for (final entry in schedules) {
-        final label = _scheduleTimeLabel(entry.startTime, entry.endTime);
-        if (label.isEmpty) continue;
-        deduped.putIfAbsent(
-          label,
-          () => _SeatStatusTimeFilterOption(
-            label: label,
-            startMinutes: BracuTime.toMinutes(entry.startTime) ?? 9999,
-            endMinutes: BracuTime.toMinutes(entry.endTime) ?? 9999,
-          ),
-        );
-      }
-    }
-    final result = deduped.values.toList();
-    result.sort((a, b) {
-      final byStart = a.startMinutes.compareTo(b.startMinutes);
-      if (byStart != 0) return byStart;
-      final byEnd = a.endMinutes.compareTo(b.endMinutes);
-      if (byEnd != 0) return byEnd;
-      return a.label.compareTo(b.label);
-    });
-    return result;
   }
 
   double _popupMenuWidth(
@@ -993,28 +932,7 @@ class _SeatStatusCard extends StatelessWidget {
   final _SeatStatusCardData item;
 
   Future<void> _openFacultyEmail(BuildContext context) async {
-    final email = item.facultyEmail.trim();
-    if (email.isEmpty) return;
-    final mailtoUri = Uri(scheme: 'mailto', path: email);
-    final openedMailClient = await launchUrl(
-      mailtoUri,
-      mode: LaunchMode.platformDefault,
-    );
-    if (openedMailClient) return;
-
-    final gmailComposeUri = Uri.https('mail.google.com', '/mail/u/0/', {
-      'view': 'cm',
-      'fs': '1',
-      'tf': '1',
-      'to': email,
-    });
-    final openedGmailWeb = await launchUrl(
-      gmailComposeUri,
-      mode: LaunchMode.platformDefault,
-    );
-    if (!openedGmailWeb && context.mounted) {
-      showAppSnackBar(context, 'Unable to open email compose');
-    }
+    await openMailComposer(context, item.facultyEmail);
   }
 
   @override
@@ -1531,18 +1449,6 @@ class _SeatStatusCardData {
       searchToken: searchToken,
     );
   }
-}
-
-class _SeatStatusTimeFilterOption {
-  const _SeatStatusTimeFilterOption({
-    required this.label,
-    required this.startMinutes,
-    required this.endMinutes,
-  });
-
-  final String label;
-  final int startMinutes;
-  final int endMinutes;
 }
 
 int _sectionOrder(String sectionName) {

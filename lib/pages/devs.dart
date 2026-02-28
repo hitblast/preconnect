@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:preconnect/pages/api_test.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/cached_image.dart';
 
@@ -262,15 +261,7 @@ class _DevGridTile extends StatelessWidget {
   final String facebookUrl;
 
   Future<void> _openUrl(BuildContext context, String rawUrl) async {
-    final uri = Uri.tryParse(rawUrl);
-    if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
-      showAppSnackBar(context, 'Unable to open link.');
-      return;
-    }
-    final launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
-    if (!launched && context.mounted) {
-      showAppSnackBar(context, 'Unable to open link.');
-    }
+    await openExternalUrl(context, rawUrl);
   }
 
   Widget _avatarPlaceholder(BuildContext context) {
@@ -374,11 +365,7 @@ class _LinkChip extends StatelessWidget {
 }
 
 Future<void> _openRepo(BuildContext context) async {
-  final uri = Uri.parse('https://github.com/sabbirba/preconnect');
-  final launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
-  if (!launched && context.mounted) {
-    showAppSnackBar(context, 'Unable to open link.');
-  }
+  await openExternalUrl(context, 'https://github.com/sabbirba/preconnect');
 }
 
 class _SupportNumberRow extends StatelessWidget {

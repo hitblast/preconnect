@@ -16,6 +16,9 @@ class SeatStatusService {
 
   Database? _db;
   Map<int, int>? _seatMapSnapshot;
+  Map<int, SeatStatusDetailsResponse>? _detailsSnapshot;
+  int? _detailsSnapshotTs;
+  Map<String, SeatStatusStaffInfo>? _staffSnapshot;
   final ApiClient _client = ApiClient();
   final Map<String, SeatStatusStaffInfo> _staffInfoByInitialCache =
       <String, SeatStatusStaffInfo>{};
@@ -59,21 +62,9 @@ class SeatStatusService {
         DateTime.fromMillisecondsSinceEpoch(ts),
       );
       if (age > maxAge) return const <int, int>{};
-      final snapshots = await _seatMapStore.find(db);
-      if (snapshots.isEmpty) return const <int, int>{};
-      final result = <int, int>{};
-      for (final snap in snapshots) {
-        final value = snap.value;
-        if (value is int) {
-          result[snap.key] = value;
-        } else {
-          final parsed = int.tryParse('$value');
-          if (parsed != null) {
-            result[snap.key] = parsed;
-          }
-        }
-      }
-      return result;
+      final snapshot = await _getSeatMapSnapshot(db);
+      if (snapshot.isEmpty) return const <int, int>{};
+      return Map<int, int>.from(snapshot);
     } catch (_) {
       return const <int, int>{};
     }
@@ -90,18 +81,14 @@ class SeatStatusService {
         DateTime.fromMillisecondsSinceEpoch(ts),
       );
       if (age > maxAge) return const <int, SeatStatusDetailsResponse>{};
-      final snapshots = await _detailsStore.find(db);
-      if (snapshots.isEmpty) return const <int, SeatStatusDetailsResponse>{};
-      final raw = <String, dynamic>{};
-      for (final snap in snapshots) {
-        if (snap.value is Map<String, dynamic>) {
-          raw[snap.key.toString()] = snap.value;
-        } else if (snap.value is Map) {
-          raw[snap.key.toString()] = (snap.value as Map)
-              .cast<String, dynamic>();
-        }
+      if (_detailsSnapshotTs == ts && _detailsSnapshot != null) {
+        return Map<int, SeatStatusDetailsResponse>.from(_detailsSnapshot!);
       }
-      return _parseCachedDetailsFromMap(raw);
+      final snapshot = await _getDetailsSnapshot(db);
+      _detailsSnapshotTs = ts;
+      _detailsSnapshot = Map<int, SeatStatusDetailsResponse>.from(snapshot);
+      if (snapshot.isEmpty) return const <int, SeatStatusDetailsResponse>{};
+      return Map<int, SeatStatusDetailsResponse>.from(snapshot);
     } catch (_) {
       return const <int, SeatStatusDetailsResponse>{};
     }
@@ -175,6 +162,8 @@ class SeatStatusService {
           await _metaStore.record(_detailsTsKey).put(txn, _nowMs());
         }
       });
+      _detailsSnapshot = null;
+      _detailsSnapshotTs = null;
     } catch (_) {}
   }
 
@@ -282,17 +271,23 @@ class SeatStatusService {
     try {
       final db = await _openDb();
       final output = <String, SeatStatusStaffInfo>{};
+      final unresolved = <String>[];
       for (final key in keys) {
         final cached = _staffInfoByInitialCache[key];
         if (cached != null) {
           output[key] = cached;
-          continue;
+        } else {
+          unresolved.add(key);
         }
-        final raw = await _staffStore.record(key).get(db);
-        if (raw is! Map) continue;
-        final info = SeatStatusStaffInfo.fromJson(raw.cast<String, dynamic>());
-        _staffInfoByInitialCache[key] = info;
-        output[key] = info;
+      }
+      if (unresolved.isNotEmpty) {
+        final snapshot = await _getStaffSnapshot(db);
+        for (final key in unresolved) {
+          final info = snapshot[key];
+          if (info == null) continue;
+          _staffInfoByInitialCache[key] = info;
+          output[key] = info;
+        }
       }
       return output;
     } catch (_) {
@@ -335,6 +330,8 @@ class SeatStatusService {
                 .delete(txn);
           }
         });
+        _detailsSnapshot = null;
+        _detailsSnapshotTs = null;
       }
 
       final chunk = detailChunkSize <= 0 ? 40 : detailChunkSize;
@@ -354,9 +351,10 @@ class SeatStatusService {
       }
 
       // Home preload: fetch only missing faculty mappings and persist to db.
+      final detailsSnapshot = await _getDetailsSnapshot(db);
       final initials = <String>{};
       for (final sectionId in seatMap.keys) {
-        final details = await _loadCachedDetailsBySectionId(db, sectionId);
+        final details = detailsSnapshot[sectionId];
         if (details == null) continue;
         final main = details.section.faculties.trim().toUpperCase();
         if (_isMeaningfulInitial(main)) initials.add(main);
@@ -424,6 +422,10 @@ class SeatStatusService {
     int sectionId,
   ) async {
     try {
+      final snapshot = _detailsSnapshot;
+      if (snapshot != null && snapshot.containsKey(sectionId)) {
+        return snapshot[sectionId];
+      }
       final raw = await _detailsStore.record(sectionId).get(db);
       if (raw is! Map) return null;
       return SeatStatusDetailsResponse.fromJson(raw.cast<String, dynamic>());
@@ -625,9 +627,8 @@ class SeatStatusService {
   Future<SeatStatusStaffInfo?> _loadStaffInfoFromDb(String initial) async {
     try {
       final db = await _openDb();
-      final raw = await _staffStore.record(initial).get(db);
-      if (raw is! Map) return null;
-      return SeatStatusStaffInfo.fromJson(raw.cast<String, dynamic>());
+      final snapshot = await _getStaffSnapshot(db);
+      return snapshot[initial];
     } catch (_) {
       return null;
     }
@@ -636,10 +637,53 @@ class SeatStatusService {
   Future<void> _saveStaffInfoToDb(SeatStatusStaffInfo info) async {
     try {
       final db = await _openDb();
-      await _staffStore
-          .record(info.shortName.toUpperCase())
-          .put(db, info.toJson());
+      final key = info.shortName.toUpperCase();
+      await _staffStore.record(key).put(db, info.toJson());
+      _staffSnapshot ??= <String, SeatStatusStaffInfo>{};
+      _staffSnapshot![key] = info;
     } catch (_) {}
+  }
+
+  Future<Map<int, SeatStatusDetailsResponse>> _getDetailsSnapshot(
+    Database db,
+  ) async {
+    final cached = _detailsSnapshot;
+    if (cached != null) return cached;
+    final snapshots = await _detailsStore.find(db);
+    if (snapshots.isEmpty) {
+      _detailsSnapshot = <int, SeatStatusDetailsResponse>{};
+      return _detailsSnapshot!;
+    }
+    final raw = <String, dynamic>{};
+    for (final snap in snapshots) {
+      if (snap.value is Map<String, dynamic>) {
+        raw[snap.key.toString()] = snap.value;
+      } else if (snap.value is Map) {
+        raw[snap.key.toString()] = (snap.value as Map).cast<String, dynamic>();
+      }
+    }
+    _detailsSnapshot = _parseCachedDetailsFromMap(raw);
+    return _detailsSnapshot!;
+  }
+
+  Future<Map<String, SeatStatusStaffInfo>> _getStaffSnapshot(
+    Database db,
+  ) async {
+    final cached = _staffSnapshot;
+    if (cached != null) return cached;
+    final records = await _staffStore.find(db);
+    final map = <String, SeatStatusStaffInfo>{};
+    for (final record in records) {
+      final raw = record.value;
+      if (raw is! Map) continue;
+      final key = record.key.trim().toUpperCase();
+      if (!_isMeaningfulInitial(key)) continue;
+      try {
+        map[key] = SeatStatusStaffInfo.fromJson(raw.cast<String, dynamic>());
+      } catch (_) {}
+    }
+    _staffSnapshot = map;
+    return map;
   }
 }
 

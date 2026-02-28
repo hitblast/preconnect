@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:preconnect/api/api_config.dart';
@@ -40,7 +39,6 @@ import 'package:preconnect/tools/ramadan_timing.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
 import 'package:preconnect/tools/time_utils.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 
 class HomePage extends StatefulWidget {
@@ -1538,17 +1536,11 @@ class _OpenWebCard extends StatelessWidget {
 }
 
 Future<void> _openPreconnectWeb(BuildContext context, String url) async {
-  final uri = Uri.parse(url);
-  final mode = kIsWeb
-      ? LaunchMode.platformDefault
-      : LaunchMode.inAppBrowserView;
-  var launched = await launchUrl(uri, mode: mode);
-  if (!launched && !kIsWeb) {
-    launched = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
-  }
-  if (!launched && context.mounted) {
-    showAppSnackBar(context, 'Unable to open browser.');
-  }
+  await openExternalUrl(
+    context,
+    url,
+    failureMessage: 'Unable to open browser.',
+  );
 }
 
 class _QuickActionCard extends StatelessWidget {

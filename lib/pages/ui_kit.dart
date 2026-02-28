@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:preconnect/tools/time_utils.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 String formatDate(String? input) {
   if (input == null || input.trim().isEmpty) return '';
@@ -45,6 +47,55 @@ void copyToClipboard(BuildContext context, String text) {
   if (value.isEmpty) return;
   Clipboard.setData(ClipboardData(text: value));
   showAppSnackBar(context, 'Copied to clipboard');
+}
+
+Future<bool> openExternalUrl(
+  BuildContext context,
+  String rawUrl, {
+  String failureMessage = 'Unable to open link.',
+  LaunchMode mobilePreferredMode = LaunchMode.inAppBrowserView,
+  LaunchMode mobileFallbackMode = LaunchMode.externalApplication,
+}) async {
+  final url = rawUrl.trim();
+  if (url.isEmpty) {
+    if (context.mounted) showAppSnackBar(context, failureMessage);
+    return false;
+  }
+  final uri = Uri.tryParse(url);
+  if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+    if (context.mounted) showAppSnackBar(context, failureMessage);
+    return false;
+  }
+  final mode = kIsWeb ? LaunchMode.platformDefault : mobilePreferredMode;
+  var launched = await launchUrl(uri, mode: mode);
+  if (!launched && !kIsWeb) {
+    launched = await launchUrl(uri, mode: mobileFallbackMode);
+  }
+  if (!launched && context.mounted) {
+    showAppSnackBar(context, failureMessage);
+  }
+  return launched;
+}
+
+Future<bool> openMailComposer(
+  BuildContext context,
+  String email, {
+  String failureMessage = 'Unable to open email compose',
+}) async {
+  final cleaned = email.trim();
+  if (cleaned.isEmpty) {
+    if (context.mounted) showAppSnackBar(context, failureMessage);
+    return false;
+  }
+  final mailtoUri = Uri(scheme: 'mailto', path: cleaned);
+  final openedMail = await launchUrl(
+    mailtoUri,
+    mode: LaunchMode.platformDefault,
+  );
+  if (!openedMail && context.mounted) {
+    showAppSnackBar(context, failureMessage);
+  }
+  return openedMail;
 }
 
 DateTime? _lastSnackAt;

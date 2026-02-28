@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:preconnect/pages/home.dart';
 import 'package:preconnect/pages/login.dart';
 import 'package:preconnect/pages/ui_kit.dart';
@@ -43,17 +41,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Future<void> _openLink(BuildContext context, String url) async {
-    final uri = Uri.parse(url);
-    final mode = kIsWeb
-        ? LaunchMode.platformDefault
-        : LaunchMode.inAppBrowserView;
-    var launched = await launchUrl(uri, mode: mode);
-    if (!launched && !kIsWeb) {
-      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-    if (!launched && context.mounted) {
-      showAppSnackBar(context, 'Unable to open link.');
-    }
+    await openExternalUrl(context, url);
   }
 
   @override
