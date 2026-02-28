@@ -329,6 +329,7 @@ class BracuPageScaffold extends StatelessWidget {
     this.actions = const [],
     this.showMenu = false,
     this.showBack = true,
+    this.onHeaderTap,
   });
 
   final String title;
@@ -338,6 +339,7 @@ class BracuPageScaffold extends StatelessWidget {
   final List<Widget> actions;
   final bool showMenu;
   final bool showBack;
+  final VoidCallback? onHeaderTap;
 
   @override
   Widget build(BuildContext context) {
@@ -353,56 +355,63 @@ class BracuPageScaffold extends StatelessWidget {
           ? Brightness.light
           : Brightness.dark,
     );
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [BracuPalette.bgTop(context), BracuPalette.bgBottom(context)],
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              BracuPalette.bgTop(context),
+              BracuPalette.bgBottom(context),
+            ],
+          ),
         ),
-      ),
-      child: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: overlayStyle,
-        child: Material(
-          type: MaterialType.transparency,
-          child: SafeArea(
-            child: Stack(
-              children: [
-                Positioned(
-                  top: -70,
-                  right: -60,
-                  child: _DecorBlob(
-                    color: BracuPalette.primary.withValues(alpha: 0.12),
-                    size: 200,
-                  ),
-                ),
-                Positioned(
-                  bottom: -80,
-                  left: -70,
-                  child: _DecorBlob(
-                    color: BracuPalette.accent.withValues(alpha: 0.10),
-                    size: 220,
-                  ),
-                ),
-                Column(
-                  children: [
-                    Padding(
-                      padding: showBack
-                          ? const EdgeInsets.fromLTRB(6, 12, 20, 8)
-                          : const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                      child: _PageHeader(
-                        title: title,
-                        subtitle: subtitle,
-                        icon: icon,
-                        actions: actions,
-                        showMenu: showMenu,
-                        showBack: showBack,
-                      ),
+        child: AnnotatedRegion<SystemUiOverlayStyle>(
+          value: overlayStyle,
+          child: Material(
+            type: MaterialType.transparency,
+            child: SafeArea(
+              child: Stack(
+                children: [
+                  Positioned(
+                    top: -70,
+                    right: -60,
+                    child: _DecorBlob(
+                      color: BracuPalette.primary.withValues(alpha: 0.12),
+                      size: 200,
                     ),
-                    Expanded(child: body),
-                  ],
-                ),
-              ],
+                  ),
+                  Positioned(
+                    bottom: -80,
+                    left: -70,
+                    child: _DecorBlob(
+                      color: BracuPalette.accent.withValues(alpha: 0.10),
+                      size: 220,
+                    ),
+                  ),
+                  Column(
+                    children: [
+                      Padding(
+                        padding: showBack
+                            ? const EdgeInsets.fromLTRB(6, 12, 20, 8)
+                            : const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                        child: _PageHeader(
+                          title: title,
+                          subtitle: subtitle,
+                          icon: icon,
+                          actions: actions,
+                          showMenu: showMenu,
+                          showBack: showBack,
+                          onHeaderTap: onHeaderTap,
+                        ),
+                      ),
+                      Expanded(child: body),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -419,6 +428,7 @@ class _PageHeader extends StatelessWidget {
     required this.actions,
     required this.showMenu,
     required this.showBack,
+    this.onHeaderTap,
   });
 
   final String title;
@@ -427,6 +437,7 @@ class _PageHeader extends StatelessWidget {
   final List<Widget> actions;
   final bool showMenu;
   final bool showBack;
+  final VoidCallback? onHeaderTap;
 
   @override
   Widget build(BuildContext context) {
@@ -435,7 +446,7 @@ class _PageHeader extends StatelessWidget {
     final backScope = BracuBackScope.maybeOf(context);
     final canScopeBack = backScope?.canGoBack ?? false;
     final hasBack = showBack && (canPop || canScopeBack);
-    return Row(
+    final row = Row(
       children: [
         if (showMenu) const SizedBox(width: 0, height: 0),
         if (hasBack)
@@ -499,6 +510,12 @@ class _PageHeader extends StatelessWidget {
         ),
         ...actions,
       ],
+    );
+    if (onHeaderTap == null) return row;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onHeaderTap,
+      child: row,
     );
   }
 }

@@ -462,6 +462,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
       setState(() {
         _latestData = fresh;
       });
+      await _preloadSeatStatus();
       unawaited(_refreshCaptiveStatus());
       if (notify) {
         RefreshBus.instance.notify(reason: 'home_dashboard');

@@ -17,6 +17,10 @@ class SeatStatusService {
   Database? _db;
   Map<int, int>? _seatMapSnapshot;
   final ApiClient _client = ApiClient();
+  final Map<String, SeatStatusStaffInfo> _staffInfoByInitialCache =
+      <String, SeatStatusStaffInfo>{};
+  final Map<String, Future<SeatStatusStaffInfo?>> _staffInfoInFlight =
+      <String, Future<SeatStatusStaffInfo?>>{};
 
   static const String _dbName = 'seat_status_cache.db';
   static const String _detailsTsKey = 'details_ts';
@@ -39,6 +43,9 @@ class SeatStatusService {
   );
   final StoreRef<int, Object?> _detailsStore = intMapStoreFactory.store(
     'seat_status_details',
+  );
+  final StoreRef<String, Object?> _staffStore = StoreRef<String, Object?>(
+    'seat_status_staff',
   );
 
   Future<Map<int, int>> loadCachedSeatMap({
@@ -261,33 +268,108 @@ class SeatStatusService {
     return result;
   }
 
+  Future<Map<String, SeatStatusStaffInfo>> loadCachedStaffInfoByInitials(
+    Iterable<String> initials,
+  ) async {
+    final keys =
+        initials
+            .map((e) => e.trim().toUpperCase())
+            .where(_isMeaningfulInitial)
+            .toSet()
+            .toList()
+          ..sort((a, b) => a.compareTo(b));
+    if (keys.isEmpty) return const <String, SeatStatusStaffInfo>{};
+    try {
+      final db = await _openDb();
+      final output = <String, SeatStatusStaffInfo>{};
+      for (final key in keys) {
+        final cached = _staffInfoByInitialCache[key];
+        if (cached != null) {
+          output[key] = cached;
+          continue;
+        }
+        final raw = await _staffStore.record(key).get(db);
+        if (raw is! Map) continue;
+        final info = SeatStatusStaffInfo.fromJson(raw.cast<String, dynamic>());
+        _staffInfoByInitialCache[key] = info;
+        output[key] = info;
+      }
+      return output;
+    } catch (_) {
+      return const <String, SeatStatusStaffInfo>{};
+    }
+  }
+
   Future<void> preloadSeatStatusCache({
     int detailChunkSize = 40,
     int detailConcurrency = 8,
   }) async {
     try {
+      final db = await _openDb();
+      final previousSeatMap = await _getSeatMapSnapshot(db);
       final seatMap = await fetchSeatMapFromApi();
       if (seatMap.isEmpty) return;
-      final db = await _openDb();
       final existingDetails = await _detailsStore.findKeys(db);
       final cachedIds = existingDetails.toSet();
-      final missing =
-          seatMap.keys.where((id) => !cachedIds.contains(id)).toList()
+      final sectionIds = seatMap.keys.toSet();
+      final missing = sectionIds.where((id) => !cachedIds.contains(id)).toList()
+        ..sort((a, b) => a.compareTo(b));
+      final changed =
+          sectionIds
+              .where(
+                (id) =>
+                    previousSeatMap[id] != null &&
+                    previousSeatMap[id] != seatMap[id],
+              )
+              .toList()
             ..sort((a, b) => a.compareTo(b));
-      if (missing.isEmpty) return;
+      final stale = cachedIds.where((id) => !sectionIds.contains(id)).toList()
+        ..sort((a, b) => a.compareTo(b));
+
+      if (stale.isNotEmpty) {
+        await db.transaction((txn) async {
+          for (final sectionId in stale) {
+            await _detailsStore.record(sectionId).delete(txn);
+            await _metaStore
+                .record('$_detailsEtagPrefix$sectionId')
+                .delete(txn);
+          }
+        });
+      }
 
       final chunk = detailChunkSize <= 0 ? 40 : detailChunkSize;
+      final targetIds = <int>{...missing, ...changed}.toList()
+        ..sort((a, b) => a.compareTo(b));
       var index = 0;
-      while (index < missing.length) {
-        final end = (index + chunk > missing.length)
-            ? missing.length
+      while (index < targetIds.length) {
+        final end = (index + chunk > targetIds.length)
+            ? targetIds.length
             : index + chunk;
-        final batch = missing.sublist(index, end);
+        final batch = targetIds.sublist(index, end);
         await fetchDetailsForSectionIdsFromApi(
           batch,
           concurrency: detailConcurrency,
         );
         index = end;
+      }
+
+      // Home preload: fetch only missing faculty mappings and persist to db.
+      final initials = <String>{};
+      for (final sectionId in seatMap.keys) {
+        final details = await _loadCachedDetailsBySectionId(db, sectionId);
+        if (details == null) continue;
+        final main = details.section.faculties.trim().toUpperCase();
+        if (_isMeaningfulInitial(main)) initials.add(main);
+        final child = (details.childSection?.faculties ?? '')
+            .trim()
+            .toUpperCase();
+        if (_isMeaningfulInitial(child)) initials.add(child);
+      }
+      if (initials.isNotEmpty) {
+        await resolveStaffInfoByInitials(
+          initials,
+          concurrency: detailConcurrency <= 0 ? 6 : detailConcurrency,
+        );
       }
     } catch (_) {}
   }
@@ -365,6 +447,200 @@ class SeatStatusService {
       });
     } catch (_) {}
   }
+
+  Future<Map<String, SeatStatusStaffInfo>> resolveStaffInfoByInitials(
+    Iterable<String> initials, {
+    int concurrency = 6,
+  }) async {
+    final requested =
+        initials
+            .map((e) => e.trim().toUpperCase())
+            .where(_isMeaningfulInitial)
+            .toSet()
+            .toList()
+          ..sort((a, b) => a.compareTo(b));
+    if (requested.isEmpty) return const <String, SeatStatusStaffInfo>{};
+
+    final chunkSize = concurrency <= 0 ? 6 : concurrency;
+    var index = 0;
+    while (index < requested.length) {
+      final end = (index + chunkSize > requested.length)
+          ? requested.length
+          : index + chunkSize;
+      final batch = requested.sublist(index, end);
+      await Future.wait(batch.map((key) => _resolveStaffInfoForInitial(key)));
+      index = end;
+    }
+
+    final output = <String, SeatStatusStaffInfo>{};
+    for (final key in requested) {
+      final value = _staffInfoByInitialCache[key];
+      if (value == null) continue;
+      output[key] = value;
+    }
+    return output;
+  }
+
+  Future<SeatStatusStaffInfo?> _resolveStaffInfoForInitial(
+    String initial,
+  ) async {
+    final key = initial.trim().toUpperCase();
+    if (!_isMeaningfulInitial(key)) return null;
+    final cached = _staffInfoByInitialCache[key];
+    if (cached != null) return cached;
+
+    final fromDb = await _loadStaffInfoFromDb(key);
+    if (fromDb != null) {
+      _staffInfoByInitialCache[key] = fromDb;
+      return fromDb;
+    }
+
+    final existing = _staffInfoInFlight[key];
+    if (existing != null) return existing;
+
+    final future = _findStaffInfoFromApis(key);
+    _staffInfoInFlight[key] = future;
+    try {
+      final info = await future;
+      if (info != null) {
+        _staffInfoByInitialCache[key] = info;
+        await _saveStaffInfoToDb(info);
+      }
+      return info;
+    } finally {
+      _staffInfoInFlight.remove(key);
+    }
+  }
+
+  Future<SeatStatusStaffInfo?> _findStaffInfoFromApis(String initial) async {
+    final match = await _autocompleteStaffByInitial(initial);
+    if (match == null || match.staffId <= 0) return null;
+    final fromStaff = await _fetchStaffInfo(
+      match.staffId,
+      fallbackInitial: initial,
+      fallbackName: match.displayName,
+    );
+    if (fromStaff != null) return fromStaff;
+    return SeatStatusStaffInfo(
+      staffId: match.staffId,
+      shortName: initial,
+      staffName: match.displayName ?? '',
+      email: '',
+      departmentId: null,
+      designationId: null,
+    );
+  }
+
+  Future<_AutocompleteStaffMatch?> _autocompleteStaffByInitial(
+    String initial,
+  ) async {
+    final q = Uri.encodeQueryComponent(initial.toLowerCase());
+    final url =
+        '${ApiConfig.connectApiBase}/data/autocomplete?q=$q&page=1&field_name=staffId&type=staff';
+    try {
+      final response = await _client.authenticatedGet(
+        url,
+        additionalHeaders: const <String, String>{'X-SOURCE': '3'},
+        acceptedStatusCodes: const <int>{200, 404},
+      );
+      if (response.statusCode != 200) return null;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) return null;
+      final results = decoded['results'];
+      if (results is! List) return null;
+
+      _AutocompleteStaffMatch? fallback;
+      for (final row in results.whereType<Map>()) {
+        final map = row.cast<dynamic, dynamic>();
+        final idRaw = '${map['id'] ?? ''}'.trim();
+        final textRaw = '${map['text'] ?? ''}'.trim();
+        final id = int.tryParse(idRaw);
+        if (id == null) continue;
+        final displayName = textRaw.contains(' - ')
+            ? textRaw.split(' - ').skip(1).join(' - ').trim()
+            : '';
+        fallback ??= _AutocompleteStaffMatch(
+          staffId: id,
+          displayName: displayName,
+        );
+        final prefix = textRaw.split(' - ').first.trim().toUpperCase();
+        if (prefix == initial) {
+          return _AutocompleteStaffMatch(staffId: id, displayName: displayName);
+        }
+      }
+      return fallback;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<SeatStatusStaffInfo?> _fetchStaffInfo(
+    int staffId, {
+    required String fallbackInitial,
+    String? fallbackName,
+  }) async {
+    final url = '${ApiConfig.connectApiBase}/adp/v1/staffs/$staffId';
+    try {
+      final response = await _client.authenticatedGet(
+        url,
+        additionalHeaders: const <String, String>{'X-SOURCE': '3'},
+        acceptedStatusCodes: const <int>{200, 404},
+      );
+      if (response.statusCode != 200) return null;
+      final raw = jsonDecode(response.body);
+      if (raw is! Map<String, dynamic>) return null;
+
+      final shortName = _nonEmpty(raw['shortName']) ?? fallbackInitial;
+      final staffName = _nonEmpty(raw['staffName']) ?? (fallbackName ?? '');
+      final email = _nonEmpty(raw['email']) ?? '';
+      final departmentId = int.tryParse('${raw['departmentId'] ?? ''}');
+      final designationId = int.tryParse('${raw['designationId'] ?? ''}');
+      return SeatStatusStaffInfo(
+        staffId: staffId,
+        shortName: shortName,
+        staffName: staffName,
+        email: email,
+        departmentId: departmentId,
+        designationId: designationId,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isMeaningfulInitial(String value) {
+    if (value.trim().isEmpty) return false;
+    const bad = <String>{'TBA', 'NULL', 'N/A', '--'};
+    return !bad.contains(value.trim().toUpperCase());
+  }
+
+  String? _nonEmpty(dynamic value) {
+    final parsed = '$value'.trim();
+    if (parsed.isEmpty) return null;
+    final upper = parsed.toUpperCase();
+    if (upper == 'NULL' || upper == 'N/A' || upper == '--') return null;
+    return parsed;
+  }
+
+  Future<SeatStatusStaffInfo?> _loadStaffInfoFromDb(String initial) async {
+    try {
+      final db = await _openDb();
+      final raw = await _staffStore.record(initial).get(db);
+      if (raw is! Map) return null;
+      return SeatStatusStaffInfo.fromJson(raw.cast<String, dynamic>());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _saveStaffInfoToDb(SeatStatusStaffInfo info) async {
+    try {
+      final db = await _openDb();
+      await _staffStore
+          .record(info.shortName.toUpperCase())
+          .put(db, info.toJson());
+    } catch (_) {}
+  }
 }
 
 bool _jsonDeepEqual(Map<String, dynamic> a, Map<String, dynamic> b) {
@@ -386,4 +662,51 @@ Map<int, SeatStatusDetailsResponse> _parseCachedDetailsFromMap(
     } catch (_) {}
   }
   return result;
+}
+
+class SeatStatusStaffInfo {
+  const SeatStatusStaffInfo({
+    required this.staffId,
+    required this.shortName,
+    required this.staffName,
+    required this.email,
+    required this.departmentId,
+    required this.designationId,
+  });
+
+  final int staffId;
+  final String shortName;
+  final String staffName;
+  final String email;
+  final int? departmentId;
+  final int? designationId;
+
+  factory SeatStatusStaffInfo.fromJson(Map<String, dynamic> json) {
+    return SeatStatusStaffInfo(
+      staffId: int.tryParse('${json['staffId'] ?? 0}') ?? 0,
+      shortName: '${json['shortName'] ?? ''}'.trim(),
+      staffName: '${json['staffName'] ?? ''}'.trim(),
+      email: '${json['email'] ?? ''}'.trim(),
+      departmentId: int.tryParse('${json['departmentId'] ?? ''}'),
+      designationId: int.tryParse('${json['designationId'] ?? ''}'),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'staffId': staffId,
+      'shortName': shortName,
+      'staffName': staffName,
+      'email': email,
+      'departmentId': departmentId,
+      'designationId': designationId,
+    };
+  }
+}
+
+class _AutocompleteStaffMatch {
+  const _AutocompleteStaffMatch({required this.staffId, this.displayName});
+
+  final int staffId;
+  final String? displayName;
 }

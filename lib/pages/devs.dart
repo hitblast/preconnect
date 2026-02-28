@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:preconnect/pages/api_test.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/cached_image.dart';
@@ -14,6 +15,7 @@ class DevsPage extends StatefulWidget {
 
 class _DevsPageState extends State<DevsPage> {
   late Future<String> _subtitleFuture;
+  int _secretTapCount = 0;
 
   @override
   void initState() {
@@ -34,6 +36,16 @@ class _DevsPageState extends State<DevsPage> {
     }
   }
 
+  Future<void> _onHeaderSecretTap() async {
+    _secretTapCount += 1;
+    if (_secretTapCount < 10) return;
+    _secretTapCount = 0;
+    if (!mounted) return;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ApiTestPage()));
+  }
+
   @override
   Widget build(BuildContext context) {
     final textSecondary = BracuPalette.textSecondary(context);
@@ -45,6 +57,7 @@ class _DevsPageState extends State<DevsPage> {
           title: 'Devs & Support',
           subtitle: subtitle,
           icon: Icons.developer_mode_outlined,
+          onHeaderTap: _onHeaderSecretTap,
           body: ListView(
             padding: const EdgeInsets.fromLTRB(20, 6, 20, 28),
             children: [

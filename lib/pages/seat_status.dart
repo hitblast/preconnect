@@ -25,17 +25,18 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   final List<_SeatStatusCardData> _visibleCards = <_SeatStatusCardData>[];
   final Map<int, SeatStatusDetailsResponse> _detailsCache =
       <int, SeatStatusDetailsResponse>{};
+  final Map<String, SeatStatusStaffInfo> _staffInfoByInitial =
+      <String, SeatStatusStaffInfo>{};
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
-  Timer? _apiRefreshTimer;
-  Timer? _detailsSyncTimer;
   bool _isInitialLoading = true;
   String _searchQuery = '';
   bool _cacheLoaded = false;
   bool _isAppForeground = true;
-  int _detailsSyncCursor = 0;
   bool _isSeatMapRefreshing = false;
   bool _isDetailsSyncing = false;
+  bool _isResolvingStaffInfo = false;
+  final Set<String> _pendingInitials = <String>{};
   Map<int, int> _latestSeatMap = <int, int>{};
 
   @override
@@ -61,7 +62,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     WidgetsBinding.instance.removeObserver(this);
     HomeTabRegistry.activeTab.removeListener(_onActiveTabChanged);
     _searchDebounce?.cancel();
-    _stopLocalPolling();
     _searchController.dispose();
     RefreshBus.instance.removeListener(_onRefreshSignal);
     super.dispose();
@@ -122,6 +122,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         _detailsCache
           ..clear()
           ..addAll(cached);
+        await _loadCachedStaffInfoForDetails(cached.values);
+        _queueStaffInfoResolve(cached.values);
       }
       _cacheLoaded = true;
     }
@@ -134,7 +136,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     }
 
     await _refreshSeatMapFromApi();
-    await _syncMissingDetailsChunk(chunkSize: 36, concurrency: 8);
+    unawaited(_syncMissingDetails(chunkSize: 36, concurrency: 8));
     if (!mounted) return;
     if (_isInitialLoading) {
       setState(() {
@@ -164,6 +166,11 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     _latestSeatMap = Map<int, int>.from(seatMap);
 
     final nextIds = _visibleSectionIds(seatMap);
+    final detailsForVisible = nextIds
+        .map((id) => _detailsCache[id])
+        .whereType<SeatStatusDetailsResponse>()
+        .toList();
+    _queueStaffInfoResolve(detailsForVisible);
     final existingIds = _cards.map((c) => c.sectionId).toSet();
 
     final updated = _cards.where((c) => nextIds.contains(c.sectionId)).map((c) {
@@ -223,6 +230,9 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       sectionName: _pickNonEmpty(main.sectionName, '--'),
       courseName: _pickNonEmpty(main.name, 'Section $sectionId'),
       facultyInitial: _pickNonEmpty(main.faculties, 'TBA'),
+      facultyName: _facultyNameForInitial(main.faculties),
+      facultyEmail: _facultyEmailForInitial(main.faculties),
+      facultyMeta: _facultyMetaForInitial(main.faculties),
       credits: main.courseCredit,
       room: _pickNonEmpty(main.roomNumber, ''),
       classSchedule: main.sectionSchedule.classSchedules,
@@ -245,6 +255,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         sectionName: _pickNonEmpty(main.sectionName, '--'),
         courseName: _pickNonEmpty(main.name, 'Section $sectionId'),
         facultyInitial: _pickNonEmpty(main.faculties, 'TBA'),
+        facultyName: _facultyNameForInitial(main.faculties),
         room: _pickNonEmpty(main.roomNumber, ''),
         labRoom: _pickNonEmpty(lab?.roomNumber, ''),
       ),
@@ -257,10 +268,11 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     required String sectionName,
     required String courseName,
     required String facultyInitial,
+    required String facultyName,
     required String room,
     required String labRoom,
   }) {
-    return '$courseCode $sectionName $courseName $facultyInitial $room $labRoom $sectionId'
+    return '$courseCode $sectionName $courseName $facultyInitial $facultyName $room $labRoom $sectionId'
         .toLowerCase();
   }
 
@@ -440,6 +452,9 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     if (x.sectionName != y.sectionName) return false;
     if (x.courseName != y.courseName) return false;
     if (x.facultyInitial != y.facultyInitial) return false;
+    if (x.facultyName != y.facultyName) return false;
+    if (x.facultyEmail != y.facultyEmail) return false;
+    if (x.facultyMeta != y.facultyMeta) return false;
     if (x.credits != y.credits) return false;
     if (x.room != y.room) return false;
     if (x.labRoom != y.labRoom) return false;
@@ -473,37 +488,25 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   }
 
   void _updatePollingStrategy() {
-    if (_isAppForeground) {
-      _startLocalPolling();
-      return;
-    }
-    _stopLocalPolling();
-  }
-
-  void _startLocalPolling() {
-    _apiRefreshTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
-      unawaited(_refreshSeatMapFromApi());
-    });
-    _detailsSyncTimer ??= Timer.periodic(const Duration(seconds: 6), (_) {
-      unawaited(_syncMissingDetailsChunk(chunkSize: 10));
-    });
+    if (!_isAppForeground) return;
+    if (HomeTabRegistry.activeTab.value != HomeTab.seatStatus) return;
     unawaited(_refreshSeatMapFromApi());
-  }
-
-  void _stopLocalPolling() {
-    _apiRefreshTimer?.cancel();
-    _apiRefreshTimer = null;
-    _detailsSyncTimer?.cancel();
-    _detailsSyncTimer = null;
+    unawaited(_syncMissingDetails(chunkSize: 24, concurrency: 6));
   }
 
   Future<void> _refreshSeatMapFromApi() async {
     if (_isSeatMapRefreshing) return;
     _isSeatMapRefreshing = true;
     try {
+      final previousMap = Map<int, int>.from(_latestSeatMap);
       final seatMap = await _service.fetchSeatMapFromApi();
       if (seatMap.isNotEmpty) {
+        final changedIds = _changedSectionIds(previousMap, seatMap);
         await _applySeatMapUpdate(seatMap);
+        if (previousMap.isNotEmpty && changedIds.isNotEmpty) {
+          await _refreshChangedDetails(changedIds, concurrency: 8);
+        }
+        unawaited(_syncMissingDetails(chunkSize: 24, concurrency: 6));
       }
     } catch (_) {
       if (_isInitialLoading && mounted) {
@@ -516,44 +519,161 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     }
   }
 
-  Future<void> _syncMissingDetailsChunk({
+  Future<void> _syncMissingDetails({
     int chunkSize = 10,
     int concurrency = 4,
   }) async {
     if (_isDetailsSyncing) return;
     if (_latestSeatMap.isEmpty) return;
-    final missing =
-        _latestSeatMap.keys
-            .where((id) => !_detailsCache.containsKey(id))
-            .toList()
-          ..sort((a, b) => a.compareTo(b));
-    if (missing.isEmpty) return;
-
     _isDetailsSyncing = true;
     try {
-      final take = math.min(chunkSize, missing.length);
-      if (_detailsSyncCursor >= missing.length) {
-        _detailsSyncCursor = 0;
-      }
-      final picked = <int>[];
-      var idx = _detailsSyncCursor;
-      for (var i = 0; i < take; i++) {
-        picked.add(missing[idx]);
-        idx = (idx + 1) % missing.length;
-      }
-      _detailsSyncCursor = idx;
+      final takeCount = math.max(1, chunkSize);
+      while (true) {
+        final missing =
+            _latestSeatMap.keys
+                .where((id) => !_detailsCache.containsKey(id))
+                .toList()
+              ..sort((a, b) => a.compareTo(b));
+        if (missing.isEmpty) return;
 
-      final fetched = await _service.fetchDetailsForSectionIdsFromApi(
-        picked,
-        concurrency: concurrency,
-      );
-      if (fetched.isEmpty) return;
-      _detailsCache.addAll(fetched);
-      await _applySeatMapUpdate(_latestSeatMap);
+        final picked = missing.take(takeCount).toList();
+        final fetched = await _service.fetchDetailsForSectionIdsFromApi(
+          picked,
+          concurrency: concurrency,
+        );
+        if (fetched.isEmpty) return;
+        _detailsCache.addAll(fetched);
+        await _loadCachedStaffInfoForDetails(fetched.values);
+        _queueStaffInfoResolve(fetched.values);
+        await _applySeatMapUpdate(_latestSeatMap);
+      }
     } catch (_) {
     } finally {
       _isDetailsSyncing = false;
     }
+  }
+
+  Set<int> _changedSectionIds(Map<int, int> before, Map<int, int> after) {
+    final changed = <int>{};
+    for (final id in after.keys) {
+      final prev = before[id];
+      final next = after[id];
+      if (prev == null || prev != next) {
+        changed.add(id);
+      }
+    }
+    return changed;
+  }
+
+  Future<void> _refreshChangedDetails(
+    Set<int> sectionIds, {
+    int concurrency = 8,
+  }) async {
+    if (sectionIds.isEmpty) return;
+    try {
+      final refreshed = await _service.fetchDetailsForSectionIdsFromApi(
+        sectionIds.toList(),
+        concurrency: concurrency,
+      );
+      if (refreshed.isEmpty) return;
+      _detailsCache.addAll(refreshed);
+      await _loadCachedStaffInfoForDetails(refreshed.values);
+      _queueStaffInfoResolve(refreshed.values);
+      await _applySeatMapUpdate(_latestSeatMap);
+    } catch (_) {}
+  }
+
+  void _queueStaffInfoResolve(
+    Iterable<SeatStatusDetailsResponse> detailsValues,
+  ) {
+    for (final details in detailsValues) {
+      final main = details.section.faculties.trim().toUpperCase();
+      if (main.isNotEmpty) _pendingInitials.add(main);
+      final child = (details.childSection?.faculties ?? '')
+          .trim()
+          .toUpperCase();
+      if (child.isNotEmpty) _pendingInitials.add(child);
+    }
+    if (_pendingInitials.isEmpty) return;
+    if (_isResolvingStaffInfo) return;
+    unawaited(_resolvePendingStaffInfo());
+  }
+
+  Future<void> _loadCachedStaffInfoForDetails(
+    Iterable<SeatStatusDetailsResponse> detailsValues,
+  ) async {
+    final initials = <String>{};
+    for (final details in detailsValues) {
+      final main = details.section.faculties.trim().toUpperCase();
+      if (main.isNotEmpty) initials.add(main);
+      final child = (details.childSection?.faculties ?? '')
+          .trim()
+          .toUpperCase();
+      if (child.isNotEmpty) initials.add(child);
+    }
+    if (initials.isEmpty) return;
+    final cached = await _service.loadCachedStaffInfoByInitials(initials);
+    if (cached.isEmpty) return;
+    _staffInfoByInitial.addAll(cached);
+  }
+
+  Future<void> _resolvePendingStaffInfo() async {
+    if (_isResolvingStaffInfo) return;
+    if (_pendingInitials.isEmpty) return;
+    _isResolvingStaffInfo = true;
+    try {
+      while (_pendingInitials.isNotEmpty) {
+        final batch = _pendingInitials.take(20).toList();
+        _pendingInitials.removeAll(batch);
+        final changed = await _resolveStaffInfoForInitials(batch.toSet());
+        if (changed && mounted && _latestSeatMap.isNotEmpty) {
+          final refreshed = _buildCardsFromSeatMap(_latestSeatMap);
+          _sortCardsByCourseAndSection(refreshed);
+          _applyCardsSnapshot(refreshed, isInitialLoading: false);
+        }
+      }
+    } finally {
+      _isResolvingStaffInfo = false;
+    }
+  }
+
+  Future<bool> _resolveStaffInfoForInitials(Set<String> initials) async {
+    if (initials.isEmpty) return false;
+    final missing = initials
+        .where((key) => !_staffInfoByInitial.containsKey(key))
+        .toSet();
+    if (missing.isEmpty) return false;
+    final resolved = await _service.resolveStaffInfoByInitials(missing);
+    if (resolved.isEmpty) return false;
+    var changed = false;
+    for (final entry in resolved.entries) {
+      if (_staffInfoByInitial.containsKey(entry.key)) continue;
+      _staffInfoByInitial[entry.key] = entry.value;
+      changed = true;
+    }
+    return changed;
+  }
+
+  String _facultyNameForInitial(String facultyInitial) {
+    final key = facultyInitial.trim().toUpperCase();
+    return (_staffInfoByInitial[key]?.staffName ?? '').trim();
+  }
+
+  String _facultyEmailForInitial(String facultyInitial) {
+    final key = facultyInitial.trim().toUpperCase();
+    return (_staffInfoByInitial[key]?.email ?? '').trim();
+  }
+
+  String _facultyMetaForInitial(String facultyInitial) {
+    final key = facultyInitial.trim().toUpperCase();
+    final info = _staffInfoByInitial[key];
+    if (info == null) return '';
+    final chunks = <String>[];
+    if (info.departmentId != null) chunks.add('Dept #${info.departmentId}');
+    if (info.designationId != null) {
+      chunks.add('Designation #${info.designationId}');
+    }
+    return chunks.join(' • ');
   }
 }
 
@@ -610,6 +730,42 @@ class _SeatStatusCard extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (item.facultyName.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          item.facultyName,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ),
+                    if (item.facultyEmail.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Text(
+                          item.facultyEmail,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ),
+                    if (item.facultyMeta.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Text(
+                          item.facultyMeta,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -899,6 +1055,9 @@ class _SeatStatusCardData {
     required this.sectionName,
     required this.courseName,
     required this.facultyInitial,
+    required this.facultyName,
+    required this.facultyEmail,
+    required this.facultyMeta,
     required this.credits,
     required this.room,
     required this.classSchedule,
@@ -921,6 +1080,9 @@ class _SeatStatusCardData {
   final String sectionName;
   final String courseName;
   final String facultyInitial;
+  final String facultyName;
+  final String facultyEmail;
+  final String facultyMeta;
   final int credits;
   final String room;
   final List<SeatStatusClassSchedule> classSchedule;
@@ -944,6 +1106,9 @@ class _SeatStatusCardData {
       sectionName: sectionName,
       courseName: courseName,
       facultyInitial: facultyInitial,
+      facultyName: facultyName,
+      facultyEmail: facultyEmail,
+      facultyMeta: facultyMeta,
       credits: credits,
       room: room,
       classSchedule: classSchedule,
