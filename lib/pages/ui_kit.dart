@@ -225,7 +225,7 @@ String formatSectionBadge(String? sectionName) {
 
 const EdgeInsets kBracuPageListPadding = EdgeInsets.fromLTRB(20, 8, 20, 28);
 
-class BracuRefreshList extends StatelessWidget {
+class BracuRefreshList extends StatefulWidget {
   const BracuRefreshList({
     super.key,
     required this.onRefresh,
@@ -240,20 +240,82 @@ class BracuRefreshList extends StatelessWidget {
   final EdgeInsets padding;
 
   @override
+  State<BracuRefreshList> createState() => _BracuRefreshListState();
+}
+
+class _BracuRefreshListState extends State<BracuRefreshList> {
+  ScrollController? _internalController;
+  bool _showScrollTop = false;
+
+  ScrollController get _controller => widget.controller ?? _internalController!;
+
+  @override
+  void initState() {
+    super.initState();
+    _internalController = widget.controller == null ? ScrollController() : null;
+    _controller.addListener(_onScroll);
+  }
+
+  @override
+  void didUpdateWidget(covariant BracuRefreshList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller?.removeListener(_onScroll);
+    _internalController?.removeListener(_onScroll);
+    if (oldWidget.controller == null && widget.controller != null) {
+      _internalController?.dispose();
+      _internalController = null;
+    } else if (oldWidget.controller != null && widget.controller == null) {
+      _internalController = ScrollController();
+    }
+    _controller.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onScroll);
+    _internalController?.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_controller.hasClients) return;
+    final shouldShow = _controller.offset > 360;
+    if (shouldShow == _showScrollTop) return;
+    setState(() {
+      _showScrollTop = shouldShow;
+    });
+  }
+
+  Future<void> _scrollToTop() async {
+    if (!_controller.hasClients) return;
+    await _controller.animateTo(
+      0,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        controller: controller,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: padding,
-        children: children,
-      ),
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: widget.onRefresh,
+          child: ListView(
+            controller: _controller,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: widget.padding,
+            children: widget.children,
+          ),
+        ),
+        _BracuScrollTopButton(visible: _showScrollTop, onTap: _scrollToTop),
+      ],
     );
   }
 }
 
-class BracuRefreshListBuilder extends StatelessWidget {
+class BracuRefreshListBuilder extends StatefulWidget {
   const BracuRefreshListBuilder({
     super.key,
     required this.onRefresh,
@@ -270,16 +332,79 @@ class BracuRefreshListBuilder extends StatelessWidget {
   final EdgeInsets padding;
 
   @override
+  State<BracuRefreshListBuilder> createState() =>
+      _BracuRefreshListBuilderState();
+}
+
+class _BracuRefreshListBuilderState extends State<BracuRefreshListBuilder> {
+  ScrollController? _internalController;
+  bool _showScrollTop = false;
+
+  ScrollController get _controller => widget.controller ?? _internalController!;
+
+  @override
+  void initState() {
+    super.initState();
+    _internalController = widget.controller == null ? ScrollController() : null;
+    _controller.addListener(_onScroll);
+  }
+
+  @override
+  void didUpdateWidget(covariant BracuRefreshListBuilder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller?.removeListener(_onScroll);
+    _internalController?.removeListener(_onScroll);
+    if (oldWidget.controller == null && widget.controller != null) {
+      _internalController?.dispose();
+      _internalController = null;
+    } else if (oldWidget.controller != null && widget.controller == null) {
+      _internalController = ScrollController();
+    }
+    _controller.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onScroll);
+    _internalController?.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_controller.hasClients) return;
+    final shouldShow = _controller.offset > 360;
+    if (shouldShow == _showScrollTop) return;
+    setState(() {
+      _showScrollTop = shouldShow;
+    });
+  }
+
+  Future<void> _scrollToTop() async {
+    if (!_controller.hasClients) return;
+    await _controller.animateTo(
+      0,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView.builder(
-        controller: controller,
-        padding: padding,
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: itemCount,
-        itemBuilder: itemBuilder,
-      ),
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: widget.onRefresh,
+          child: ListView.builder(
+            controller: _controller,
+            padding: widget.padding,
+            physics: const AlwaysScrollableScrollPhysics(),
+            itemCount: widget.itemCount,
+            itemBuilder: widget.itemBuilder,
+          ),
+        ),
+        _BracuScrollTopButton(visible: _showScrollTop, onTap: _scrollToTop),
+      ],
     );
   }
 }
@@ -308,7 +433,7 @@ class BracuRefreshPlaceholder extends StatelessWidget {
   }
 }
 
-class BracuRefreshScroll extends StatelessWidget {
+class BracuRefreshScroll extends StatefulWidget {
   const BracuRefreshScroll({
     super.key,
     required this.onRefresh,
@@ -321,13 +446,93 @@ class BracuRefreshScroll extends StatelessWidget {
   final EdgeInsets padding;
 
   @override
+  State<BracuRefreshScroll> createState() => _BracuRefreshScrollState();
+}
+
+class _BracuRefreshScrollState extends State<BracuRefreshScroll> {
+  final ScrollController _controller = ScrollController();
+  bool _showScrollTop = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onScroll);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_controller.hasClients) return;
+    final shouldShow = _controller.offset > 360;
+    if (shouldShow == _showScrollTop) return;
+    setState(() {
+      _showScrollTop = shouldShow;
+    });
+  }
+
+  Future<void> _scrollToTop() async {
+    if (!_controller.hasClients) return;
+    await _controller.animateTo(
+      0,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: SingleChildScrollView(
-        padding: padding,
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: child,
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: widget.onRefresh,
+          child: SingleChildScrollView(
+            controller: _controller,
+            padding: widget.padding,
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: widget.child,
+          ),
+        ),
+        _BracuScrollTopButton(visible: _showScrollTop, onTap: _scrollToTop),
+      ],
+    );
+  }
+}
+
+class _BracuScrollTopButton extends StatelessWidget {
+  const _BracuScrollTopButton({required this.visible, required this.onTap});
+
+  final bool visible;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      right: 16,
+      bottom: 16 + MediaQuery.of(context).padding.bottom,
+      child: IgnorePointer(
+        ignoring: !visible,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 160),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              width: 42,
+              height: 42,
+              child: Icon(
+                Icons.keyboard_arrow_up_rounded,
+                color: BracuPalette.textPrimary(context),
+                size: 24,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
