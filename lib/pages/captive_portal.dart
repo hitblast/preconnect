@@ -1,13 +1,12 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/android_network_assist.dart';
+import 'package:preconnect/tools/captive_portal_http_service.dart';
 import 'package:preconnect/tools/captive_login_store.dart';
-import 'package:preconnect/tools/user_agent.dart';
 
 class CaptivePortalPage extends StatefulWidget {
   const CaptivePortalPage({super.key, this.autoOpenPortalOnStart = false});
@@ -19,9 +18,6 @@ class CaptivePortalPage extends StatefulWidget {
 }
 
 class _CaptivePortalPageState extends State<CaptivePortalPage> {
-  static final Uri _probeUri = Uri.parse(
-    'http://connectivitycheck.gstatic.com/generate_204',
-  );
   static const Duration _apiLoginTimeout = Duration(seconds: 18);
   static const Duration _autoSessionCheckInterval = Duration(seconds: 30);
   static const Duration _autoExtendCooldown = Duration(seconds: 60);
@@ -184,8 +180,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
       final suggestion = await _registerWifiSuggestion();
       if (!mounted) return;
       if (suggestion == 'permission-required' || suggestion == 'invalid') {
-        _showLocalSnackBar('Wi-Fi setup failed: $suggestion');
-        return;
+        _showLocalSnackBar('Wi-Fi setup skipped: $suggestion');
       }
 
       final loggedIn = await _loginViaCaptiveApi(
@@ -289,7 +284,9 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
   Future<void> _openExtendSession(CaptivePortalApiStatus status) async {
     if (!status.canExtendSession || status.userPortalUrl == null) return;
     try {
-      await _requestSessionExtension(status.userPortalUrl!);
+      await CaptivePortalHttpService.instance.requestSessionExtension(
+        status.userPortalUrl!,
+      );
       if (!mounted) return;
       _showLocalSnackBar('Session extended.');
       await _refreshSessionStatus(
@@ -370,7 +367,9 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     _isAutoExtending = true;
     _lastAutoExtendAt = now;
     try {
-      await _requestSessionExtension(status.userPortalUrl!);
+      await CaptivePortalHttpService.instance.requestSessionExtension(
+        status.userPortalUrl!,
+      );
       if (!mounted) return;
       _showLocalSnackBar('Session extended automatically.');
       await _refreshSessionStatus(
@@ -383,21 +382,6 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
       _showLocalSnackBar('Auto-extend failed. Tap Extend Session manually.');
     } finally {
       _isAutoExtending = false;
-    }
-  }
-
-  Future<void> _requestSessionExtension(Uri uri) async {
-    final client = HttpClient()..userAgent = kPreconnectUserAgent;
-    client.connectionTimeout = const Duration(seconds: 10);
-    try {
-      final request = await client.getUrl(uri);
-      final response = await request.close();
-      await response.drain<void>();
-      if (response.statusCode < 200 || response.statusCode >= 400) {
-        throw HttpException('HTTP ${response.statusCode}', uri: uri);
-      }
-    } finally {
-      client.close(force: true);
     }
   }
 
@@ -498,12 +482,20 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     required String username,
     required String password,
   }) async {
-    final client = HttpClient()..userAgent = kPreconnectUserAgent;
-    client.connectionTimeout = const Duration(seconds: 10);
+    final httpService = CaptivePortalHttpService.instance;
+    final portalUrl = await _currentPortalApiUri();
+    final client = httpService.newClient();
     final cookies = <String, Cookie>{};
 
     try {
-      final first = await _getWithRedirects(client, _probeUri, cookies);
+      final first = await httpService.probeWithFallback(
+        client: client,
+        cookies: cookies,
+        portalUrl: portalUrl,
+      );
+      if (first == null) {
+        return false;
+      }
       if (first.statusCode == 204) {
         return true;
       }
@@ -524,17 +516,29 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
       };
 
       final encoded = Uri(queryParameters: payload).query;
-      final response = await _postOnce(client, form.action, encoded, cookies);
+      final response = await httpService.postOnce(
+        client: client,
+        uri: form.action,
+        body: encoded,
+        cookies: cookies,
+      );
 
       if (response.location != null) {
         final redirected = response.location!.isAbsolute
             ? response.location!
             : form.action.resolveUri(response.location!);
-        await _getWithRedirects(client, redirected, cookies);
+        await httpService.getWithRedirects(
+          client: client,
+          uri: redirected,
+          cookies: cookies,
+        );
       }
 
-      final verify = await _getWithRedirects(client, _probeUri, cookies);
-      return verify.statusCode == 204;
+      return await httpService.isValidatedViaProbeFallback(
+        client: client,
+        cookies: cookies,
+        portalUrl: portalUrl,
+      );
     } catch (_) {
       return false;
     } finally {
@@ -542,82 +546,10 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     }
   }
 
-  Future<_HttpResult> _getWithRedirects(
-    HttpClient client,
-    Uri uri,
-    Map<String, Cookie> cookies,
-  ) async {
-    var current = uri;
-    for (var i = 0; i < 8; i++) {
-      final request = await client.getUrl(current);
-      request.followRedirects = false;
-      final cookieHeader = _cookieHeader(cookies);
-      if (cookieHeader != null) {
-        request.headers.set(HttpHeaders.cookieHeader, cookieHeader);
-      }
-      final response = await request.close();
-      _captureCookies(response, cookies);
-
-      final status = response.statusCode;
-      final location = response.headers.value(HttpHeaders.locationHeader);
-      final body = await response.transform(utf8.decoder).join();
-
-      if (status >= 300 && status < 400 && location != null) {
-        current = Uri.parse(location).isAbsolute
-            ? Uri.parse(location)
-            : current.resolve(location);
-        continue;
-      }
-
-      return _HttpResult(
-        statusCode: status,
-        uri: current,
-        body: body,
-        location: location == null ? null : Uri.parse(location),
-      );
-    }
-    return _HttpResult(statusCode: 0, uri: current, body: '', location: null);
-  }
-
-  Future<_HttpResult> _postOnce(
-    HttpClient client,
-    Uri uri,
-    String body,
-    Map<String, Cookie> cookies,
-  ) async {
-    final request = await client.postUrl(uri);
-    request.followRedirects = false;
-    request.headers.set(
-      HttpHeaders.contentTypeHeader,
-      'application/x-www-form-urlencoded',
-    );
-    final cookieHeader = _cookieHeader(cookies);
-    if (cookieHeader != null) {
-      request.headers.set(HttpHeaders.cookieHeader, cookieHeader);
-    }
-    request.write(body);
-    final response = await request.close();
-    _captureCookies(response, cookies);
-    final location = response.headers.value(HttpHeaders.locationHeader);
-    final text = await response.transform(utf8.decoder).join();
-
-    return _HttpResult(
-      statusCode: response.statusCode,
-      uri: uri,
-      body: text,
-      location: location == null ? null : Uri.parse(location),
-    );
-  }
-
-  void _captureCookies(HttpClientResponse response, Map<String, Cookie> jar) {
-    for (final cookie in response.cookies) {
-      jar[cookie.name] = cookie;
-    }
-  }
-
-  String? _cookieHeader(Map<String, Cookie> jar) {
-    if (jar.isEmpty) return null;
-    return jar.values.map((c) => '${c.name}=${c.value}').join('; ');
+  Future<Uri?> _currentPortalApiUri() async {
+    if (!AndroidNetworkAssist.isSupported) return null;
+    final status = await AndroidNetworkAssist.getNetworkStatus();
+    return _validatedHttpUri(status?.captivePortalUrl?.trim() ?? '');
   }
 
   _PortalForm? _extractLoginForm({
@@ -880,20 +812,6 @@ class CaptivePortalApiStatus {
   final int? secondsRemaining;
   final bool canExtendSession;
   final Uri? userPortalUrl;
-}
-
-class _HttpResult {
-  const _HttpResult({
-    required this.statusCode,
-    required this.uri,
-    required this.body,
-    required this.location,
-  });
-
-  final int statusCode;
-  final Uri uri;
-  final String body;
-  final Uri? location;
 }
 
 class _PortalForm {

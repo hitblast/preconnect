@@ -12,7 +12,6 @@ import android.net.wifi.WifiNetworkSuggestion
 import android.os.Build
 import android.os.Bundle
 import android.os.Looper
-import android.provider.Settings
 import com.android.installreferrer.api.InstallReferrerClient
 import com.android.installreferrer.api.InstallReferrerStateListener
 import com.google.android.play.core.integrity.IntegrityManagerFactory
@@ -221,7 +220,6 @@ class MainActivity : FlutterFragmentActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "getNetworkStatus" -> result.success(currentNetworkStatus())
-                    "openCaptivePortal" -> result.success(openCaptivePortal())
                     "addWifiSuggestion" -> addWifiSuggestion(call, result)
                     "removeAllWifiSuggestions" -> removeAllWifiSuggestions(result)
                     "getAndClearPostConnectionEvent" -> result.success(getAndClearPostConnectionEvent())
@@ -374,28 +372,6 @@ class MainActivity : FlutterFragmentActivity() {
             .remove("wifi_post_connection_ssid")
             .apply()
         return payload
-    }
-
-    private fun openCaptivePortal(): Boolean {
-        return try {
-            val network = connectivityManager.activeNetwork ?: return false
-            val method = ConnectivityManager::class.java.methods.firstOrNull { candidate ->
-                candidate.name == "startCaptivePortalApp" &&
-                    candidate.parameterTypes.size == 1 &&
-                    candidate.parameterTypes[0] == Network::class.java
-            }
-            if (method != null) {
-                method.invoke(connectivityManager, network)
-                true
-            } else {
-                // Fallback for SDKs where startCaptivePortalApp is unavailable at compile/runtime.
-                val intent = Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
-                true
-            }
-        } catch (_: Exception) {
-            false
-        }
     }
 
     private fun registerNetworkCallback() {

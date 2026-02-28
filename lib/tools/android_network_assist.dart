@@ -84,15 +84,6 @@ class AndroidNetworkAssist {
         );
   }
 
-  static Future<bool> openCaptivePortal() async {
-    if (!isSupported) return false;
-    try {
-      return await _channel.invokeMethod<bool>('openCaptivePortal') ?? false;
-    } catch (_) {
-      return false;
-    }
-  }
-
   static Future<String> addWifiSuggestion({
     required String ssid,
     required String password,

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:preconnect/api/api_client.dart';
+import 'package:preconnect/tools/android_network_assist.dart';
 
 enum CaptivePortalState { offline, validated, captive, unknown }
 
@@ -24,6 +25,34 @@ class CaptivePortalDetector {
   static const Duration _timeout = Duration(seconds: 4);
 
   static Future<CaptivePortalStatus> detect() async {
+    if (AndroidNetworkAssist.isSupported) {
+      final status = await AndroidNetworkAssist.getNetworkStatus();
+      if (status != null) {
+        if (!status.connected) {
+          return const CaptivePortalStatus(
+            state: CaptivePortalState.offline,
+            httpStatusCode: null,
+          );
+        }
+        if (status.captive) {
+          return const CaptivePortalStatus(
+            state: CaptivePortalState.captive,
+            httpStatusCode: null,
+          );
+        }
+        if (status.validated) {
+          return const CaptivePortalStatus(
+            state: CaptivePortalState.validated,
+            httpStatusCode: null,
+          );
+        }
+        return const CaptivePortalStatus(
+          state: CaptivePortalState.unknown,
+          httpStatusCode: null,
+        );
+      }
+    }
+
     final hasNetwork = await ApiClient().hasConnection(forceRefresh: true);
     if (!hasNetwork) {
       return const CaptivePortalStatus(

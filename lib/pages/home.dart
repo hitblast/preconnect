@@ -32,6 +32,7 @@ import 'package:preconnect/tools/android_network_assist.dart';
 import 'package:preconnect/tools/cached_image.dart';
 import 'package:preconnect/tools/captive_login_store.dart';
 import 'package:preconnect/tools/captive_portal_detector.dart';
+import 'package:preconnect/tools/captive_portal_http_service.dart';
 import 'package:preconnect/tools/home_card_preferences.dart';
 import 'package:preconnect/tools/holiday_status.dart';
 import 'package:preconnect/tools/in_app_review_prompt.dart';
@@ -299,6 +300,16 @@ class _HomeDashboardState extends State<_HomeDashboard> {
   bool _isCheckingCaptive = false;
   StreamSubscription<AndroidNetworkStatus>? _networkStatusSubscription;
   bool _autoOpenedWifiAssistant = false;
+  bool _isOpeningWifiAssistant = false;
+  bool _isAutoExtendingSession = false;
+  DateTime? _lastAutoAssistantOpenAt;
+  DateTime? _lastAutoSessionExtendAt;
+  Timer? _captiveAutoTimer;
+
+  static const Duration _captiveAutoPollInterval = Duration(seconds: 30);
+  static const Duration _autoAssistantCooldown = Duration(seconds: 45);
+  static const Duration _autoSessionExtendCooldown = Duration(seconds: 60);
+  static const int _autoSessionExtendThresholdSeconds = 21600;
 
   @override
   void initState() {
@@ -312,6 +323,10 @@ class _HomeDashboardState extends State<_HomeDashboard> {
         _applyAndroidNetworkStatus,
       );
       unawaited(_consumePostConnectionEvent());
+      _captiveAutoTimer = Timer.periodic(_captiveAutoPollInterval, (_) {
+        if (!mounted) return;
+        unawaited(_refreshCaptiveStatus());
+      });
     }
     unawaited(_refreshCaptiveStatus());
     unawaited(_preloadDegreeProgress());
@@ -323,6 +338,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
   void dispose() {
     RefreshBus.instance.removeListener(_onRefreshSignal);
     _networkStatusSubscription?.cancel();
+    _captiveAutoTimer?.cancel();
     super.dispose();
   }
 
@@ -494,20 +510,69 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     });
     if (status.captive) {
       unawaited(_maybeAutoOpenWifiAssistant(status));
+    } else {
+      _autoOpenedWifiAssistant = false;
+    }
+    unawaited(_maybeAutoExtendSession(status));
+  }
+
+  Future<void> _maybeAutoExtendSession(AndroidNetworkStatus status) async {
+    if (!mounted || _isAutoExtendingSession) return;
+    if (status.canExtendSession != true) return;
+    final rawPortalUrl = (status.captivePortalUrl ?? '').trim();
+    if (rawPortalUrl.isEmpty) return;
+    final portalUri = Uri.tryParse(rawPortalUrl);
+    if (portalUri == null ||
+        !portalUri.hasAuthority ||
+        (portalUri.scheme != 'http' && portalUri.scheme != 'https')) {
+      return;
+    }
+
+    final expiryMillis = status.sessionExpiryTimeMillis;
+    if (expiryMillis == null || expiryMillis <= 0) return;
+    final remainingSeconds =
+        ((expiryMillis - DateTime.now().millisecondsSinceEpoch) / 1000).floor();
+    if (remainingSeconds > _autoSessionExtendThresholdSeconds) return;
+
+    final now = DateTime.now();
+    if (_lastAutoSessionExtendAt != null &&
+        now.difference(_lastAutoSessionExtendAt!) <
+            _autoSessionExtendCooldown) {
+      return;
+    }
+
+    _isAutoExtendingSession = true;
+    _lastAutoSessionExtendAt = now;
+    try {
+      await CaptivePortalHttpService.instance.requestSessionExtension(
+        portalUri,
+      );
+      if (!mounted) return;
+      unawaited(_refreshCaptiveStatus());
+    } catch (_) {
+      // Best-effort background extension; ignore transient failures.
+    } finally {
+      _isAutoExtendingSession = false;
     }
   }
 
   Future<void> _maybeAutoOpenWifiAssistant(AndroidNetworkStatus status) async {
-    if (_autoOpenedWifiAssistant || !mounted) return;
+    if (_autoOpenedWifiAssistant || _isOpeningWifiAssistant || !mounted) return;
     if (status.transport != 'wifi') return;
     final creds = await CaptiveLoginStore.instance.read();
     if (!mounted || creds == null) return;
     final currentSsid = (status.ssid ?? '').trim();
     if (currentSsid.isEmpty) return;
+    final now = DateTime.now();
+    if (_lastAutoAssistantOpenAt != null &&
+        now.difference(_lastAutoAssistantOpenAt!) < _autoAssistantCooldown) {
+      return;
+    }
     _autoOpenedWifiAssistant = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    _lastAutoAssistantOpenAt = now;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      _openWifiLoginAssistant();
+      await _openWifiLoginAssistant();
     });
   }
 
@@ -519,18 +584,25 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     final creds = await CaptiveLoginStore.instance.read();
     if (!mounted || creds == null) return;
     _autoOpenedWifiAssistant = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    _lastAutoAssistantOpenAt = DateTime.now();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      _openWifiLoginAssistant();
+      await _openWifiLoginAssistant();
     });
   }
 
-  void _openWifiLoginAssistant() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const CaptivePortalPage(autoOpenPortalOnStart: true),
-      ),
-    );
+  Future<void> _openWifiLoginAssistant() async {
+    if (_isOpeningWifiAssistant || !mounted) return;
+    _isOpeningWifiAssistant = true;
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const CaptivePortalPage(autoOpenPortalOnStart: true),
+        ),
+      );
+    } finally {
+      _isOpeningWifiAssistant = false;
+    }
   }
 
   String _todayName() {

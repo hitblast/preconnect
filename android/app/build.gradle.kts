@@ -50,6 +50,9 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
 
     }
 
@@ -77,6 +80,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+        }
+    }
+
+    packaging {
+        jniLibs {
+            excludes += setOf("**/x86_64/*.so")
         }
     }
 }
