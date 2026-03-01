@@ -1,9 +1,9 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:preconnect/api/friend_schedule_store.dart';
 import 'package:preconnect/pages/ui_kit.dart';
+import 'package:preconnect/tools/platform_permissions.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 
 class ScanSchedulePage extends StatefulWidget {
@@ -55,19 +55,10 @@ class _ScanSchedulePageState extends State<ScanSchedulePage>
   Future<void> _ensureCameraPermission({
     bool openSettingsOnDeny = false,
   }) async {
-    if (kIsWeb) {
-      if (mounted) setState(() => _cameraGranted = false);
-      return;
-    }
-    final grantedByPlatform = defaultTargetPlatform == TargetPlatform.macOS;
-    PermissionStatus requested = PermissionStatus.granted;
-    if (!grantedByPlatform) {
-      final status = await Permission.camera.status;
-      requested = status.isGranted ? status : await Permission.camera.request();
-    }
+    final granted = await PlatformPermissions.requestScannerCameraPermission();
     if (!mounted) return;
-    setState(() => _cameraGranted = requested.isGranted);
-    if (requested.isGranted) {
+    setState(() => _cameraGranted = granted);
+    if (granted) {
       _startScanner();
     } else if (openSettingsOnDeny) {
       await openAppSettings();

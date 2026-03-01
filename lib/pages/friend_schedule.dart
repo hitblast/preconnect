@@ -3,10 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:preconnect/api/friend_schedule_store.dart';
 import 'package:preconnect/model/friend_schedule.dart';
 import 'package:archive/archive.dart';
@@ -15,6 +14,7 @@ import 'package:preconnect/pages/friend_schedule_sections/friend_action_card.dar
 import 'package:preconnect/pages/friend_schedule_sections/schedule_list.dart';
 import 'package:preconnect/pages/friend_schedule_sections/friend_detail.dart';
 import 'package:preconnect/pages/ui_kit.dart';
+import 'package:preconnect/tools/platform_permissions.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/ramadan_timing.dart';
 
@@ -199,20 +199,7 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
   }
 
   Future<bool> _ensureGalleryPermission() async {
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      final photos = await Permission.photos.request();
-      return photos.isGranted || photos.isLimited;
-    }
-    if (defaultTargetPlatform == TargetPlatform.macOS) {
-      return true;
-    }
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      final photos = await Permission.photos.request();
-      if (photos.isGranted) return true;
-      final storage = await Permission.storage.request();
-      return storage.isGranted;
-    }
-    return true;
+    return PlatformPermissions.requestGalleryImagePermission();
   }
 
   Future<String> _ensureReadableImagePath(XFile image) async {
