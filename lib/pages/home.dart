@@ -14,7 +14,7 @@ import 'package:preconnect/pages/exam_schedule.dart';
 import 'package:preconnect/pages/seat_status.dart';
 import 'package:preconnect/pages/degree_progress.dart';
 import 'package:preconnect/pages/alarms.dart';
-import 'package:preconnect/pages/captive_portal.dart';
+import 'package:preconnect/pages/captive_wifi.dart';
 import 'package:preconnect/pages/student_profile.dart';
 import 'package:preconnect/pages/share_schedule.dart';
 import 'package:preconnect/pages/scan_schedule.dart';
@@ -30,8 +30,7 @@ import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/android_network_assist.dart';
 import 'package:preconnect/tools/cached_image.dart';
 import 'package:preconnect/tools/captive_login_store.dart';
-import 'package:preconnect/tools/captive_portal_detector.dart';
-import 'package:preconnect/tools/captive_portal_http_service.dart';
+import 'package:preconnect/tools/captive_wifi_http_service.dart';
 import 'package:preconnect/tools/home_card_preferences.dart';
 import 'package:preconnect/tools/holiday_status.dart';
 import 'package:preconnect/tools/in_app_review_prompt.dart';
@@ -40,6 +39,15 @@ import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
 import 'package:preconnect/tools/time_utils.dart';
 import 'package:share_plus/share_plus.dart';
+
+enum CaptiveWifiState { offline, validated, captive, unknown }
+
+class CaptiveWifiStatus {
+  const CaptiveWifiStatus({required this.state, required this.httpStatusCode});
+
+  final CaptiveWifiState state;
+  final int? httpStatusCode;
+}
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -294,7 +302,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
   late Future<_HomeData> _future;
   _HomeData? _latestData;
   bool _isRefreshing = false;
-  CaptivePortalStatus? _captiveStatus;
+  CaptiveWifiStatus? _captiveStatus;
   bool _isCheckingCaptive = false;
   StreamSubscription<AndroidNetworkStatus>? _networkStatusSubscription;
   bool _autoOpenedWifiAssistant = false;
@@ -482,10 +490,12 @@ class _HomeDashboardState extends State<_HomeDashboard> {
           return;
         }
       }
-      final fallback = await CaptivePortalDetector.detect();
       if (!mounted) return;
       setState(() {
-        _captiveStatus = fallback;
+        _captiveStatus = const CaptiveWifiStatus(
+          state: CaptiveWifiState.unknown,
+          httpStatusCode: null,
+        );
       });
     } finally {
       _isCheckingCaptive = false;
@@ -494,14 +504,14 @@ class _HomeDashboardState extends State<_HomeDashboard> {
 
   void _applyAndroidNetworkStatus(AndroidNetworkStatus status) {
     if (!mounted) return;
-    final mapped = CaptivePortalStatus(
+    final mapped = CaptiveWifiStatus(
       state: status.captive
-          ? CaptivePortalState.captive
+          ? CaptiveWifiState.captive
           : status.validated
-          ? CaptivePortalState.validated
+          ? CaptiveWifiState.validated
           : status.connected
-          ? CaptivePortalState.unknown
-          : CaptivePortalState.offline,
+          ? CaptiveWifiState.unknown
+          : CaptiveWifiState.offline,
       httpStatusCode: null,
     );
     setState(() {
@@ -518,12 +528,12 @@ class _HomeDashboardState extends State<_HomeDashboard> {
   Future<void> _maybeAutoExtendSession(AndroidNetworkStatus status) async {
     if (!mounted || _isAutoExtendingSession) return;
     if (status.canExtendSession != true) return;
-    final rawPortalUrl = (status.captivePortalUrl ?? '').trim();
-    if (rawPortalUrl.isEmpty) return;
-    final portalUri = Uri.tryParse(rawPortalUrl);
-    if (portalUri == null ||
-        !portalUri.hasAuthority ||
-        (portalUri.scheme != 'http' && portalUri.scheme != 'https')) {
+    final rawCaptiveWifiUrl = (status.captiveWifiUrl ?? '').trim();
+    if (rawCaptiveWifiUrl.isEmpty) return;
+    final captiveWifiUri = Uri.tryParse(rawCaptiveWifiUrl);
+    if (captiveWifiUri == null ||
+        !captiveWifiUri.hasAuthority ||
+        (captiveWifiUri.scheme != 'http' && captiveWifiUri.scheme != 'https')) {
       return;
     }
 
@@ -543,8 +553,8 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     _isAutoExtendingSession = true;
     _lastAutoSessionExtendAt = now;
     try {
-      await CaptivePortalHttpService.instance.requestSessionExtension(
-        portalUri,
+      await CaptiveWifiHttpService.instance.requestSessionExtension(
+        captiveWifiUri,
       );
       if (!mounted) return;
       unawaited(_refreshCaptiveStatus());
@@ -596,7 +606,8 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     try {
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => const CaptivePortalPage(autoOpenPortalOnStart: true),
+          builder: (_) =>
+              const CaptiveWifiPage(autoOpenCaptiveWifiOnStart: true),
         ),
       );
     } finally {
@@ -821,9 +832,9 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                   widget.onNavigate(HomeTab.profile),
                             ),
                             if (_captiveStatus?.state ==
-                                CaptivePortalState.captive) ...[
+                                CaptiveWifiState.captive) ...[
                               const SizedBox(height: 12),
-                              _CaptivePortalBanner(
+                              _CaptiveWifiBanner(
                                 statusCode: _captiveStatus?.httpStatusCode,
                                 onOpenLogin: _openWifiLoginAssistant,
                               ),
@@ -1260,8 +1271,8 @@ class _HomeDashboardState extends State<_HomeDashboard> {
   }
 }
 
-class _CaptivePortalBanner extends StatelessWidget {
-  const _CaptivePortalBanner({required this.onOpenLogin, this.statusCode});
+class _CaptiveWifiBanner extends StatelessWidget {
+  const _CaptiveWifiBanner({required this.onOpenLogin, this.statusCode});
 
   final VoidCallback onOpenLogin;
   final int? statusCode;
@@ -1288,7 +1299,7 @@ class _CaptivePortalBanner extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Captive portal login required',
+                  'Captive Wi-Fi login required',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -1301,8 +1312,8 @@ class _CaptivePortalBanner extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             statusCode == null
-                ? 'Connected to Wi-Fi but internet is behind captive portal.'
-                : 'Connected to Wi-Fi but internet is behind captive portal (probe: HTTP $statusCode).',
+                ? 'Connected to Wi-Fi but internet is behind captive Wi-Fi.'
+                : 'Connected to Wi-Fi but internet is behind captive Wi-Fi (probe: HTTP $statusCode).',
             style: TextStyle(
               fontSize: 12,
               color: BracuPalette.textSecondary(context),
@@ -1314,7 +1325,7 @@ class _CaptivePortalBanner extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: onOpenLogin,
               icon: const Icon(Icons.login_rounded, size: 16),
-              label: const Text('One-Tap Captive Portal'),
+              label: const Text('One-Tap Captive Wi-Fi'),
             ),
           ),
         ],

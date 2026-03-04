@@ -5,19 +5,20 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/android_network_assist.dart';
-import 'package:preconnect/tools/captive_portal_http_service.dart';
+import 'package:preconnect/tools/captive_wifi_http_service.dart';
 import 'package:preconnect/tools/captive_login_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class CaptivePortalPage extends StatefulWidget {
-  const CaptivePortalPage({super.key, this.autoOpenPortalOnStart = false});
+class CaptiveWifiPage extends StatefulWidget {
+  const CaptiveWifiPage({super.key, this.autoOpenCaptiveWifiOnStart = false});
 
-  final bool autoOpenPortalOnStart;
+  final bool autoOpenCaptiveWifiOnStart;
 
   @override
-  State<CaptivePortalPage> createState() => _CaptivePortalPageState();
+  State<CaptiveWifiPage> createState() => _CaptiveWifiPageState();
 }
 
-class _CaptivePortalPageState extends State<CaptivePortalPage> {
+class _CaptiveWifiPageState extends State<CaptiveWifiPage> {
   static const Duration _apiLoginTimeout = Duration(seconds: 18);
   static const Duration _autoSessionCheckInterval = Duration(seconds: 30);
   static const Duration _autoExtendCooldown = Duration(seconds: 60);
@@ -26,7 +27,6 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
   final TextEditingController _ssidController = TextEditingController(
     text: CaptiveLoginStore.defaultCampusSsid,
   );
-  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final GlobalKey<ScaffoldMessengerState> _pageMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
@@ -35,11 +35,12 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
   bool _isCheckingSession = false;
   bool _isAutoExtending = false;
   bool _autoExtendEnabled = true;
-  CaptivePortalApiStatus? _sessionStatus;
+  CaptiveWifiApiStatus? _sessionStatus;
   Timer? _autoSessionTimer;
   Timer? _liveSessionTimer;
   DateTime? _lastAutoExtendAt;
   int? _liveRemainingSeconds;
+  String _studentId = '';
 
   @override
   void initState() {
@@ -51,18 +52,20 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     final autoExtendEnabled = await CaptiveLoginStore.instance
         .readAutoExtendEnabled();
     final creds = await CaptiveLoginStore.instance.read();
+    final prefs = SharedPreferencesAsync();
+    final studentId = (await prefs.getString('studentId') ?? '').trim();
     if (!mounted) return;
-    _autoExtendEnabled = autoExtendEnabled;
-    if (creds != null) {
-      setState(() {
-        _usernameController.text = creds.username;
+    setState(() {
+      _autoExtendEnabled = autoExtendEnabled;
+      _studentId = studentId;
+      if (creds != null) {
         _passwordController.text = creds.password;
-      });
-    }
+      }
+    });
     await _autofillSsidFromSystem();
     _restartAutoSessionMonitor();
     unawaited(_checkPostConnectionEvent());
-    if (widget.autoOpenPortalOnStart) {
+    if (widget.autoOpenCaptiveWifiOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         unawaited(_runOneTapConnect());
@@ -88,7 +91,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
 
   bool _validateRequiredInputs() {
     return _ssidController.text.trim().isNotEmpty &&
-        _usernameController.text.trim().isNotEmpty &&
+        _studentId.isNotEmpty &&
         _passwordController.text.isNotEmpty;
   }
 
@@ -160,7 +163,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
   Future<void> _runOneTapConnect() async {
     if (!mounted || _isConnecting) return;
     if (!_validateRequiredInputs()) {
-      _showLocalSnackBar('Fill SSID, ID/Email and Password.');
+      _showLocalSnackBar('Student ID missing in app cache or password empty.');
       return;
     }
 
@@ -169,13 +172,10 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     });
 
     try {
-      final username = _usernameController.text.trim();
+      final studentId = _studentId.trim();
       final password = _passwordController.text;
 
-      await CaptiveLoginStore.instance.save(
-        username: username,
-        password: password,
-      );
+      await CaptiveLoginStore.instance.save(password: password);
 
       final suggestion = await _registerWifiSuggestion();
       if (!mounted) return;
@@ -184,7 +184,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
       }
 
       final loggedIn = await _loginViaCaptiveApi(
-        username: username,
+        studentId: studentId,
         password: password,
       ).timeout(_apiLoginTimeout, onTimeout: () => false);
       if (!mounted) return;
@@ -213,7 +213,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     if (status == null) {
       if (showSuccessSnackBar) {
         _showLocalSnackBar(
-          'Captive portal session data unavailable on current network.',
+          'Captive Wi-Fi session data unavailable on current network.',
         );
       }
       return;
@@ -241,7 +241,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     } catch (_) {
       if (!mounted) return;
       if (showErrorSnackBar) {
-        _showLocalSnackBar('Unable to read captive portal session status.');
+        _showLocalSnackBar('Unable to read captive Wi-Fi session status.');
       }
     } finally {
       if (mounted) {
@@ -252,9 +252,9 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     }
   }
 
-  CaptivePortalApiStatus? _statusFromNetwork(AndroidNetworkStatus? status) {
+  CaptiveWifiApiStatus? _statusFromNetwork(AndroidNetworkStatus? status) {
     if (status == null) return null;
-    final rawUrl = (status.captivePortalUrl ?? '').trim();
+    final rawUrl = (status.captiveWifiUrl ?? '').trim();
     if (rawUrl.isEmpty) return null;
     final parsedUrl = _validatedHttpUri(rawUrl);
     if (parsedUrl == null) return null;
@@ -266,10 +266,10 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
       final diff = ((expiry - nowMillis) / 1000).floor();
       secondsRemaining = diff < 0 ? 0 : diff;
     }
-    return CaptivePortalApiStatus(
+    return CaptiveWifiApiStatus(
       secondsRemaining: secondsRemaining,
       canExtendSession: status.canExtendSession == true,
-      userPortalUrl: parsedUrl,
+      sessionUrl: parsedUrl,
     );
   }
 
@@ -281,11 +281,11 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     return uri;
   }
 
-  Future<void> _openExtendSession(CaptivePortalApiStatus status) async {
-    if (!status.canExtendSession || status.userPortalUrl == null) return;
+  Future<void> _openExtendSession(CaptiveWifiApiStatus status) async {
+    if (!status.canExtendSession || status.sessionUrl == null) return;
     try {
-      await CaptivePortalHttpService.instance.requestSessionExtension(
-        status.userPortalUrl!,
+      await CaptiveWifiHttpService.instance.requestSessionExtension(
+        status.sessionUrl!,
       );
       if (!mounted) return;
       _showLocalSnackBar('Session extended.');
@@ -350,10 +350,10 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     }
   }
 
-  Future<void> _maybeAutoExtend(CaptivePortalApiStatus status) async {
+  Future<void> _maybeAutoExtend(CaptiveWifiApiStatus status) async {
     if (!_autoExtendEnabled) return;
     if (_isAutoExtending) return;
-    if (!status.canExtendSession || status.userPortalUrl == null) return;
+    if (!status.canExtendSession || status.sessionUrl == null) return;
     final remaining = status.secondsRemaining;
     if (remaining == null) return;
     if (remaining > _autoExtendThresholdSeconds) return;
@@ -367,8 +367,8 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     _isAutoExtending = true;
     _lastAutoExtendAt = now;
     try {
-      await CaptivePortalHttpService.instance.requestSessionExtension(
-        status.userPortalUrl!,
+      await CaptiveWifiHttpService.instance.requestSessionExtension(
+        status.sessionUrl!,
       );
       if (!mounted) return;
       _showLocalSnackBar('Session extended automatically.');
@@ -395,7 +395,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     final expiresIn = _liveRemainingSeconds ?? status?.secondsRemaining;
     final expired = expiresIn != null && expiresIn <= 0;
     final canExtend = status?.canExtendSession == true;
-    final showExtend = canExtend && status?.userPortalUrl != null;
+    final showExtend = canExtend && status?.sessionUrl != null;
     final remainingLabel = expiresIn == null
         ? 'Unknown'
         : expiresIn <= 0
@@ -411,7 +411,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
               const Icon(Icons.timer_outlined, size: 18),
               const SizedBox(width: 8),
               Text(
-                'Portal Session',
+                'Captive Wi-Fi Session',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -435,7 +435,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
           const SizedBox(height: 2),
           Text(
             canExtend
-                ? 'Session can be extended from the portal.'
+                ? 'Session can be extended from Captive Wi-Fi.'
                 : 'Session extension is not available.',
             style: TextStyle(fontSize: 12, color: textSecondary),
           ),
@@ -479,39 +479,35 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
   }
 
   Future<bool> _loginViaCaptiveApi({
-    required String username,
+    required String studentId,
     required String password,
   }) async {
-    final httpService = CaptivePortalHttpService.instance;
-    final portalUrl = await _currentPortalApiUri();
+    final httpService = CaptiveWifiHttpService.instance;
+    final captiveWifiUrl = await _currentCaptiveWifiApiUri();
+    if (captiveWifiUrl == null) {
+      return false;
+    }
     final client = httpService.newClient();
     final cookies = <String, Cookie>{};
 
     try {
-      final first = await httpService.probeWithFallback(
+      final first = await httpService.getWithRedirects(
         client: client,
+        uri: captiveWifiUrl,
         cookies: cookies,
-        portalUrl: portalUrl,
       );
-      if (first == null) {
-        return false;
-      }
       if (first.statusCode == 204) {
         return true;
       }
 
-      final form = _extractLoginForm(
-        html: first.body,
-        pageUri: first.uri,
-        username: username,
-      );
+      final form = _extractLoginForm(html: first.body, pageUri: first.uri);
       if (form == null) {
         return false;
       }
 
       final payload = <String, String>{
         ...form.hiddenFields,
-        form.usernameField: username,
+        form.studentIdField: studentId,
         form.passwordField: password,
       };
 
@@ -534,10 +530,9 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
         );
       }
 
-      return await httpService.isValidatedViaProbeFallback(
+      return await httpService.isValidatedViaProbe(
         client: client,
         cookies: cookies,
-        portalUrl: portalUrl,
       );
     } catch (_) {
       return false;
@@ -546,16 +541,15 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     }
   }
 
-  Future<Uri?> _currentPortalApiUri() async {
+  Future<Uri?> _currentCaptiveWifiApiUri() async {
     if (!AndroidNetworkAssist.isSupported) return null;
     final status = await AndroidNetworkAssist.getNetworkStatus();
-    return _validatedHttpUri(status?.captivePortalUrl?.trim() ?? '');
+    return _validatedHttpUri(status?.captiveWifiUrl?.trim() ?? '');
   }
 
-  _PortalForm? _extractLoginForm({
+  _CaptiveWifiForm? _extractLoginForm({
     required String html,
     required Uri pageUri,
-    required String username,
   }) {
     if (html.trim().isEmpty) return null;
 
@@ -581,8 +575,8 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
         dotAll: true,
       ).allMatches(body).toList();
       String? passwordField;
-      String? usernameField;
-      var usernameScore = -1;
+      String? studentIdField;
+      var studentIdScore = -1;
       final hidden = <String, String>{};
 
       for (final input in inputs) {
@@ -609,38 +603,25 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
         }
 
         var score = 0;
-        final wantsEmail = username.contains('@');
-        final looksEmail =
-            hint.contains('email') || hint.contains('mail') || type == 'email';
         final looksId =
             hint.contains('id') ||
             hint.contains('student') ||
             hint.contains('roll');
-        final looksUser =
-            hint.contains('user') ||
-            hint.contains('username') ||
-            hint.contains('login');
+        if (!looksId) continue;
+        if (hint.contains('student')) score += 60;
+        if (hint.contains('id')) score += 30;
+        if (hint.contains('roll')) score += 20;
 
-        if (wantsEmail) {
-          if (looksEmail) score += 100;
-          if (looksUser) score += 25;
-          if (looksId) score += 10;
-        } else {
-          if (looksId) score += 100;
-          if (looksUser) score += 50;
-          if (looksEmail) score += 10;
-        }
-
-        if (score > usernameScore) {
-          usernameScore = score;
-          usernameField = name;
+        if (score > studentIdScore) {
+          studentIdScore = score;
+          studentIdField = name;
         }
       }
 
-      if (usernameField != null && passwordField != null) {
-        return _PortalForm(
+      if (studentIdField != null && passwordField != null) {
+        return _CaptiveWifiForm(
           action: action,
-          usernameField: usernameField,
+          studentIdField: studentIdField,
           passwordField: passwordField,
           hiddenFields: hidden,
         );
@@ -689,7 +670,7 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
   @override
   Widget build(BuildContext context) {
     return BracuPageScaffold(
-      title: 'Captive Portal',
+      title: 'Captive Wi-Fi',
       subtitle: 'API Based Session',
       icon: Icons.wifi_rounded,
       body: ScaffoldMessenger(
@@ -707,23 +688,21 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
                         children: [
                           TextField(
                             controller: _ssidController,
-                            textInputAction: TextInputAction.next,
+                            readOnly: true,
+                            enableInteractiveSelection: false,
                             decoration: const InputDecoration(
                               labelText: 'SSID',
                               border: OutlineInputBorder(),
                             ),
                           ),
                           const SizedBox(height: 10),
-                          TextField(
-                            controller: _usernameController,
-                            textInputAction: TextInputAction.next,
-                            autofillHints: const <String>[
-                              AutofillHints.username,
-                              AutofillHints.email,
-                            ],
+                          InputDecorator(
                             decoration: const InputDecoration(
-                              labelText: 'ID or Email',
+                              labelText: 'Student ID',
                               border: OutlineInputBorder(),
+                            ),
+                            child: Text(
+                              _studentId.isEmpty ? 'Not available' : _studentId,
                             ),
                           ),
                           const SizedBox(height: 10),
@@ -796,34 +775,33 @@ class _CaptivePortalPageState extends State<CaptivePortalPage> {
     _autoSessionTimer?.cancel();
     _liveSessionTimer?.cancel();
     _ssidController.dispose();
-    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 }
 
-class CaptivePortalApiStatus {
-  const CaptivePortalApiStatus({
+class CaptiveWifiApiStatus {
+  const CaptiveWifiApiStatus({
     required this.secondsRemaining,
     required this.canExtendSession,
-    required this.userPortalUrl,
+    required this.sessionUrl,
   });
 
   final int? secondsRemaining;
   final bool canExtendSession;
-  final Uri? userPortalUrl;
+  final Uri? sessionUrl;
 }
 
-class _PortalForm {
-  const _PortalForm({
+class _CaptiveWifiForm {
+  const _CaptiveWifiForm({
     required this.action,
-    required this.usernameField,
+    required this.studentIdField,
     required this.passwordField,
     required this.hiddenFields,
   });
 
   final Uri action;
-  final String usernameField;
+  final String studentIdField;
   final String passwordField;
   final Map<String, String> hiddenFields;
 }

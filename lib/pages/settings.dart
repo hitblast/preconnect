@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:preconnect/pages/captive_portal.dart';
+import 'package:preconnect/pages/captive_wifi.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/app_lock_service.dart';
 import 'package:preconnect/tools/home_card_preferences.dart';
@@ -151,9 +151,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 borderRadius: BorderRadius.circular(14),
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const CaptivePortalPage(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const CaptiveWifiPage()),
                   );
                 },
                 child: Ink(

@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:preconnect/tools/user_agent.dart';
 
-class CaptivePortalHttpResult {
-  const CaptivePortalHttpResult({
+class CaptiveWifiHttpResult {
+  const CaptiveWifiHttpResult({
     required this.statusCode,
     required this.uri,
     required this.body,
@@ -17,10 +17,10 @@ class CaptivePortalHttpResult {
   final Uri? location;
 }
 
-class CaptivePortalHttpService {
-  CaptivePortalHttpService._();
+class CaptiveWifiHttpService {
+  CaptiveWifiHttpService._();
 
-  static final CaptivePortalHttpService instance = CaptivePortalHttpService._();
+  static final CaptiveWifiHttpService instance = CaptiveWifiHttpService._();
   static final Uri defaultProbeUri = Uri.parse(
     'http://connectivitycheck.gstatic.com/generate_204',
   );
@@ -47,72 +47,25 @@ class CaptivePortalHttpService {
     }
   }
 
-  List<Uri> candidateProbeUris({Uri? portalUrl, Uri? fallbackProbeUri}) {
-    final uris = <Uri>[];
-    if (portalUrl != null) {
-      uris.add(portalUrl);
-    }
-    uris.add(fallbackProbeUri ?? defaultProbeUri);
-    final seen = <String>{};
-    return [
-      for (final uri in uris)
-        if (seen.add(uri.toString())) uri,
-    ];
-  }
-
-  Future<CaptivePortalHttpResult?> probeWithFallback({
+  Future<bool> isValidatedViaProbe({
     required HttpClient client,
     required Map<String, Cookie> cookies,
-    Uri? portalUrl,
-    Uri? fallbackProbeUri,
+    Uri? probeUri,
   }) async {
-    for (final probeUri in candidateProbeUris(
-      portalUrl: portalUrl,
-      fallbackProbeUri: fallbackProbeUri,
-    )) {
-      try {
-        final result = await getWithRedirects(
-          client: client,
-          uri: probeUri,
-          cookies: cookies,
-        );
-        if (result.statusCode > 0) {
-          return result;
-        }
-      } catch (_) {
-        continue;
-      }
+    final target = probeUri ?? defaultProbeUri;
+    try {
+      final result = await getWithRedirects(
+        client: client,
+        uri: target,
+        cookies: cookies,
+      );
+      return result.statusCode == 204;
+    } catch (_) {
+      return false;
     }
-    return null;
   }
 
-  Future<bool> isValidatedViaProbeFallback({
-    required HttpClient client,
-    required Map<String, Cookie> cookies,
-    Uri? portalUrl,
-    Uri? fallbackProbeUri,
-  }) async {
-    for (final probeUri in candidateProbeUris(
-      portalUrl: portalUrl,
-      fallbackProbeUri: fallbackProbeUri,
-    )) {
-      try {
-        final result = await getWithRedirects(
-          client: client,
-          uri: probeUri,
-          cookies: cookies,
-        );
-        if (result.statusCode == 204) {
-          return true;
-        }
-      } catch (_) {
-        continue;
-      }
-    }
-    return false;
-  }
-
-  Future<CaptivePortalHttpResult> getWithRedirects({
+  Future<CaptiveWifiHttpResult> getWithRedirects({
     required HttpClient client,
     required Uri uri,
     required Map<String, Cookie> cookies,
@@ -139,14 +92,14 @@ class CaptivePortalHttpService {
         continue;
       }
 
-      return CaptivePortalHttpResult(
+      return CaptiveWifiHttpResult(
         statusCode: status,
         uri: current,
         body: body,
         location: location == null ? null : Uri.parse(location),
       );
     }
-    return CaptivePortalHttpResult(
+    return CaptiveWifiHttpResult(
       statusCode: 0,
       uri: current,
       body: '',
@@ -154,7 +107,7 @@ class CaptivePortalHttpService {
     );
   }
 
-  Future<CaptivePortalHttpResult> postOnce({
+  Future<CaptiveWifiHttpResult> postOnce({
     required HttpClient client,
     required Uri uri,
     required String body,
@@ -176,7 +129,7 @@ class CaptivePortalHttpService {
     final location = response.headers.value(HttpHeaders.locationHeader);
     final text = await response.transform(utf8.decoder).join();
 
-    return CaptivePortalHttpResult(
+    return CaptiveWifiHttpResult(
       statusCode: response.statusCode,
       uri: uri,
       body: text,
