@@ -66,21 +66,27 @@ assets/              Icons & SVGs
 scripts/             Build & CI helpers
 ```
 
-## Seat Status Proxy (Dev)
+## Seat Status Proxy
 
-Seat Status doesn't calls Connect API directly. It goes through the hosted proxy API:
+The app does not call BRACU Connect seat-status endpoints directly. It uses the hosted proxy API:
 
 - `GET /seat-status`
 - `GET /sections/:sectionId/details`
 - `GET /staff/:initial`
-- `GET /seat-status/stream` (realtime)
+- `GET /seat-status/stream` (real-time trigger)
+
+Current client flow:
+
+- Load full section data from `/sections/details`
+- Cache locally on device
+- Listen to `/seat-status/stream` and refresh details on updates
 
 Why this reduces Connect API calls:
 
-- server-side cache (seat map, details, staff)
-- one shared upstream fetch for all users
-- edge/cache headers for Cloudflare/CDN
-- App reads from proxy instead of repeated direct Connect calls per device
+- Server-side cache for seat, details, and staff data
+- Shared upstream fetches across all users
+- CDN/cache-friendly response headers
+- No repeated per-device direct Connect seat-status polling
 
 ## Documentation & Policies
 
