@@ -74,6 +74,7 @@ The app does not call BRACU Connect seat-status endpoints directly. It uses the 
 - `GET /sections/:sectionId/details`
 - `GET /staff/:initial`
 - `GET /seat-status/stream` (real-time trigger)
+- `GET /course-prerequisites`
 
 Current client flow:
 
