@@ -68,6 +68,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.allow_failure }}
     timeout-minutes: 60
+    env:
+      SEAT_STATUS_PROXY_BASE: ${{ secrets.SEAT_STATUS_PROXY_BASE }}
+      PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER: ${{ secrets.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
+      DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
     strategy:
       fail-fast: false
       matrix:
@@ -175,6 +179,14 @@ jobs:
             exit 1
           fi
 
+      - name: Check Seat Status
+        shell: bash
+        run: |
+          if [ -z "$SEAT_STATUS_PROXY_BASE" ]; then
+            echo "Missing required secret: SEAT_STATUS_PROXY_BASE"
+            exit 1
+          fi
+
       - name: Check Android Signing Secrets
         if: matrix.platform == 'android'
         id: android_signing
@@ -206,16 +218,16 @@ jobs:
 
       - name: Build Android APK (Release)
         if: matrix.platform == 'android' && steps.android_signing.outputs.enabled == 'true'
-        run: flutter build apk --release --build-name ${{ needs.prepare-version.outputs.version_name }} --build-number ${{ needs.prepare-version.outputs.version_code }}
+        run: flutter build apk --release --build-name ${{ needs.prepare-version.outputs.version_name }} --build-number ${{ needs.prepare-version.outputs.version_code }} --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
 
       - name: Build Android AAB (Release)
         if: matrix.platform == 'android' && steps.android_signing.outputs.enabled == 'true'
-        run: flutter build appbundle --release --build-name ${{ needs.prepare-version.outputs.version_name }} --build-number ${{ needs.prepare-version.outputs.version_code }}
+        run: flutter build appbundle --release --build-name ${{ needs.prepare-version.outputs.version_name }} --build-number ${{ needs.prepare-version.outputs.version_code }} --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
 
       - name: Build iOS App (Release, No Codesign)
         if: matrix.platform == 'ios'
         run: |
-          flutter build ios --release --no-codesign
+          flutter build ios --release --no-codesign --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
 
       - name: Build iOS IPA (Release, Signed)
         if: matrix.platform == 'ios'
@@ -243,12 +255,12 @@ jobs:
           security list-keychains -s "$KEYCHAIN_PATH"
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           echo "${{ secrets.IOS_PROFILE_BASE64 }}" | base64 -d > "$HOME/Library/MobileDevice/Provisioning Profiles/profile.mobileprovision"
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
 
       - name: Build macOS App
         if: matrix.platform == 'macos'
         run: |
-          flutter build macos --release
+          flutter build macos --release --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
 
 
       - name: Package Android Release

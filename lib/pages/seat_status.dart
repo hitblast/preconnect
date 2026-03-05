@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
 import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/model/seat_status_info.dart';
@@ -43,13 +45,16 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   String _searchQuery = '';
   bool _cacheLoaded = false;
   bool _isAppForeground = true;
-  bool _isSeatMapRefreshing = false;
-  bool _isDetailsSyncing = false;
+  bool _isDetailsRefreshing = false;
   bool _isResolvingStaffInfo = false;
+  bool _isStreamConnecting = false;
   bool _availableOnly = false;
   String _selectedDayFilter = '';
   final Set<String> _pendingInitials = <String>{};
-  Map<int, int> _latestSeatMap = <int, int>{};
+  http.Client? _streamClient;
+  StreamSubscription<String>? _streamSubscription;
+  Timer? _streamReconnectTimer;
+  Timer? _streamRefreshDebounce;
 
   @override
   void initState() {
@@ -71,6 +76,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 
   @override
   void dispose() {
+    _stopSeatStatusStream();
     WidgetsBinding.instance.removeObserver(this);
     HomeTabRegistry.activeTab.removeListener(_onActiveTabChanged);
     _searchDebounce?.cancel();
@@ -111,7 +117,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     if (!await ensureOnline(context, notify: notify)) {
       return;
     }
-    await _refreshSeatMapFromApi();
+    await _refreshDetailsFromApi();
     if (notify) {
       RefreshBus.instance.notify(reason: 'seat_status');
     }
@@ -123,41 +129,24 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         _isInitialLoading = true;
       });
     }
-    final cachedSeatMapFuture = _service.loadCachedSeatMap(
-      maxAge: const Duration(hours: 1),
-    );
-    Future<Map<int, SeatStatusDetailsResponse>>? cachedDetailsFuture;
     if (!_cacheLoaded) {
-      cachedDetailsFuture = _service.loadCachedDetails(
+      final cached = await _service.loadCachedDetails(
         maxAge: const Duration(hours: 1),
       );
-    }
-    final cachedSeatMap = await cachedSeatMapFuture;
-
-    if (cachedSeatMap.isNotEmpty && mounted) {
-      _latestSeatMap = Map<int, int>.from(cachedSeatMap);
-      final cachedCards = _buildCardsFromSeatMap(cachedSeatMap);
-      _applyCardsSnapshot(cachedCards, isInitialLoading: false);
-    }
-    if (cachedDetailsFuture != null) {
-      final cached = await cachedDetailsFuture;
       if (cached.isNotEmpty) {
         _detailsCache
           ..clear()
           ..addAll(cached);
         await _loadCachedStaffInfoForDetails(cached.values);
         _queueStaffInfoResolve(cached.values);
-        if (_latestSeatMap.isNotEmpty) {
-          final refreshed = _buildCardsFromSeatMap(_latestSeatMap);
-          _sortCardsByCourseAndSection(refreshed);
-          _applyCardsSnapshot(refreshed, isInitialLoading: false);
-        }
+        final cachedCards = _buildCardsFromDetailsMap(cached);
+        _sortCardsByCourseAndSection(cachedCards);
+        _applyCardsSnapshot(cachedCards, isInitialLoading: false);
       }
       _cacheLoaded = true;
     }
 
-    await _refreshSeatMapFromApi();
-    unawaited(_syncMissingDetails(chunkSize: 64, concurrency: 12));
+    await _refreshDetailsFromApi();
     if (!mounted) return;
     if (_isInitialLoading) {
       setState(() {
@@ -166,84 +155,33 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     }
   }
 
-  List<_SeatStatusCardData> _buildCardsFromSeatMap(Map<int, int> seatMap) {
-    final sectionIds = _visibleSectionIds(seatMap).toList()
+  List<_SeatStatusCardData> _buildCardsFromDetailsMap(
+    Map<int, SeatStatusDetailsResponse> detailsMap,
+  ) {
+    final sectionIds = _visibleSectionIdsFromDetails(detailsMap).toList()
       ..sort((a, b) => _compareSectionIdsByNaming(a, b));
     return sectionIds.map((sectionId) {
-      final cached = _detailsCache[sectionId];
+      final cached = detailsMap[sectionId];
       if (cached == null) {
         return _buildFallbackCard(
           sectionId: sectionId,
-          remaining: seatMap[sectionId] ?? 0,
+          remaining: 0,
         );
       }
-      return _buildCardFromDetails(
-        sectionId: sectionId,
-        details: cached,
-        remaining: seatMap[sectionId],
-      );
+      return _buildCardFromDetails(sectionId: sectionId, details: cached);
     }).toList();
   }
 
-  Future<void> _applySeatMapUpdate(Map<int, int> seatMap) async {
-    if (!mounted || seatMap.isEmpty) return;
-    _latestSeatMap = Map<int, int>.from(seatMap);
-
-    final nextIds = _visibleSectionIds(seatMap);
-    final detailsForVisible = nextIds
-        .map((id) => _detailsCache[id])
-        .whereType<SeatStatusDetailsResponse>()
-        .toList();
-    _queueStaffInfoResolve(detailsForVisible);
-    final existingIds = _cards.map((c) => c.sectionId).toSet();
-
-    final updated = _cards.where((c) => nextIds.contains(c.sectionId)).map((c) {
-      final seatMapValue = seatMap[c.sectionId];
-      final details = _detailsCache[c.sectionId];
-      if (details != null) {
-        return _buildCardFromDetails(
-          sectionId: c.sectionId,
-          details: details,
-          remaining: seatMapValue,
-        );
-      }
-      final detailsConsumed =
-          _detailsCache[c.sectionId]?.section.consumedSeat ?? c.consumed;
-      final remaining = seatMapValue == null
-          ? c.remaining
-          : _resolveRemainingFromSeatMap(
-              total: c.total,
-              seatMapValue: seatMapValue,
-              detailsConsumed: detailsConsumed,
-            );
-      final consumed = c.total > 0
-          ? (c.total - remaining).clamp(0, c.total)
-          : c.consumed;
-      return c.copyWith(remaining: remaining, consumed: consumed);
-    }).toList();
-
-    final addedIds = nextIds.difference(existingIds).toList()
-      ..sort((a, b) => _compareSectionIdsByNaming(a, b));
-    for (final sectionId in addedIds) {
-      final cached = _detailsCache[sectionId];
-      if (cached == null) {
-        updated.add(
-          _buildFallbackCard(
-            sectionId: sectionId,
-            remaining: seatMap[sectionId] ?? 0,
-          ),
-        );
-        continue;
-      }
-      updated.add(
-        _buildCardFromDetails(
-          sectionId: sectionId,
-          details: cached,
-          remaining: seatMap[sectionId],
-        ),
-      );
-    }
-
+  Future<void> _applyDetailsUpdate(
+    Map<int, SeatStatusDetailsResponse> detailsMap,
+  ) async {
+    if (!mounted || detailsMap.isEmpty) return;
+    _detailsCache
+      ..clear()
+      ..addAll(detailsMap);
+    await _loadCachedStaffInfoForDetails(detailsMap.values);
+    _queueStaffInfoResolve(detailsMap.values);
+    final updated = _buildCardsFromDetailsMap(detailsMap);
     _sortCardsByCourseAndSection(updated);
     if (_areCardListsDifferent(_cards, updated)) {
       _applyCardsSnapshot(updated, isInitialLoading: false);
@@ -278,38 +216,32 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       finalExamDate: null,
       finalExamStartTime: null,
       finalExamEndTime: null,
-      remaining: 0,
+      remaining: remaining,
       consumed: 0,
       total: 0,
       searchToken: 'sec$sectionId loading tba $remaining',
     );
   }
 
-  Set<int> _visibleSectionIds(Map<int, int> seatMap) {
+  Set<int> _visibleSectionIdsFromDetails(
+    Map<int, SeatStatusDetailsResponse> detailsMap,
+  ) {
     final childIds = <int>{};
-    for (final details in _detailsCache.values) {
+    for (final details in detailsMap.values) {
       final childId = details.childSection?.sectionId ?? 0;
       if (childId > 0) childIds.add(childId);
     }
-    return seatMap.keys.where((id) => !childIds.contains(id)).toSet();
+    return detailsMap.keys.where((id) => !childIds.contains(id)).toSet();
   }
 
   _SeatStatusCardData _buildCardFromDetails({
     required int sectionId,
     required SeatStatusDetailsResponse details,
-    required int? remaining,
   }) {
     final main = details.section;
     final lab = details.childSection;
     final total = main.capacity;
-    final fallbackRemaining = (total - main.consumedSeat).clamp(0, total);
-    final resolvedRemaining = remaining == null
-        ? fallbackRemaining
-        : _resolveRemainingFromSeatMap(
-            total: total,
-            seatMapValue: remaining,
-            detailsConsumed: main.consumedSeat,
-          );
+    final resolvedRemaining = (total - main.consumedSeat).clamp(0, total);
     final resolvedConsumed = (total - resolvedRemaining).clamp(0, total);
     return _SeatStatusCardData(
       sectionId: sectionId,
@@ -362,22 +294,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         remaining: resolvedRemaining,
       ),
     );
-  }
-
-  int _resolveRemainingFromSeatMap({
-    required int total,
-    required int seatMapValue,
-    required int detailsConsumed,
-  }) {
-    if (total <= 0) return 0;
-    final normalized = seatMapValue.clamp(0, total);
-    final asRemaining = normalized;
-    final asConsumed = (total - normalized).clamp(0, total);
-    final fallbackRemaining = (total - detailsConsumed).clamp(0, total);
-    final remainingDiff = (asRemaining - fallbackRemaining).abs();
-    final consumedDiff = (asConsumed - fallbackRemaining).abs();
-    if (consumedDiff < remainingDiff) return asConsumed;
-    return asRemaining;
   }
 
   String _buildSearchToken({
@@ -798,25 +714,25 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   }
 
   void _updatePollingStrategy() {
-    if (!_isAppForeground) return;
-    if (HomeTabRegistry.activeTab.value != HomeTab.seatStatus) return;
-    unawaited(_refreshSeatMapFromApi());
-    unawaited(_syncMissingDetails(chunkSize: 48, concurrency: 10));
+    final shouldRun =
+        _isAppForeground && HomeTabRegistry.activeTab.value == HomeTab.seatStatus;
+    if (!shouldRun) {
+      _stopSeatStatusStream();
+      return;
+    }
+    _startSeatStatusStream();
+    if (_cards.isEmpty) {
+      unawaited(_refreshDetailsFromApi());
+    }
   }
 
-  Future<void> _refreshSeatMapFromApi() async {
-    if (_isSeatMapRefreshing) return;
-    _isSeatMapRefreshing = true;
+  Future<void> _refreshDetailsFromApi() async {
+    if (_isDetailsRefreshing) return;
+    _isDetailsRefreshing = true;
     try {
-      final previousMap = Map<int, int>.from(_latestSeatMap);
-      final seatMap = await _service.fetchSeatMapFromApi();
-      if (seatMap.isNotEmpty) {
-        final changedIds = _changedSectionIds(previousMap, seatMap);
-        await _applySeatMapUpdate(seatMap);
-        if (previousMap.isNotEmpty && changedIds.isNotEmpty) {
-          await _refreshChangedDetails(changedIds, concurrency: 8);
-        }
-        unawaited(_syncMissingDetails(chunkSize: 48, concurrency: 10));
+      final details = await _service.fetchAllSectionsDetailsFromApi();
+      if (details.isNotEmpty) {
+        await _applyDetailsUpdate(details);
       }
     } catch (_) {
       if (_isInitialLoading && mounted) {
@@ -825,72 +741,87 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         });
       }
     } finally {
-      _isSeatMapRefreshing = false;
+      _isDetailsRefreshing = false;
     }
   }
 
-  Future<void> _syncMissingDetails({
-    int chunkSize = 10,
-    int concurrency = 4,
-  }) async {
-    if (_isDetailsSyncing) return;
-    if (_latestSeatMap.isEmpty) return;
-    _isDetailsSyncing = true;
-    try {
-      final takeCount = math.max(1, chunkSize);
-      while (true) {
-        final missing =
-            _latestSeatMap.keys
-                .where((id) => !_detailsCache.containsKey(id))
-                .toList()
-              ..sort((a, b) => a.compareTo(b));
-        if (missing.isEmpty) return;
+  void _startSeatStatusStream() {
+    if (_streamSubscription != null || _isStreamConnecting) return;
+    unawaited(_connectSeatStatusStream());
+  }
 
-        final picked = missing.take(takeCount).toList();
-        final fetched = await _service.fetchDetailsForSectionIdsFromApi(
-          picked,
-          concurrency: concurrency,
-        );
-        if (fetched.isEmpty) return;
-        _detailsCache.addAll(fetched);
-        await _loadCachedStaffInfoForDetails(fetched.values);
-        _queueStaffInfoResolve(fetched.values);
-        await _applySeatMapUpdate(_latestSeatMap);
+  void _stopSeatStatusStream() {
+    _streamReconnectTimer?.cancel();
+    _streamReconnectTimer = null;
+    _streamRefreshDebounce?.cancel();
+    _streamRefreshDebounce = null;
+    unawaited(_streamSubscription?.cancel());
+    _streamSubscription = null;
+    _streamClient?.close();
+    _streamClient = null;
+    _isStreamConnecting = false;
+  }
+
+  Future<void> _connectSeatStatusStream() async {
+    if (!_isAppForeground || HomeTabRegistry.activeTab.value != HomeTab.seatStatus) {
+      return;
+    }
+    if (_streamSubscription != null || _isStreamConnecting) return;
+    _isStreamConnecting = true;
+    _streamClient?.close();
+    _streamClient = http.Client();
+    try {
+      final request = http.Request(
+        'GET',
+        Uri.parse(_service.seatStatusStreamUrl),
+      )..headers['Accept'] = 'text/event-stream';
+      final response = await _streamClient!
+          .send(request)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) {
+        throw StateError('SSE returned ${response.statusCode}');
       }
+      _streamSubscription = response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(
+            _onStreamLine,
+            onError: (_) => _scheduleStreamReconnect(),
+            onDone: _scheduleStreamReconnect,
+            cancelOnError: true,
+          );
     } catch (_) {
+      _scheduleStreamReconnect();
     } finally {
-      _isDetailsSyncing = false;
+      _isStreamConnecting = false;
     }
   }
 
-  Set<int> _changedSectionIds(Map<int, int> before, Map<int, int> after) {
-    final changed = <int>{};
-    for (final id in after.keys) {
-      final prev = before[id];
-      final next = after[id];
-      if (prev == null || prev != next) {
-        changed.add(id);
-      }
+  void _onStreamLine(String line) {
+    if (!line.startsWith('data:')) return;
+    if (!_isAppForeground || HomeTabRegistry.activeTab.value != HomeTab.seatStatus) {
+      return;
     }
-    return changed;
+    _streamRefreshDebounce?.cancel();
+    _streamRefreshDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (!mounted) return;
+      unawaited(_refreshDetailsFromApi());
+    });
   }
 
-  Future<void> _refreshChangedDetails(
-    Set<int> sectionIds, {
-    int concurrency = 8,
-  }) async {
-    if (sectionIds.isEmpty) return;
-    try {
-      final refreshed = await _service.fetchDetailsForSectionIdsFromApi(
-        sectionIds.toList(),
-        concurrency: concurrency,
-      );
-      if (refreshed.isEmpty) return;
-      _detailsCache.addAll(refreshed);
-      await _loadCachedStaffInfoForDetails(refreshed.values);
-      _queueStaffInfoResolve(refreshed.values);
-      await _applySeatMapUpdate(_latestSeatMap);
-    } catch (_) {}
+  void _scheduleStreamReconnect() {
+    unawaited(_streamSubscription?.cancel());
+    _streamSubscription = null;
+    _streamClient?.close();
+    _streamClient = null;
+    _streamReconnectTimer?.cancel();
+    final shouldRun =
+        _isAppForeground && HomeTabRegistry.activeTab.value == HomeTab.seatStatus;
+    if (!shouldRun) return;
+    _streamReconnectTimer = Timer(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      _startSeatStatusStream();
+    });
   }
 
   void _queueStaffInfoResolve(
@@ -936,8 +867,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         final batch = _pendingInitials.take(20).toList();
         _pendingInitials.removeAll(batch);
         final changed = await _resolveStaffInfoForInitials(batch.toSet());
-        if (changed && mounted && _latestSeatMap.isNotEmpty) {
-          final refreshed = _buildCardsFromSeatMap(_latestSeatMap);
+        if (changed && mounted && _detailsCache.isNotEmpty) {
+          final refreshed = _buildCardsFromDetailsMap(_detailsCache);
           _sortCardsByCourseAndSection(refreshed);
           _applyCardsSnapshot(refreshed, isInitialLoading: false);
         }
