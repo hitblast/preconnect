@@ -66,6 +66,26 @@ assets/              Icons & SVGs
 scripts/             Build & CI helpers
 ```
 
+## Seat Status Proxy (Dev)
+
+Seat Status doesn't calls Connect API directly. It goes through the hosted proxy API:
+
+- `GET /api/v1/seat-status`
+- `GET /api/v1/sections/:sectionId/details`
+- `GET /api/v1/staff/:initial`
+- `GET /api/v1/seat-status/stream` (realtime)
+
+Why this reduces Connect API calls:
+
+- server-side cache (seat map, details, staff)
+- one shared upstream fetch for all users
+- edge/cache headers for Cloudflare/CDN
+- App reads from proxy instead of repeated direct Connect calls per device
+
+Seat-status base URL:
+
+- `http://34.144.247.162`
+
 ## Documentation & Policies
 
 - Code of Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)

@@ -13,13 +13,7 @@ class ApiConfig {
 
   static const String connectApiBase = 'https://connect.bracu.ac.bd/api';
   static const String cdnBase = 'https://connect.bracu.ac.bd/cdn';
-  static const String seatStatusProxyBaseEnv = String.fromEnvironment(
-    'SEAT_STATUS_PROXY_BASE',
-  );
-  static const String seatStatusProxyApiKey = String.fromEnvironment(
-    'SEAT_STATUS_PROXY_API_KEY',
-  );
-  static String get seatStatusProxyBase => seatStatusProxyBaseEnv.trim();
+  static const String seatStatusProxyBase = 'http://34.144.247.162';
 
   static const String clientId = 'slm';
   static const String redirectUri = 'https://connect.bracu.ac.bd/';

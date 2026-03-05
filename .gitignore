@@ -36,6 +36,7 @@ public/*
 .wrangler/
 
 # Web related
+/web/server/
 
 # Symbolication related
 app.*.symbols

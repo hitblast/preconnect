@@ -27,9 +27,7 @@ class SeatStatusService {
   String get _proxyBase {
     final base = ApiConfig.seatStatusProxyBase.trim();
     if (base.isEmpty) {
-      throw StateError(
-        'Missing SEAT_STATUS_PROXY_BASE dart-define for seat-status APIs',
-      );
+      throw StateError('Missing Seat Status proxy base URL');
     }
     return base;
   }
@@ -44,12 +42,6 @@ class SeatStatusService {
 
   String _staffByInitialUrl(String initial) {
     return '$_proxyBase/api/v1/staff/${Uri.encodeComponent(initial)}';
-  }
-
-  Map<String, String> get _proxyHeaders {
-    final apiKey = ApiConfig.seatStatusProxyApiKey.trim();
-    if (apiKey.isEmpty) return const <String, String>{};
-    return <String, String>{'x-api-key': apiKey};
   }
 
   static const String _dbName = 'seat_status_cache.db';
@@ -197,7 +189,6 @@ class SeatStatusService {
     final url = _seatMapUrl;
     final response = await _client.publicGet(
       url,
-      headers: _proxyHeaders,
       acceptedStatusCodes: const <int>{200},
     );
     final raw = jsonDecode(response.body);
@@ -234,7 +225,6 @@ class SeatStatusService {
           try {
             final response = await _client.publicGet(
               url,
-              headers: _proxyHeaders,
               acceptedStatusCodes: const <int>{200},
             );
             final raw = jsonDecode(response.body);
@@ -482,7 +472,6 @@ class SeatStatusService {
     try {
       final response = await _client.publicGet(
         url,
-        headers: _proxyHeaders,
         acceptedStatusCodes: const <int>{200, 404},
       );
       if (response.statusCode != 200) return null;
