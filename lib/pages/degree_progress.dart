@@ -955,7 +955,7 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
       return compareNaturalText(a.course.code, b.course.code);
     });
 
-    return wishlist.take(8).toList();
+    return wishlist;
   }
 
   bool _isPrerequisiteSatisfied(String raw, Set<String> readyCodes) {
