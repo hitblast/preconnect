@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/shared_widgets/section_badge.dart';
@@ -23,6 +24,8 @@ class ClassSchedule extends StatefulWidget {
 }
 
 class _ClassScheduleState extends State<ClassSchedule> {
+  static const int _initialVisibleWeekCount = 1;
+
   late Future<_ScheduleData> _future;
   final ScrollController _scrollController = ScrollController();
   List<int> _semesterSessionOptions = const <int>[];
@@ -31,6 +34,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
   String? _lastHighlightToken;
   bool _didScroll = false;
   bool _scrollRetry = false;
+  int _visibleWeekCount = _initialVisibleWeekCount;
 
   @override
   void initState() {
@@ -61,7 +65,9 @@ class _ClassScheduleState extends State<ClassSchedule> {
     _didScroll = false;
     _scrollRetry = false;
     if (mounted) {
-      setState(() {});
+      setState(() {
+        _visibleWeekCount = _initialVisibleWeekCount;
+      });
     }
   }
 
@@ -237,6 +243,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
       _selectedSemesterSessionId = sessionId;
       _didScroll = false;
       _scrollRetry = false;
+      _visibleWeekCount = _initialVisibleWeekCount;
       _future = _loadSchedule(forceRefresh: true);
     });
     await _future;
@@ -329,6 +336,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
     setState(() {
       _didScroll = false;
       _scrollRetry = false;
+      _visibleWeekCount = _initialVisibleWeekCount;
       _future = _loadSchedule(forceRefresh: true);
     });
     await _future;
@@ -387,6 +395,20 @@ class _ClassScheduleState extends State<ClassSchedule> {
     return DateTime(date.year, date.month, date.day, startHour, startMinute);
   }
 
+  DateTime? _dateForWeekday(String day, {int weekOffset = 0}) {
+    final targetWeekday = BracuTime.weekdayFromName(day);
+    if (targetWeekday == null) return null;
+    final now = DateTime.now();
+    final startOfWeek = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
+    return startOfWeek.add(
+      Duration(days: (weekOffset * 7) + targetWeekday - 1),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return BracuPageScaffold(
@@ -435,19 +457,61 @@ class _ClassScheduleState extends State<ClassSchedule> {
             "FRIDAY",
           ];
           days = days.where((day) => keys.contains(day)).toList();
+          final sections = <_RenderedScheduleSection>[];
+          if (shouldHighlightCurrentSemester) {
+            for (
+              var weekOffset = 0;
+              weekOffset < _visibleWeekCount;
+              weekOffset++
+            ) {
+              for (final day in days) {
+                sections.add(
+                  _RenderedScheduleSection(day: day, weekOffset: weekOffset),
+                );
+              }
+            }
+          } else {
+            for (final day in days) {
+              sections.add(_RenderedScheduleSection(day: day, weekOffset: 0));
+            }
+          }
 
           final children = <Widget>[];
           String? highlightToken;
           _highlightKey = null;
-          for (var i = 0; i < days.length; i++) {
-            final day = days[i];
+          for (var i = 0; i < sections.length; i++) {
+            final sectionInfo = sections[i];
+            final day = sectionInfo.day;
             final schedules = grouped[day]!;
+            final dayDate = shouldHighlightCurrentSemester
+                ? _dateForWeekday(day, weekOffset: sectionInfo.weekOffset)
+                : null;
+            final dayDateLabel = dayDate == null
+                ? ''
+                : DateFormat('dd MMMM yyyy').format(dayDate);
 
             children.add(
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  BracuSectionTitle(title: formatWeekdayTitle(day)),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: BracuSectionTitle(
+                          title: formatWeekdayTitle(day),
+                        ),
+                      ),
+                      if (dayDateLabel.isNotEmpty)
+                        Text(
+                          dayDateLabel,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: BracuPalette.textPrimary(context),
+                          ),
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 10),
                   ...schedules.map((entry) {
                     final s = entry["schedule"] as section.ClassSchedule;
@@ -474,10 +538,12 @@ class _ClassScheduleState extends State<ClassSchedule> {
                     );
 
                     final isHighlighted =
-                        shouldHighlightCurrentSemester && nextSchedule == s;
+                        shouldHighlightCurrentSemester &&
+                        sectionInfo.weekOffset == 0 &&
+                        nextSchedule == s;
                     if (isHighlighted) {
                       highlightToken =
-                          '${day}_${s.startTime}_${s.endTime}_$code';
+                          '${sectionInfo.weekOffset}_${day}_${s.startTime}_${s.endTime}_$code';
                       _highlightKey ??= GlobalKey();
                     }
                     return Padding(
@@ -609,6 +675,24 @@ class _ClassScheduleState extends State<ClassSchedule> {
               ),
             );
           }
+
+          if (shouldHighlightCurrentSemester) {
+            children.add(
+              Padding(
+                padding: const EdgeInsets.only(top: 2, bottom: 8),
+                child: Center(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        _visibleWeekCount += 1;
+                      });
+                    },
+                    child: const Text('Next week'),
+                  ),
+                ),
+              ),
+            );
+          }
           children.add(const SizedBox(height: 8));
 
           if (highlightToken != null && highlightToken != _lastHighlightToken) {
@@ -641,4 +725,11 @@ class _ScheduleData {
   final Map<String, List<Map<String, dynamic>>> grouped;
   final section.ClassSchedule? nextSchedule;
   final bool isRamadan;
+}
+
+class _RenderedScheduleSection {
+  const _RenderedScheduleSection({required this.day, required this.weekOffset});
+
+  final String day;
+  final int weekOffset;
 }
