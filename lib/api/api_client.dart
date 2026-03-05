@@ -109,6 +109,22 @@ class ApiClient {
     throw ApiException(response.statusCode, response.body);
   }
 
+  Future<http.Response> publicGet(
+    String url, {
+    Map<String, String> headers = const <String, String>{},
+    Set<int> acceptedStatusCodes = const <int>{200},
+  }) async {
+    final mergedHeaders = <String, String>{
+      'Accept': 'application/json',
+      ...headers,
+    };
+    final response = await http
+        .get(Uri.parse(url), headers: mergedHeaders)
+        .timeout(_requestTimeout);
+    if (acceptedStatusCodes.contains(response.statusCode)) return response;
+    throw ApiException(response.statusCode, response.body);
+  }
+
   Future<http.Response> authenticatedGetWithEtag(
     String url, {
     String? etag,

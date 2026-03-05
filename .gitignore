@@ -22,6 +22,7 @@ android/key.properties
 .vscode/
 
 # Flutter/Dart/Pub related
+**/node_modules/
 **/doc/api/
 .dart_tool/
 .flutter-plugins

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/api_config.dart';
-import 'package:preconnect/api/http_cache_utils.dart';
 import 'package:preconnect/model/seat_status_info.dart';
 import 'package:sembast/sembast_io.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,10 +24,37 @@ class SeatStatusService {
   final Map<String, Future<SeatStatusStaffInfo?>> _staffInfoInFlight =
       <String, Future<SeatStatusStaffInfo?>>{};
 
+  String get _proxyBase {
+    final base = ApiConfig.seatStatusProxyBase.trim();
+    if (base.isEmpty) {
+      throw StateError(
+        'Missing SEAT_STATUS_PROXY_BASE dart-define for seat-status APIs',
+      );
+    }
+    return base;
+  }
+
+  String get _seatMapUrl {
+    return '$_proxyBase/api/v1/seat-status';
+  }
+
+  String _sectionDetailsUrl(int sectionId) {
+    return '$_proxyBase/api/v1/sections/$sectionId/details';
+  }
+
+  String _staffByInitialUrl(String initial) {
+    return '$_proxyBase/api/v1/staff/${Uri.encodeComponent(initial)}';
+  }
+
+  Map<String, String> get _proxyHeaders {
+    final apiKey = ApiConfig.seatStatusProxyApiKey.trim();
+    if (apiKey.isEmpty) return const <String, String>{};
+    return <String, String>{'x-api-key': apiKey};
+  }
+
   static const String _dbName = 'seat_status_cache.db';
   static const String _detailsTsKey = 'details_ts';
   static const String _seatMapTsKey = 'seat_map_ts';
-  static const String _seatMapEtagKey = 'seat_map_etag';
   static const String _detailsEtagPrefix = 'details_etag_';
   static const String _legacyCleanupDoneKey = 'seat_status_sp_cleanup_done_v1';
   static const List<String> _legacySharedPrefsKeys = <String>[
@@ -168,18 +194,17 @@ class SeatStatusService {
   }
 
   Future<Map<int, int>> fetchSeatMapFromApi() async {
-    const path = '/adv/v1/advising/sections/seat-status';
-    final url = '${ApiConfig.connectApiBase}$path';
-    final db = await _openDb();
-    final etag = await _metaStore.record(_seatMapEtagKey).get(db) as String?;
-    final response = await _client.authenticatedGetWithEtag(url, etag: etag);
-    if (response.statusCode == 304) {
-      return Map<int, int>.from(await _getSeatMapSnapshot(db));
-    }
+    final url = _seatMapUrl;
+    final response = await _client.publicGet(
+      url,
+      headers: _proxyHeaders,
+      acceptedStatusCodes: const <int>{200},
+    );
     final raw = jsonDecode(response.body);
-    if (raw is! Map) return const <int, int>{};
+    final sourceMap = _decodeSeatMapPayload(raw);
+    if (sourceMap.isEmpty) return const <int, int>{};
     final map = <int, int>{};
-    for (final entry in raw.entries) {
+    for (final entry in sourceMap.entries) {
       final sectionId = int.tryParse('${entry.key}');
       final remaining = int.tryParse('${entry.value}');
       if (sectionId == null || remaining == null) continue;
@@ -187,10 +212,6 @@ class SeatStatusService {
     }
     if (map.isEmpty) return const <int, int>{};
     final saved = await replaceSeatMapSnapshotAndSave(map);
-    final nextEtag = extractEtagFromResponse(response);
-    if (nextEtag != null) {
-      await _metaStore.record(_seatMapEtagKey).put(db, nextEtag);
-    }
     return saved;
   }
 
@@ -201,8 +222,6 @@ class SeatStatusService {
     if (sectionIds.isEmpty) return const <int, SeatStatusDetailsResponse>{};
     final uniqueIds = sectionIds.toSet().toList()..sort((a, b) => a - b);
     final result = <int, SeatStatusDetailsResponse>{};
-    final db = await _openDb();
-    final nextEtags = <int, String>{};
     var index = 0;
     while (index < uniqueIds.length) {
       final end = (index + concurrency > uniqueIds.length)
@@ -211,38 +230,16 @@ class SeatStatusService {
       final batch = uniqueIds.sublist(index, end);
       await Future.wait(
         batch.map((sectionId) async {
-          final url =
-              '${ApiConfig.connectApiBase}/adv/v1/advising/sections/$sectionId/details';
+          final url = _sectionDetailsUrl(sectionId);
           try {
-            final etagKey = '$_detailsEtagPrefix$sectionId';
-            final etag = await _metaStore.record(etagKey).get(db) as String?;
-            final response = await _client.authenticatedGetWithEtag(
+            final response = await _client.publicGet(
               url,
-              etag: etag,
+              headers: _proxyHeaders,
+              acceptedStatusCodes: const <int>{200},
             );
-            if (response.statusCode == 304) {
-              final cached = await _loadCachedDetailsBySectionId(db, sectionId);
-              if (cached != null) {
-                result[sectionId] = cached;
-                return;
-              }
-              final retry = await _client.authenticatedGet(url);
-              final retryRaw = jsonDecode(retry.body);
-              if (retryRaw is! Map<String, dynamic>) return;
-              result[sectionId] = SeatStatusDetailsResponse.fromJson(retryRaw);
-              final retryEtag = extractEtagFromResponse(retry);
-              if (retryEtag != null) {
-                nextEtags[sectionId] = retryEtag;
-              }
-              return;
-            }
             final raw = jsonDecode(response.body);
             if (raw is! Map<String, dynamic>) return;
             result[sectionId] = SeatStatusDetailsResponse.fromJson(raw);
-            final nextEtag = extractEtagFromResponse(response);
-            if (nextEtag != null) {
-              nextEtags[sectionId] = nextEtag;
-            }
           } catch (_) {}
         }),
       );
@@ -250,9 +247,6 @@ class SeatStatusService {
     }
     if (result.isNotEmpty) {
       await saveDetailsCache(result);
-    }
-    if (nextEtags.isNotEmpty) {
-      await _saveDetailsEtags(nextEtags);
     }
     return result;
   }
@@ -417,39 +411,6 @@ class SeatStatusService {
     return existing;
   }
 
-  Future<SeatStatusDetailsResponse?> _loadCachedDetailsBySectionId(
-    Database db,
-    int sectionId,
-  ) async {
-    try {
-      final snapshot = _detailsSnapshot;
-      if (snapshot != null && snapshot.containsKey(sectionId)) {
-        return snapshot[sectionId];
-      }
-      final raw = await _detailsStore.record(sectionId).get(db);
-      if (raw is! Map) return null;
-      return SeatStatusDetailsResponse.fromJson(raw.cast<String, dynamic>());
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<void> _saveDetailsEtags(Map<int, String> etags) async {
-    if (etags.isEmpty) return;
-    try {
-      final db = await _openDb();
-      await db.transaction((txn) async {
-        for (final entry in etags.entries) {
-          final value = entry.value.trim();
-          if (value.isEmpty) continue;
-          await _metaStore
-              .record('$_detailsEtagPrefix${entry.key}')
-              .put(txn, value);
-        }
-      });
-    } catch (_) {}
-  }
-
   Future<Map<String, SeatStatusStaffInfo>> resolveStaffInfoByInitials(
     Iterable<String> initials, {
     int concurrency = 6,
@@ -500,7 +461,7 @@ class SeatStatusService {
     final existing = _staffInfoInFlight[key];
     if (existing != null) return existing;
 
-    final future = _findStaffInfoFromApis(key);
+    final future = _fetchStaffInfoByInitialFromProxy(key);
     _staffInfoInFlight[key] = future;
     try {
       final info = await future;
@@ -514,97 +475,20 @@ class SeatStatusService {
     }
   }
 
-  Future<SeatStatusStaffInfo?> _findStaffInfoFromApis(String initial) async {
-    final match = await _autocompleteStaffByInitial(initial);
-    if (match == null || match.staffId <= 0) return null;
-    final fromStaff = await _fetchStaffInfo(
-      match.staffId,
-      fallbackInitial: initial,
-      fallbackName: match.displayName,
-    );
-    if (fromStaff != null) return fromStaff;
-    return SeatStatusStaffInfo(
-      staffId: match.staffId,
-      shortName: initial,
-      staffName: match.displayName ?? '',
-      email: '',
-      departmentId: null,
-      designationId: null,
-    );
-  }
-
-  Future<_AutocompleteStaffMatch?> _autocompleteStaffByInitial(
+  Future<SeatStatusStaffInfo?> _fetchStaffInfoByInitialFromProxy(
     String initial,
   ) async {
-    final q = Uri.encodeQueryComponent(initial.toLowerCase());
-    final url =
-        '${ApiConfig.connectApiBase}/data/autocomplete?q=$q&page=1&field_name=staffId&type=staff';
+    final url = _staffByInitialUrl(initial);
     try {
-      final response = await _client.authenticatedGet(
+      final response = await _client.publicGet(
         url,
-        additionalHeaders: const <String, String>{'X-SOURCE': '3'},
-        acceptedStatusCodes: const <int>{200, 404},
-      );
-      if (response.statusCode != 200) return null;
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) return null;
-      final results = decoded['results'];
-      if (results is! List) return null;
-
-      _AutocompleteStaffMatch? fallback;
-      for (final row in results.whereType<Map>()) {
-        final map = row.cast<dynamic, dynamic>();
-        final idRaw = '${map['id'] ?? ''}'.trim();
-        final textRaw = '${map['text'] ?? ''}'.trim();
-        final id = int.tryParse(idRaw);
-        if (id == null) continue;
-        final displayName = textRaw.contains(' - ')
-            ? textRaw.split(' - ').skip(1).join(' - ').trim()
-            : '';
-        fallback ??= _AutocompleteStaffMatch(
-          staffId: id,
-          displayName: displayName,
-        );
-        final prefix = textRaw.split(' - ').first.trim().toUpperCase();
-        if (prefix == initial) {
-          return _AutocompleteStaffMatch(staffId: id, displayName: displayName);
-        }
-      }
-      return fallback;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<SeatStatusStaffInfo?> _fetchStaffInfo(
-    int staffId, {
-    required String fallbackInitial,
-    String? fallbackName,
-  }) async {
-    final url = '${ApiConfig.connectApiBase}/adp/v1/staffs/$staffId';
-    try {
-      final response = await _client.authenticatedGet(
-        url,
-        additionalHeaders: const <String, String>{'X-SOURCE': '3'},
+        headers: _proxyHeaders,
         acceptedStatusCodes: const <int>{200, 404},
       );
       if (response.statusCode != 200) return null;
       final raw = jsonDecode(response.body);
       if (raw is! Map<String, dynamic>) return null;
-
-      final shortName = _nonEmpty(raw['shortName']) ?? fallbackInitial;
-      final staffName = _nonEmpty(raw['staffName']) ?? (fallbackName ?? '');
-      final email = _nonEmpty(raw['email']) ?? '';
-      final departmentId = int.tryParse('${raw['departmentId'] ?? ''}');
-      final designationId = int.tryParse('${raw['designationId'] ?? ''}');
-      return SeatStatusStaffInfo(
-        staffId: staffId,
-        shortName: shortName,
-        staffName: staffName,
-        email: email,
-        departmentId: departmentId,
-        designationId: designationId,
-      );
+      return SeatStatusStaffInfo.fromJson(raw);
     } catch (_) {
       return null;
     }
@@ -614,14 +498,6 @@ class SeatStatusService {
     if (value.trim().isEmpty) return false;
     const bad = <String>{'TBA', 'NULL', 'N/A', '--'};
     return !bad.contains(value.trim().toUpperCase());
-  }
-
-  String? _nonEmpty(dynamic value) {
-    final parsed = '$value'.trim();
-    if (parsed.isEmpty) return null;
-    final upper = parsed.toUpperCase();
-    if (upper == 'NULL' || upper == 'N/A' || upper == '--') return null;
-    return parsed;
   }
 
   Future<SeatStatusStaffInfo?> _loadStaffInfoFromDb(String initial) async {
@@ -687,6 +563,14 @@ class SeatStatusService {
   }
 }
 
+Map<dynamic, dynamic> _decodeSeatMapPayload(dynamic raw) {
+  if (raw is Map && raw['seatMap'] is Map) {
+    return raw['seatMap'] as Map<dynamic, dynamic>;
+  }
+  if (raw is Map) return raw;
+  return const <dynamic, dynamic>{};
+}
+
 bool _jsonDeepEqual(Map<String, dynamic> a, Map<String, dynamic> b) {
   return jsonEncode(a) == jsonEncode(b);
 }
@@ -746,11 +630,4 @@ class SeatStatusStaffInfo {
       'designationId': designationId,
     };
   }
-}
-
-class _AutocompleteStaffMatch {
-  const _AutocompleteStaffMatch({required this.staffId, this.displayName});
-
-  final int staffId;
-  final String? displayName;
 }
