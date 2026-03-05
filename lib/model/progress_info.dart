@@ -25,6 +25,8 @@ class ProgressInfo {
     final curriculumRaw = payload['curriculum'];
     final completedRaw = payload['completedCourses'];
     final majorMinorRaw = payload['majorMinors'];
+    final prerequisiteRaw = payload['coursePrerequisites'];
+    final prerequisiteByCode = _buildCoursePrerequisiteMap(prerequisiteRaw);
 
     final curriculum = curriculumRaw is Map<String, dynamic>
         ? curriculumRaw
@@ -73,6 +75,11 @@ class ProgressInfo {
                                   (course['isMandatory'] ?? false) == true,
                               headerName: headerName,
                               subHeaderName: subHeaderName,
+                              prerequisiteExpression:
+                                  prerequisiteByCode[normalizedCode] ?? '',
+                              prerequisiteCodes: _extractPrerequisiteCodes(
+                                prerequisiteByCode[normalizedCode] ?? '',
+                              ),
                             ),
                           );
                         }
@@ -268,6 +275,8 @@ class CurriculumCourse {
     required this.isMandatory,
     required this.headerName,
     required this.subHeaderName,
+    required this.prerequisiteExpression,
+    required this.prerequisiteCodes,
   });
 
   final String code;
@@ -276,6 +285,40 @@ class CurriculumCourse {
   final bool isMandatory;
   final String headerName;
   final String subHeaderName;
+  final String prerequisiteExpression;
+  final Set<String> prerequisiteCodes;
+}
+
+Map<String, String> _buildCoursePrerequisiteMap(dynamic raw) {
+  final output = <String, String>{};
+  final rows = switch (raw) {
+    Map<String, dynamic> map when map['rows'] is List => map['rows'] as List,
+    Map map when map['rows'] is List => map['rows'] as List,
+    List list => list,
+    _ => const <dynamic>[],
+  };
+  for (final item in rows.whereType<Map>()) {
+    final map = item.cast<dynamic, dynamic>();
+    final code = '${map['courseCode'] ?? ''}'.trim().toUpperCase();
+    if (code.isEmpty) continue;
+    final expression = '${map['prerequisiteCourses'] ?? ''}'.trim();
+    output[code] = expression;
+  }
+  return output;
+}
+
+Set<String> _extractPrerequisiteCodes(String raw) {
+  final output = <String>{};
+  final matches = RegExp(
+    r'\b[A-Z]{2,4}\s*-?\s*\d{3,4}[A-Z]?\b',
+  ).allMatches(raw.toUpperCase());
+  for (final match in matches) {
+    final value = (match.group(0) ?? '').replaceAll(RegExp(r'\s+'), '');
+    if (value.isNotEmpty) {
+      output.add(value);
+    }
+  }
+  return output;
 }
 
 class HeaderProgress {

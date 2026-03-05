@@ -257,8 +257,10 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
             if (currentSemesterCodes.contains(code)) continue;
             requiredByCode.putIfAbsent(code, () => course);
           }
-          final requiredCourses = requiredByCode.values.toList()
-            ..sort((a, b) => compareNaturalText(a.code, b.code));
+          final wishlistCourses = _buildWishlistCourses(
+            info: info,
+            currentSections: _currentSemesterSections,
+          );
 
           return BracuRefreshList(
             onRefresh: _refresh,
@@ -534,6 +536,91 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                 ),
               if (info.majorOptions.isNotEmpty || info.minorOptions.isNotEmpty)
                 const SizedBox(height: 14),
+              const BracuSectionTitle(title: 'Wishlist for Next Semester'),
+              const SizedBox(height: 10),
+              if (wishlistCourses.isEmpty)
+                BracuCard(
+                  child: Text(
+                    'No next-semester suggestions available yet.',
+                    style: TextStyle(
+                      color: BracuPalette.textSecondary(context),
+                    ),
+                  ),
+                )
+              else ...[
+                ...wishlistCourses.map((course) {
+                  final item = course.course;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: BracuCard(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SectionBadge(
+                            label: '?',
+                            color: BracuPalette.primary,
+                            size: 40,
+                            fontSize: 13,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.code,
+                                  style: TextStyle(
+                                    color: BracuPalette.textPrimary(context),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  item.title.isEmpty ? item.code : item.title,
+                                  style: TextStyle(
+                                    color: BracuPalette.textSecondary(context),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 108,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '${_formatCredit(item.credit)} credits',
+                                  style: TextStyle(
+                                    color: BracuPalette.textPrimary(context),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  item.isMandatory ? 'Required' : 'Elective',
+                                  style: TextStyle(
+                                    color: item.isMandatory
+                                        ? BracuPalette.warning
+                                        : BracuPalette.accent,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 4),
+              ],
               if (currentSectionsForDisplay.isNotEmpty) ...[
                 const BracuSectionTitle(title: 'Current Semester Courses'),
                 const SizedBox(height: 10),
@@ -718,89 +805,6 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                     ),
                   );
                 }),
-              const SizedBox(height: 6),
-              const BracuSectionTitle(title: 'Required Courses'),
-              const SizedBox(height: 10),
-              if (requiredCourses.isEmpty)
-                BracuCard(
-                  child: Text(
-                    'No required courses remaining.',
-                    style: TextStyle(
-                      color: BracuPalette.textSecondary(context),
-                    ),
-                  ),
-                )
-              else
-                ...requiredCourses.map((course) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: BracuCard(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SectionBadge(
-                            label: '?',
-                            color: BracuPalette.primary,
-                            size: 40,
-                            fontSize: 13,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  course.code,
-                                  style: TextStyle(
-                                    color: BracuPalette.textPrimary(context),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  course.title.isEmpty
-                                      ? course.code
-                                      : course.title,
-                                  style: TextStyle(
-                                    color: BracuPalette.textSecondary(context),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          SizedBox(
-                            width: 96,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  '${_formatCredit(course.credit)} credits',
-                                  style: TextStyle(
-                                    color: BracuPalette.textPrimary(context),
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'Required',
-                                  style: TextStyle(
-                                    color: BracuPalette.warning,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
             ],
           );
         },
@@ -904,6 +908,131 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
     if (curriculumName.isNotEmpty) return curriculumName;
     return 'Program';
   }
+
+  List<_WishlistCourse> _buildWishlistCourses({
+    required ProgressInfo info,
+    required List<section.Section> currentSections,
+  }) {
+    final completedCodes = info.completedCourses
+        .map((c) => c.code.trim().toUpperCase())
+        .where((code) => code.isNotEmpty)
+        .toSet();
+    final currentCodes = currentSections
+        .map((s) => s.courseCode.trim().toUpperCase())
+        .where((code) => code.isNotEmpty)
+        .toSet();
+    final readyCodes = <String>{...completedCodes, ...currentCodes};
+
+    final wishlist = <_WishlistCourse>[];
+    for (final course in info.curriculumCourses) {
+      final code = course.code.trim().toUpperCase();
+      if (code.isEmpty) continue;
+      if (completedCodes.contains(code) || currentCodes.contains(code)) {
+        continue;
+      }
+
+      final prereqMet =
+          course.prerequisiteExpression.trim().isEmpty ||
+          _isPrerequisiteSatisfied(course.prerequisiteExpression, readyCodes);
+      if (!prereqMet) continue;
+
+      wishlist.add(
+        _WishlistCourse(
+          course: course,
+          basis: course.prerequisiteExpression.trim().isEmpty
+              ? _WishlistBasis.noPrerequisite
+              : _WishlistBasis.prerequisiteSatisfied,
+        ),
+      );
+    }
+
+    wishlist.sort((a, b) {
+      final basisCmp = a.basis.index.compareTo(b.basis.index);
+      if (basisCmp != 0) return basisCmp;
+      if (a.course.isMandatory != b.course.isMandatory) {
+        return a.course.isMandatory ? -1 : 1;
+      }
+      return compareNaturalText(a.course.code, b.course.code);
+    });
+
+    return wishlist.take(8).toList();
+  }
+
+  bool _isPrerequisiteSatisfied(String raw, Set<String> readyCodes) {
+    final tokens = _tokenizePrerequisite(raw);
+    if (tokens.isEmpty) return true;
+    var index = 0;
+
+    late bool Function() parseExpression;
+    late bool Function() parseTerm;
+    late bool Function() parseFactor;
+
+    parseExpression = () {
+      var value = parseTerm();
+      while (index < tokens.length && tokens[index] == 'OR') {
+        index++;
+        value = value || parseTerm();
+      }
+      return value;
+    };
+
+    parseTerm = () {
+      var value = parseFactor();
+      while (index < tokens.length && tokens[index] == 'AND') {
+        index++;
+        value = value && parseFactor();
+      }
+      return value;
+    };
+
+    parseFactor = () {
+      if (index >= tokens.length) return true;
+      final token = tokens[index];
+      if (token == '(') {
+        index++;
+        final value = parseExpression();
+        if (index < tokens.length && tokens[index] == ')') {
+          index++;
+        }
+        return value;
+      }
+      index++;
+      return readyCodes.contains(token);
+    };
+
+    return parseExpression();
+  }
+
+  List<String> _tokenizePrerequisite(String raw) {
+    final normalized = raw.trim().toUpperCase();
+    if (normalized.isEmpty ||
+        normalized == 'N/A' ||
+        normalized == 'NONE' ||
+        normalized == '-') {
+      return const <String>[];
+    }
+
+    final pattern = RegExp(
+      r'\(|\)|\bAND\b|\bOR\b|\b[A-Z]{2,4}\s*-?\s*\d{3,4}[A-Z]?\b',
+    );
+    return pattern
+        .allMatches(normalized)
+        .map((match) => (match.group(0) ?? '').replaceAll(RegExp(r'\s+'), ''))
+        .where((token) => token.isNotEmpty)
+        .toList();
+  }
+}
+
+enum _WishlistBasis { prerequisiteSatisfied, noPrerequisite }
+
+class _WishlistCourse {
+  const _WishlistCourse({
+    required this.course,
+    required this.basis,
+  });
+
+  final CurriculumCourse course;
+  final _WishlistBasis basis;
 }
 
 class _Metric extends StatelessWidget {

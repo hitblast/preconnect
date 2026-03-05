@@ -20,6 +20,8 @@ class ProgressService {
   static const String _completedCoursesCacheKey =
       'StudentProgramProgressCompletedCourses';
   static const String _curriculumCacheKey = 'StudentProgramProgressCurriculum';
+  static const String _coursePrerequisitesCacheKey =
+      'StudentProgramProgressCoursePrerequisites';
   static const String _majorMinorsEtagKey = 'StudentProgramProgressMajorEtag';
   static const String _completedCoursesEtagKey =
       'StudentProgramProgressCompletedEtag';
@@ -66,6 +68,8 @@ class ProgressService {
           '${ApiConfig.connectApiBase}${ApiConfig.completedCoursesPath(portfolioId)}';
       final curriculumUrl =
           '${ApiConfig.connectApiBase}${ApiConfig.programCurriculumsPath(portfolioId)}';
+      final coursePrerequisitesUrl =
+          '${ApiConfig.seatStatusProxyBase}/course-prerequisites';
 
       final majorEtag = await asyncPrefs.getString(_majorMinorsEtagKey);
       final completedEtag = await asyncPrefs.getString(
@@ -109,10 +113,16 @@ class ProgressService {
         dataKey: _curriculumCacheKey,
         etagKey: _curriculumEtagKey,
       );
+      final coursePrerequisites = await _resolvePublicComponent(
+        prefs: asyncPrefs,
+        url: coursePrerequisitesUrl,
+        dataKey: _coursePrerequisitesCacheKey,
+      );
 
       if (majorMinors == null ||
           completedCourses == null ||
-          curriculum == null) {
+          curriculum == null ||
+          coursePrerequisites == null) {
         if (fromGet) return null;
         return getProgress(fromFetch: true);
       }
@@ -121,6 +131,7 @@ class ProgressService {
         'majorMinors': majorMinors,
         'completedCourses': completedCourses,
         'curriculum': curriculum,
+        'coursePrerequisites': coursePrerequisites,
       };
       final info = ProgressInfo.fromPayload(payload);
       final summary = ProgressSummary.fromProgressInfo(info);
@@ -152,6 +163,23 @@ class ProgressService {
       await prefs.setString(etagKey, etag);
     }
     return decoded;
+  }
+
+  Future<dynamic> _resolvePublicComponent({
+    required SharedPreferencesAsync prefs,
+    required String url,
+    required String dataKey,
+  }) async {
+    try {
+      final response = await _client.publicGet(url);
+      final decoded = jsonDecode(response.body);
+      await writeJsonToPrefs(prefs, dataKey, decoded);
+      return decoded;
+    } catch (_) {
+      final cached = await prefs.getString(dataKey);
+      if (cached == null || cached.trim().isEmpty) return null;
+      return jsonDecode(cached);
+    }
   }
 
   Future<ProgressInfo?> getProgress({bool fromFetch = false}) async {
