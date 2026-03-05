@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/api_config.dart';
@@ -43,6 +44,7 @@ class SeatStatusService {
       <String, SeatStatusStaffInfo>{};
   final Map<String, Future<SeatStatusStaffInfo?>> _staffInfoInFlight =
       <String, Future<SeatStatusStaffInfo?>>{};
+  final ValueNotifier<bool> isSavingDetailsCache = ValueNotifier<bool>(false);
 
   String get _proxyBase {
     final base = ApiConfig.seatStatusProxyBase.trim();
@@ -120,6 +122,7 @@ class SeatStatusService {
     Map<int, SeatStatusDetailsResponse> detailsBySection,
   ) async {
     if (detailsBySection.isEmpty) return;
+    isSavingDetailsCache.value = true;
     try {
       final db = await _openDb();
       await db.transaction((txn) async {
@@ -145,7 +148,10 @@ class SeatStatusService {
       });
       _detailsSnapshot = null;
       _detailsSnapshotTs = null;
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      isSavingDetailsCache.value = false;
+    }
   }
 
   Future<Map<int, SeatStatusDetailsResponse>>

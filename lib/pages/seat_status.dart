@@ -8,6 +8,7 @@ import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/model/seat_status_info.dart';
 import 'package:preconnect/pages/ui_kit.dart';
+import 'package:preconnect/tools/cached_image.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
 import 'package:preconnect/tools/time_utils.dart';
@@ -47,6 +48,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   bool _isDetailsRefreshing = false;
   bool _isResolvingStaffInfo = false;
   bool _isStreamConnecting = false;
+  bool _isSavingCache = false;
   bool _availableOnly = false;
   String _selectedDayFilter = '';
   final Set<String> _pendingInitials = <String>{};
@@ -67,6 +69,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       });
     });
     unawaited(_reloadAll());
+    _isSavingCache = _service.isSavingDetailsCache.value;
+    _service.isSavingDetailsCache.addListener(_onCacheSaveStateChanged);
     WidgetsBinding.instance.addObserver(this);
     HomeTabRegistry.activeTab.addListener(_onActiveTabChanged);
     _updatePollingStrategy();
@@ -76,6 +80,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   @override
   void dispose() {
     _stopSeatStatusStream();
+    _service.isSavingDetailsCache.removeListener(_onCacheSaveStateChanged);
     WidgetsBinding.instance.removeObserver(this);
     HomeTabRegistry.activeTab.removeListener(_onActiveTabChanged);
     _searchDebounce?.cancel();
@@ -110,6 +115,15 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       return;
     }
     unawaited(_handleRefresh(notify: false));
+  }
+
+  void _onCacheSaveStateChanged() {
+    if (!mounted) return;
+    final next = _service.isSavingDetailsCache.value;
+    if (next == _isSavingCache) return;
+    setState(() {
+      _isSavingCache = next;
+    });
   }
 
   Future<void> _handleRefresh({bool notify = true}) async {
@@ -346,49 +360,64 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 
   @override
   Widget build(BuildContext context) {
+    final content = _isInitialLoading
+        ? BracuRefreshPlaceholder(
+            onRefresh: _handleRefresh,
+            child: const BracuLoading(label: 'Loading seats...'),
+          )
+        : _cards.isEmpty
+        ? BracuRefreshListBuilder(
+            onRefresh: _handleRefresh,
+            itemCount: 2,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return _buildFilterHeader(context);
+              }
+              return const BracuCard(
+                child: BracuEmptyState(message: 'No section data available'),
+              );
+            },
+          )
+        : BracuRefreshListBuilder(
+            onRefresh: _handleRefresh,
+            itemCount: _visibleCards.isEmpty ? 2 : _visibleCards.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return _buildFilterHeader(context);
+              }
+              if (_visibleCards.isEmpty) {
+                return const BracuCard(
+                  child: BracuEmptyState(
+                    message: 'No matching section found',
+                  ),
+                );
+              }
+              final item = _visibleCards[index - 1];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _SeatStatusCard(item: item),
+              );
+            },
+          );
+
     return BracuPageScaffold(
       title: 'Seat Status',
       subtitle: 'Live Sections',
       icon: Icons.insights_outlined,
-      body: _isInitialLoading
-          ? BracuRefreshPlaceholder(
-              onRefresh: _handleRefresh,
-              child: const BracuLoading(label: 'Loading seats...'),
-            )
-          : _cards.isEmpty
-          ? BracuRefreshListBuilder(
-              onRefresh: _handleRefresh,
-              itemCount: 2,
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  return _buildFilterHeader(context);
-                }
-                return const BracuCard(
-                  child: BracuEmptyState(message: 'No section data available'),
-                );
-              },
-            )
-          : BracuRefreshListBuilder(
-              onRefresh: _handleRefresh,
-              itemCount: _visibleCards.isEmpty ? 2 : _visibleCards.length + 1,
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  return _buildFilterHeader(context);
-                }
-                if (_visibleCards.isEmpty) {
-                  return const BracuCard(
-                    child: BracuEmptyState(
-                      message: 'No matching section found',
-                    ),
-                  );
-                }
-                final item = _visibleCards[index - 1];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _SeatStatusCard(item: item),
-                );
-              },
+      body: Stack(
+        children: [
+          content,
+          if (_isSavingCache)
+            Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black.withValues(alpha: 0.14),
+                child: const Center(
+                  child: BracuLoading(label: 'Saving seat cache...'),
+                ),
+              ),
             ),
+        ],
+      ),
     );
   }
 
@@ -880,6 +909,13 @@ class _SeatStatusCard extends StatelessWidget {
 
   final _SeatStatusCardData item;
 
+  Widget _facultyAvatar(BuildContext context) {
+    final label = item.facultyInitial.trim().isEmpty
+        ? '?'
+        : item.facultyInitial.trim().toUpperCase();
+    return _FacultyAvatar(initial: item.facultyInitial, fallbackLabel: label);
+  }
+
   Future<void> _openFacultyEmail(BuildContext context) async {
     await openMailComposer(context, item.facultyEmail);
   }
@@ -932,43 +968,60 @@ class _SeatStatusCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (item.facultyName.isNotEmpty)
+                    if (item.facultyName.isNotEmpty ||
+                        item.facultyEmail.isNotEmpty ||
+                        item.facultyMeta.isNotEmpty)
                       Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          item.facultyName,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: textSecondary,
-                          ),
-                        ),
-                      ),
-                    if (item.facultyEmail.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 1),
-                        child: GestureDetector(
-                          onTap: () => _openFacultyEmail(context),
-                          child: Text(
-                            item.facultyEmail,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: textSecondary,
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _facultyAvatar(context),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (item.facultyName.isNotEmpty)
+                                    Text(
+                                      item.facultyName,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: textSecondary,
+                                      ),
+                                    ),
+                                  if (item.facultyEmail.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 1),
+                                      child: GestureDetector(
+                                        onTap: () => _openFacultyEmail(context),
+                                        child: Text(
+                                          item.facultyEmail,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                            color: textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  if (item.facultyMeta.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 1),
+                                      child: Text(
+                                        item.facultyMeta,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ),
-                      ),
-                    if (item.facultyMeta.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 1),
-                        child: Text(
-                          item.facultyMeta,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: textSecondary,
-                          ),
+                          ],
                         ),
                       ),
                   ],
@@ -1113,6 +1166,154 @@ class _SeatStatusCard extends StatelessWidget {
       return '$day $time';
     }).toList();
     return lines;
+  }
+}
+
+class _FacultyAvatar extends StatefulWidget {
+  const _FacultyAvatar({
+    required this.initial,
+    required this.fallbackLabel,
+  });
+
+  final String initial;
+  final String fallbackLabel;
+
+  @override
+  State<_FacultyAvatar> createState() => _FacultyAvatarState();
+}
+
+class _FacultyAvatarState extends State<_FacultyAvatar> {
+  static const String _facultyImageApiBase =
+      'https://preconnect.app/api/faculty';
+  static const double _avatarSize = 52;
+  static final Map<String, String?> _resolvedImageUrls = <String, String?>{};
+  static final Map<String, Future<String?>> _inFlight =
+      <String, Future<String?>>{};
+
+  String? _resolvedUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolvedUrl = _resolvedImageUrls[_normalizedInitial];
+    if (_resolvedUrl == null && _normalizedInitial != null) {
+      unawaited(_resolveImageUrl());
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _FacultyAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initial == widget.initial) return;
+    _resolvedUrl = _resolvedImageUrls[_normalizedInitial];
+    if (_resolvedUrl == null && _normalizedInitial != null) {
+      unawaited(_resolveImageUrl());
+    }
+  }
+
+  String? get _normalizedInitial {
+    final normalized = widget.initial.trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-z0-9]'),
+      '',
+    );
+    if (normalized.isEmpty || normalized == 'tba') {
+      return null;
+    }
+    return normalized;
+  }
+
+  Future<void> _resolveImageUrl() async {
+    final initial = _normalizedInitial;
+    if (initial == null) return;
+    final existing = _inFlight[initial];
+    final future = existing ?? _fetchImageUrl(initial);
+    if (existing == null) {
+      _inFlight[initial] = future;
+    }
+    try {
+      final resolved = await future;
+      _resolvedImageUrls[initial] = resolved;
+      if (!mounted || _normalizedInitial != initial) return;
+      setState(() {
+        _resolvedUrl = resolved;
+      });
+    } finally {
+      if (identical(_inFlight[initial], future)) {
+        _inFlight.remove(initial);
+      }
+    }
+  }
+
+  Future<String?> _fetchImageUrl(String initial) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_facultyImageApiBase/$initial'),
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return null;
+      }
+      final body = response.body.trim();
+      if (body.isEmpty) return null;
+      if (body.startsWith('http://') || body.startsWith('https://')) {
+        return body;
+      }
+      final decoded = jsonDecode(body);
+      if (decoded is String) return decoded.trim().isEmpty ? null : decoded;
+      if (decoded is Map) {
+        for (final key in <String>['url', 'image', 'imageUrl', 'photoUrl']) {
+          final value = '${decoded[key] ?? ''}'.trim();
+          if (value.startsWith('http://') || value.startsWith('https://')) {
+            return value;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Widget _fallbackAvatar() {
+    return Container(
+      width: _avatarSize,
+      height: _avatarSize,
+      decoration: BoxDecoration(
+        color: BracuPalette.primary.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        widget.fallbackLabel,
+        style: const TextStyle(
+          color: BracuPalette.primary,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = _fallbackAvatar();
+    final resolvedUrl = _resolvedUrl;
+    if (resolvedUrl == null || resolvedUrl.isEmpty) {
+      return fallback;
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: SizedBox(
+        width: _avatarSize,
+        height: _avatarSize,
+        child: CachedImage(
+          url: resolvedUrl,
+          fit: BoxFit.cover,
+          width: _avatarSize,
+          height: _avatarSize,
+          placeholder: fallback,
+          error: fallback,
+        ),
+      ),
+    );
   }
 }
 
