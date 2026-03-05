@@ -8,13 +8,33 @@ import 'package:sembast/sembast_io.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SeatStatusService {
+  static const List<String> _detailsWrapperKeys = <String>[
+    'data',
+    'sections',
+    'details',
+    'items',
+    'results',
+  ];
+  static const List<String> _seatMapWrapperKeys = <String>[
+    'data',
+    'seatStatus',
+    'sections',
+    'items',
+    'results',
+  ];
+  static const Set<String> _invalidInitials = <String>{
+    'TBA',
+    'NULL',
+    'N/A',
+    '--',
+  };
+
   SeatStatusService._internal();
 
   static final SeatStatusService _instance = SeatStatusService._internal();
   factory SeatStatusService() => _instance;
 
   Database? _db;
-  Map<int, int>? _seatMapSnapshot;
   Map<int, SeatStatusDetailsResponse>? _detailsSnapshot;
   int? _detailsSnapshotTs;
   Map<String, SeatStatusStaffInfo>? _staffSnapshot;
@@ -36,6 +56,10 @@ class SeatStatusService {
     return '$_proxyBase/seat-status/stream';
   }
 
+  String get _seatStatusUrl {
+    return '$_proxyBase/seat-status';
+  }
+
   String _sectionDetailsUrl(int sectionId) {
     return '$_proxyBase/sections/$sectionId/details';
   }
@@ -50,8 +74,6 @@ class SeatStatusService {
 
   static const String _dbName = 'seat_status_cache.db';
   static const String _detailsTsKey = 'details_ts';
-  static const String _seatMapTsKey = 'seat_map_ts';
-  static const String _detailsEtagPrefix = 'details_etag_';
   static const String _legacyCleanupDoneKey = 'seat_status_sp_cleanup_done_v1';
   static const List<String> _legacySharedPrefsKeys = <String>[
     'seat_status_details_cache_v1',
@@ -63,34 +85,12 @@ class SeatStatusService {
   final StoreRef<String, Object?> _metaStore = StoreRef<String, Object?>(
     'seat_status_meta',
   );
-  final StoreRef<int, Object?> _seatMapStore = intMapStoreFactory.store(
-    'seat_status_map',
-  );
   final StoreRef<int, Object?> _detailsStore = intMapStoreFactory.store(
     'seat_status_details',
   );
   final StoreRef<String, Object?> _staffStore = StoreRef<String, Object?>(
     'seat_status_staff',
   );
-
-  Future<Map<int, int>> loadCachedSeatMap({
-    Duration maxAge = const Duration(hours: 1),
-  }) async {
-    try {
-      final db = await _openDb();
-      final ts = await _metaStore.record(_seatMapTsKey).get(db) as int?;
-      if (ts == null) return const <int, int>{};
-      final age = DateTime.now().difference(
-        DateTime.fromMillisecondsSinceEpoch(ts),
-      );
-      if (age > maxAge) return const <int, int>{};
-      final snapshot = await _getSeatMapSnapshot(db);
-      if (snapshot.isEmpty) return const <int, int>{};
-      return Map<int, int>.from(snapshot);
-    } catch (_) {
-      return const <int, int>{};
-    }
-  }
 
   Future<Map<int, SeatStatusDetailsResponse>> loadCachedDetails({
     Duration maxAge = const Duration(hours: 1),
@@ -113,47 +113,6 @@ class SeatStatusService {
       return Map<int, SeatStatusDetailsResponse>.from(snapshot);
     } catch (_) {
       return const <int, SeatStatusDetailsResponse>{};
-    }
-  }
-
-  Future<Map<int, int>> replaceSeatMapSnapshotAndSave(
-    Map<int, int> fullSeatMap,
-  ) async {
-    try {
-      final db = await _openDb();
-      final existing = await _getSeatMapSnapshot(db);
-
-      final changed = <MapEntry<int, int>>[];
-      for (final entry in fullSeatMap.entries) {
-        if (existing[entry.key] != entry.value) {
-          changed.add(entry);
-        }
-      }
-      final removed = existing.keys
-          .where((key) => !fullSeatMap.containsKey(key))
-          .toList();
-
-      if (changed.isEmpty && removed.isEmpty) {
-        _seatMapSnapshot = Map<int, int>.from(fullSeatMap);
-        return Map<int, int>.from(fullSeatMap);
-      }
-
-      await db.transaction((txn) async {
-        for (final entry in changed) {
-          await _seatMapStore.record(entry.key).put(txn, entry.value);
-        }
-        for (final key in removed) {
-          await _seatMapStore.record(key).delete(txn);
-        }
-        await _metaStore.record(_seatMapTsKey).put(txn, _nowMs());
-      });
-
-      _seatMapSnapshot = Map<int, int>.from(fullSeatMap);
-      return Map<int, int>.from(fullSeatMap);
-    } catch (_) {
-      final fallback = Map<int, int>.from(fullSeatMap);
-      _seatMapSnapshot = fallback;
-      return fallback;
     }
   }
 
@@ -189,81 +148,30 @@ class SeatStatusService {
     } catch (_) {}
   }
 
-  Future<Map<int, SeatStatusDetailsResponse>> fetchDetailsForSectionIdsFromApi(
-    List<int> sectionIds, {
-    int concurrency = 8,
-  }) async {
-    if (sectionIds.isEmpty) return const <int, SeatStatusDetailsResponse>{};
-    final uniqueIds = sectionIds.toSet().toList()..sort((a, b) => a - b);
-    try {
-      final allDetails = await fetchAllSectionsDetailsFromApi();
-      if (allDetails.isNotEmpty) {
-        final filtered = <int, SeatStatusDetailsResponse>{};
-        for (final id in uniqueIds) {
-          final details = allDetails[id];
-          if (details != null) filtered[id] = details;
-        }
-        return filtered;
-      }
-    } catch (_) {}
-
-    // Fallback: direct per-section fetch if bundle route is unavailable.
-    final result = <int, SeatStatusDetailsResponse>{};
-    var index = 0;
-    while (index < uniqueIds.length) {
-      final end = (index + concurrency > uniqueIds.length)
-          ? uniqueIds.length
-          : index + concurrency;
-      final batch = uniqueIds.sublist(index, end);
-      await Future.wait(
-        batch.map((sectionId) async {
-          final url = _sectionDetailsUrl(sectionId);
-          try {
-            final response = await _client.publicGet(
-              url,
-              acceptedStatusCodes: const <int>{200},
-            );
-            final raw = jsonDecode(response.body);
-            if (raw is! Map<String, dynamic>) return;
-            result[sectionId] = SeatStatusDetailsResponse.fromJson(raw);
-          } catch (_) {}
-        }),
-      );
-      index = end;
+  Future<Map<int, SeatStatusDetailsResponse>>
+  fetchAllSectionsDetailsFromApi() async {
+    final bundled = await _fetchAllSectionsDetailsBundle();
+    if (bundled.isNotEmpty) {
+      return bundled;
     }
-    if (result.isNotEmpty) {
-      await saveDetailsCache(result);
-    }
-    return result;
+    final seatMap = await _fetchSeatMapFromApi();
+    if (seatMap.isEmpty) return const <int, SeatStatusDetailsResponse>{};
+    final allDetails = await _fetchSectionDetailsDirect(
+      seatMap.keys.toList()..sort((a, b) => a - b),
+    );
+    await _saveDetailsIfAny(allDetails);
+    return allDetails;
   }
 
-  Future<Map<int, SeatStatusDetailsResponse>> fetchAllSectionsDetailsFromApi()
-  async {
-    final response = await _client.publicGet(
-      _allSectionsDetailsUrl,
-      acceptedStatusCodes: const <int>{200},
-    );
-    final raw = jsonDecode(response.body);
-    if (raw is! Map) return const <int, SeatStatusDetailsResponse>{};
-    final allDetails = _parseCachedDetailsFromMap(
-      raw.map((key, value) => MapEntry('$key', value)),
-    );
-    if (allDetails.isNotEmpty) {
-      await saveDetailsCache(allDetails);
-    }
-    return allDetails;
+  Future<Map<int, int>> _fetchSeatMapFromApi() async {
+    final raw = await _fetchJson(_seatStatusUrl);
+    return _parseSeatMapResponse(raw);
   }
 
   Future<Map<String, SeatStatusStaffInfo>> loadCachedStaffInfoByInitials(
     Iterable<String> initials,
   ) async {
-    final keys =
-        initials
-            .map((e) => e.trim().toUpperCase())
-            .where(_isMeaningfulInitial)
-            .toSet()
-            .toList()
-          ..sort((a, b) => a.compareTo(b));
+    final keys = _normalizedInitials(initials);
     if (keys.isEmpty) return const <String, SeatStatusStaffInfo>{};
     try {
       final db = await _openDb();
@@ -292,10 +200,7 @@ class SeatStatusService {
     }
   }
 
-  Future<void> preloadSeatStatusCache({
-    int detailChunkSize = 40,
-    int detailConcurrency = 8,
-  }) async {
+  Future<void> preloadSeatStatusCache({int detailConcurrency = 8}) async {
     try {
       final db = await _openDb();
       final allDetails = await fetchAllSectionsDetailsFromApi();
@@ -310,27 +215,13 @@ class SeatStatusService {
         await db.transaction((txn) async {
           for (final sectionId in stale) {
             await _detailsStore.record(sectionId).delete(txn);
-            await _metaStore
-                .record('$_detailsEtagPrefix$sectionId')
-                .delete(txn);
           }
         });
         _detailsSnapshot = null;
         _detailsSnapshotTs = null;
       }
 
-      final detailsSnapshot = allDetails;
-      final initials = <String>{};
-      for (final sectionId in detailsSnapshot.keys) {
-        final details = detailsSnapshot[sectionId];
-        if (details == null) continue;
-        final main = details.section.faculties.trim().toUpperCase();
-        if (_isMeaningfulInitial(main)) initials.add(main);
-        final child = (details.childSection?.faculties ?? '')
-            .trim()
-            .toUpperCase();
-        if (_isMeaningfulInitial(child)) initials.add(child);
-      }
+      final initials = _collectFacultyInitials(allDetails.values);
       if (initials.isNotEmpty) {
         await resolveStaffInfoByInitials(
           initials,
@@ -365,37 +256,11 @@ class SeatStatusService {
     } catch (_) {}
   }
 
-  Future<Map<int, int>> _getSeatMapSnapshot(Database db) async {
-    final cached = _seatMapSnapshot;
-    if (cached != null) return cached;
-    final snapshots = await _seatMapStore.find(db);
-    final existing = <int, int>{};
-    for (final snap in snapshots) {
-      final value = snap.value;
-      if (value is int) {
-        existing[snap.key] = value;
-      } else {
-        final parsed = int.tryParse('$value');
-        if (parsed != null) {
-          existing[snap.key] = parsed;
-        }
-      }
-    }
-    _seatMapSnapshot = existing;
-    return existing;
-  }
-
   Future<Map<String, SeatStatusStaffInfo>> resolveStaffInfoByInitials(
     Iterable<String> initials, {
     int concurrency = 6,
   }) async {
-    final requested =
-        initials
-            .map((e) => e.trim().toUpperCase())
-            .where(_isMeaningfulInitial)
-            .toSet()
-            .toList()
-          ..sort((a, b) => a.compareTo(b));
+    final requested = _normalizedInitials(initials);
     if (requested.isEmpty) return const <String, SeatStatusStaffInfo>{};
 
     final chunkSize = concurrency <= 0 ? 6 : concurrency;
@@ -469,8 +334,7 @@ class SeatStatusService {
 
   bool _isMeaningfulInitial(String value) {
     if (value.trim().isEmpty) return false;
-    const bad = <String>{'TBA', 'NULL', 'N/A', '--'};
-    return !bad.contains(value.trim().toUpperCase());
+    return !_invalidInitials.contains(value.trim().toUpperCase());
   }
 
   Future<SeatStatusStaffInfo?> _loadStaffInfoFromDb(String initial) async {
@@ -534,6 +398,87 @@ class SeatStatusService {
     _staffSnapshot = map;
     return map;
   }
+
+  Future<Map<int, SeatStatusDetailsResponse>>
+  _fetchAllSectionsDetailsBundle() async {
+    try {
+      final raw = await _fetchJson(_allSectionsDetailsUrl);
+      final parsed = _parseDetailsBundleResponse(raw);
+      await _saveDetailsIfAny(parsed);
+      return parsed;
+    } catch (_) {
+      return const <int, SeatStatusDetailsResponse>{};
+    }
+  }
+
+  Future<Map<int, SeatStatusDetailsResponse>> _fetchSectionDetailsDirect(
+    List<int> sectionIds, {
+    int concurrency = 8,
+  }) async {
+    final result = <int, SeatStatusDetailsResponse>{};
+    var index = 0;
+    while (index < sectionIds.length) {
+      final end = (index + concurrency > sectionIds.length)
+          ? sectionIds.length
+          : index + concurrency;
+      final batch = sectionIds.sublist(index, end);
+      await Future.wait(
+        batch.map((sectionId) async {
+          try {
+            final raw = await _fetchJson(_sectionDetailsUrl(sectionId));
+            if (raw is! Map) return;
+            result[sectionId] = SeatStatusDetailsResponse.fromJson(
+              raw.cast<String, dynamic>(),
+            );
+          } catch (_) {}
+        }),
+      );
+      index = end;
+    }
+    return result;
+  }
+
+  Future<dynamic> _fetchJson(String url) async {
+    final response = await _client.publicGet(
+      url,
+      acceptedStatusCodes: const <int>{200},
+    );
+    return jsonDecode(response.body);
+  }
+
+  Future<void> _saveDetailsIfAny(
+    Map<int, SeatStatusDetailsResponse> details,
+  ) async {
+    if (details.isEmpty) return;
+    await saveDetailsCache(details);
+  }
+
+  List<String> _normalizedInitials(Iterable<String> initials) {
+    final normalized = initials
+        .map((value) => value.trim().toUpperCase())
+        .where(_isMeaningfulInitial)
+        .toSet()
+        .toList();
+    normalized.sort((a, b) => a.compareTo(b));
+    return normalized;
+  }
+
+  Set<String> _collectFacultyInitials(
+    Iterable<SeatStatusDetailsResponse> detailsValues,
+  ) {
+    final initials = <String>{};
+    for (final details in detailsValues) {
+      final main = details.section.faculties;
+      if (_isMeaningfulInitial(main)) {
+        initials.add(main.trim().toUpperCase());
+      }
+      final child = details.childSection?.faculties ?? '';
+      if (_isMeaningfulInitial(child)) {
+        initials.add(child.trim().toUpperCase());
+      }
+    }
+    return initials;
+  }
 }
 
 bool _jsonDeepEqual(Map<String, dynamic> a, Map<String, dynamic> b) {
@@ -553,6 +498,116 @@ Map<int, SeatStatusDetailsResponse> _parseCachedDetailsFromMap(
         (entry.value as Map).cast<String, dynamic>(),
       );
     } catch (_) {}
+  }
+  return result;
+}
+
+Map<int, SeatStatusDetailsResponse> _parseDetailsBundleResponse(dynamic raw) {
+  if (raw is Map) {
+    final mapped = raw.map((key, value) => MapEntry('$key', value));
+    final direct = _parseCachedDetailsFromMap(mapped);
+    if (direct.isNotEmpty) return direct;
+
+    for (final key in SeatStatusService._detailsWrapperKeys) {
+      final nested = _parseDetailsBundleResponse(raw[key]);
+      if (nested.isNotEmpty) return nested;
+    }
+  }
+
+  if (raw is List) {
+    final result = <int, SeatStatusDetailsResponse>{};
+    for (final item in raw.whereType<Map>()) {
+      final map = item.cast<String, dynamic>();
+      final details = SeatStatusDetailsResponse.fromJson(map);
+      final sectionId = details.section.sectionId;
+      if (sectionId <= 0) continue;
+      result[sectionId] = details;
+    }
+    return result;
+  }
+
+  return const <int, SeatStatusDetailsResponse>{};
+}
+
+Map<int, int> _parseSeatMapResponse(dynamic raw) {
+  final result = <int, int>{};
+
+  void addEntry(int? sectionId, int? remaining) {
+    if (sectionId == null || sectionId <= 0) return;
+    result[sectionId] = remaining == null || remaining < 0 ? 0 : remaining;
+  }
+
+  int? remainingFromMap(Map<dynamic, dynamic> map) {
+    final directKeys = <String>[
+      'remaining',
+      'available',
+      'availableSeat',
+      'remainingSeat',
+      'seat',
+      'value',
+    ];
+    for (final key in directKeys) {
+      final value = int.tryParse('${map[key] ?? ''}');
+      if (value != null) return value;
+    }
+    final capacity = int.tryParse('${map['capacity'] ?? ''}');
+    final consumed = int.tryParse(
+      '${map['consumedSeat'] ?? map['consumed'] ?? ''}',
+    );
+    if (capacity != null && consumed != null) {
+      return capacity - consumed;
+    }
+    return null;
+  }
+
+  Map<int, int> parseAny(dynamic value) {
+    if (value is Map) {
+      final direct = <int, int>{};
+      var allKeyedInts = true;
+      for (final entry in value.entries) {
+        final key = int.tryParse('${entry.key}');
+        final val = int.tryParse('${entry.value}');
+        if (key == null || val == null) {
+          allKeyedInts = false;
+          break;
+        }
+        direct[key] = val;
+      }
+      if (allKeyedInts && direct.isNotEmpty) return direct;
+
+      for (final entry in value.entries) {
+        final nestedMap = entry.value;
+        if (nestedMap is Map) {
+          addEntry(
+            int.tryParse('${nestedMap['sectionId'] ?? entry.key}'),
+            remainingFromMap(nestedMap),
+          );
+        }
+      }
+      if (result.isNotEmpty) return result;
+
+      for (final key in SeatStatusService._seatMapWrapperKeys) {
+        final nested = parseAny(value[key]);
+        if (nested.isNotEmpty) return nested;
+      }
+    }
+
+    if (value is List) {
+      for (final item in value.whereType<Map>()) {
+        addEntry(
+          int.tryParse('${item['sectionId'] ?? item['id'] ?? ''}'),
+          remainingFromMap(item),
+        );
+      }
+      if (result.isNotEmpty) return result;
+    }
+
+    return const <int, int>{};
+  }
+
+  final parsed = parseAny(raw);
+  if (parsed.isNotEmpty) {
+    return parsed;
   }
   return result;
 }

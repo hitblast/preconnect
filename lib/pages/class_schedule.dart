@@ -255,22 +255,12 @@ class _ClassScheduleState extends State<ClassSchedule> {
       'Current',
       ..._semesterSessionOptions.map(_semesterLabel),
     ];
-    final textStyle = const TextStyle(
-      fontSize: 16,
-      fontWeight: FontWeight.w400,
+    final menuWidth = compactPopupMenuWidth(
+      context,
+      labels,
+      minWidth: 120,
+      maxWidth: 260,
     );
-    var maxTextWidth = 0.0;
-    for (final label in labels) {
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: textStyle),
-        textDirection: Directionality.of(context),
-        maxLines: 1,
-      )..layout();
-      if (painter.width > maxTextWidth) {
-        maxTextWidth = painter.width;
-      }
-    }
-    final menuWidth = (maxTextWidth + 32).clamp(120.0, 260.0);
     return PopupMenuButton<int>(
       tooltip: 'Select semester',
       constraints: BoxConstraints(minWidth: menuWidth, maxWidth: menuWidth),
@@ -279,14 +269,11 @@ class _ClassScheduleState extends State<ClassSchedule> {
         unawaited(_selectSemester(sessionId));
       },
       itemBuilder: (context) => [
-        const PopupMenuItem<int>(
-          value: currentMenuValue,
-          child: Text('Current'),
-        ),
+        compactPopupMenuItem<int>(value: currentMenuValue, label: 'Current'),
         ..._semesterSessionOptions.map(
-          (sessionId) => PopupMenuItem<int>(
+          (sessionId) => compactPopupMenuItem<int>(
             value: sessionId,
-            child: Text(_semesterLabel(sessionId)),
+            label: _semesterLabel(sessionId),
           ),
         ),
       ],

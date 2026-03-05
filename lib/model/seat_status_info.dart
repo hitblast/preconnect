@@ -10,16 +10,14 @@ class SeatStatusDetailsResponse {
   final SeatStatusSection? childSection;
 
   factory SeatStatusDetailsResponse.fromJson(Map<String, dynamic> json) {
+    final childSectionJson = _asStringDynamicMap(json['childSection']);
     return SeatStatusDetailsResponse(
       section: SeatStatusSection.fromJson(
-        (json['section'] as Map?)?.cast<String, dynamic>() ??
-            const <String, dynamic>{},
+        _asStringDynamicMap(json['section']) ?? const <String, dynamic>{},
       ),
-      childSection: json['childSection'] is Map<String, dynamic>
-          ? SeatStatusSection.fromJson(
-              json['childSection'] as Map<String, dynamic>,
-            )
-          : null,
+      childSection: childSectionJson == null
+          ? null
+          : SeatStatusSection.fromJson(childSectionJson),
     );
   }
 
@@ -62,9 +60,8 @@ class SeatStatusSection {
     final rawSchedule = json['sectionSchedule'];
     final scheduleJson = switch (rawSchedule) {
       String s when s.trim().isNotEmpty =>
-        (jsonDecode(s) as Map?)?.cast<String, dynamic>() ??
-            const <String, dynamic>{},
-      Map<String, dynamic> m => m,
+        _asStringDynamicMap(jsonDecode(s)) ?? const <String, dynamic>{},
+      Map m => m.cast<String, dynamic>(),
       _ => const <String, dynamic>{},
     };
 
@@ -123,8 +120,12 @@ class SeatStatusSchedule {
     final rawSchedules = json['classSchedules'];
     final classSchedules = rawSchedules is List
         ? rawSchedules
-              .whereType<Map<String, dynamic>>()
-              .map(SeatStatusClassSchedule.fromJson)
+              .whereType<Map>()
+              .map(
+                (item) => SeatStatusClassSchedule.fromJson(
+                  item.cast<String, dynamic>(),
+                ),
+              )
               .toList()
         : const <SeatStatusClassSchedule>[];
 
@@ -188,6 +189,12 @@ int _toInt(dynamic value) {
 String _toString(dynamic value) {
   if (value == null) return '';
   return '$value'.trim();
+}
+
+Map<String, dynamic>? _asStringDynamicMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return value.cast<String, dynamic>();
+  return null;
 }
 
 String? _toNullableString(dynamic value) {

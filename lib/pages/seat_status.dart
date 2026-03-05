@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -163,10 +162,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     return sectionIds.map((sectionId) {
       final cached = detailsMap[sectionId];
       if (cached == null) {
-        return _buildFallbackCard(
-          sectionId: sectionId,
-          remaining: 0,
-        );
+        return _buildFallbackCard(sectionId: sectionId, remaining: 0);
       }
       return _buildCardFromDetails(sectionId: sectionId, details: cached);
     }).toList();
@@ -479,28 +475,17 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       'Any Day',
       ..._weekdayOrder.map(formatWeekdayTitle),
     ];
-    final menuWidth = _popupMenuWidth(
-      context,
-      labels,
-      minWidth: 170,
-      maxWidth: 320,
-    );
+    final menuWidth = compactPopupMenuWidth(context, labels, maxWidth: 320);
     return PopupMenuButton<String>(
       tooltip: 'Filter by day',
-      initialValue: _selectedDayFilter,
       constraints: BoxConstraints(minWidth: menuWidth, maxWidth: menuWidth),
       onSelected: _setDayFilter,
       itemBuilder: (context) => <PopupMenuEntry<String>>[
-        CheckedPopupMenuItem<String>(
-          value: '',
-          checked: _selectedDayFilter.isEmpty,
-          child: _menuItemLabel('Any Day'),
-        ),
+        compactPopupMenuItem<String>(value: '', label: 'Any Day'),
         ..._weekdayOrder.map(
-          (day) => CheckedPopupMenuItem<String>(
+          (day) => compactPopupMenuItem<String>(
             value: day,
-            checked: day == _selectedDayFilter,
-            child: _menuItemLabel(formatWeekdayTitle(day)),
+            label: formatWeekdayTitle(day),
           ),
         ),
       ],
@@ -600,38 +585,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     });
   }
 
-  double _popupMenuWidth(
-    BuildContext context,
-    List<String> labels, {
-    required double minWidth,
-    required double maxWidth,
-  }) {
-    const style = TextStyle(fontSize: 16, fontWeight: FontWeight.w400);
-    var maxTextWidth = 0.0;
-    for (final label in labels) {
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: style),
-        textDirection: Directionality.of(context),
-        maxLines: 1,
-      )..layout();
-      if (painter.width > maxTextWidth) {
-        maxTextWidth = painter.width;
-      }
-    }
-    final screenMax = MediaQuery.sizeOf(context).width - 20;
-    final effectiveMax = math.min(maxWidth, screenMax);
-    return (maxTextWidth + 110).clamp(minWidth, effectiveMax);
-  }
-
-  Widget _menuItemLabel(String label) {
-    return Text(
-      label,
-      maxLines: 1,
-      softWrap: false,
-      overflow: TextOverflow.fade,
-    );
-  }
-
   void _sortCardsByCourseAndSection(List<_SeatStatusCardData> cards) {
     cards.sort((a, b) {
       final codeCmp = a.courseCode.compareTo(b.courseCode);
@@ -715,7 +668,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 
   void _updatePollingStrategy() {
     final shouldRun =
-        _isAppForeground && HomeTabRegistry.activeTab.value == HomeTab.seatStatus;
+        _isAppForeground &&
+        HomeTabRegistry.activeTab.value == HomeTab.seatStatus;
     if (!shouldRun) {
       _stopSeatStatusStream();
       return;
@@ -763,7 +717,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   }
 
   Future<void> _connectSeatStatusStream() async {
-    if (!_isAppForeground || HomeTabRegistry.activeTab.value != HomeTab.seatStatus) {
+    if (!_isAppForeground ||
+        HomeTabRegistry.activeTab.value != HomeTab.seatStatus) {
       return;
     }
     if (_streamSubscription != null || _isStreamConnecting) return;
@@ -799,7 +754,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 
   void _onStreamLine(String line) {
     if (!line.startsWith('data:')) return;
-    if (!_isAppForeground || HomeTabRegistry.activeTab.value != HomeTab.seatStatus) {
+    if (!_isAppForeground ||
+        HomeTabRegistry.activeTab.value != HomeTab.seatStatus) {
       return;
     }
     _streamRefreshDebounce?.cancel();
@@ -816,7 +772,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     _streamClient = null;
     _streamReconnectTimer?.cancel();
     final shouldRun =
-        _isAppForeground && HomeTabRegistry.activeTab.value == HomeTab.seatStatus;
+        _isAppForeground &&
+        HomeTabRegistry.activeTab.value == HomeTab.seatStatus;
     if (!shouldRun) return;
     _streamReconnectTimer = Timer(const Duration(seconds: 3), () {
       if (!mounted) return;

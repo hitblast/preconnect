@@ -14,7 +14,7 @@ class ApiConfig {
   static const String connectApiBase = 'https://connect.bracu.ac.bd/api';
   static const String cdnBase = 'https://connect.bracu.ac.bd/cdn';
   static const String seatStatusProxyBase =
-      String.fromEnvironment('SEAT_STATUS_PROXY_BASE');
+      'https://seat-status-api-lp7hzqxuwq-el.a.run.app';
 
   static const String clientId = 'slm';
   static const String redirectUri = 'https://connect.bracu.ac.bd/';

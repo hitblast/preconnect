@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -210,6 +211,58 @@ String formatTimeHour(String? input) {
   final t = formatTime(input);
   if (t.isEmpty) return '--';
   return t.split(':').first;
+}
+
+double compactPopupMenuWidth(
+  BuildContext context,
+  List<String> labels, {
+  double minWidth = 0,
+  double maxWidth = 320,
+  TextStyle style = const TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
+  double horizontalPadding = 16,
+  double screenMargin = 20,
+}) {
+  var maxTextWidth = 0.0;
+  for (final label in labels) {
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: style),
+      textDirection: Directionality.of(context),
+      maxLines: 1,
+    )..layout();
+    if (painter.width > maxTextWidth) {
+      maxTextWidth = painter.width;
+    }
+  }
+  final screenMax = MediaQuery.sizeOf(context).width - screenMargin;
+  final effectiveMax = math.min(maxWidth, screenMax);
+  return (maxTextWidth + (horizontalPadding * 2) + 4).clamp(
+    minWidth,
+    effectiveMax,
+  );
+}
+
+PopupMenuItem<T> compactPopupMenuItem<T>({
+  required T value,
+  required String label,
+  double height = 42,
+  EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 16),
+  TextStyle textStyle = const TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w400,
+  ),
+}) {
+  return PopupMenuItem<T>(
+    value: value,
+    padding: padding,
+    height: height,
+    child: Text(
+      label,
+      style: textStyle,
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.fade,
+    ),
+  );
 }
 
 String formatSectionBadge(String? sectionName) {
