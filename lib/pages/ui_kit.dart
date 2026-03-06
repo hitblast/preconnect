@@ -687,7 +687,7 @@ class BracuPageScaffold extends StatelessWidget {
                   Positioned(
                     top: -70,
                     right: -60,
-                    child: _DecorBlob(
+                    child: DecorBlob(
                       color: BracuPalette.primary.withValues(alpha: 0.12),
                       size: 200,
                     ),
@@ -695,7 +695,7 @@ class BracuPageScaffold extends StatelessWidget {
                   Positioned(
                     bottom: -80,
                     left: -70,
-                    child: _DecorBlob(
+                    child: DecorBlob(
                       color: BracuPalette.accent.withValues(alpha: 0.10),
                       size: 220,
                     ),
@@ -946,8 +946,8 @@ class BracuEmptyState extends StatelessWidget {
   }
 }
 
-class _DecorBlob extends StatelessWidget {
-  const _DecorBlob({required this.color, required this.size});
+class DecorBlob extends StatelessWidget {
+  const DecorBlob({super.key, required this.color, required this.size});
 
   final Color color;
   final double size;

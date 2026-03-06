@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:preconnect/pages/grade_sheet_viewer.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 
+const kGradeSheetTitle = 'Grade Sheet';
+const kGradeSheetCardSubtitle = 'Latest Grade Sheet inside the app';
+const kGradeSheetViewerSubtitle = 'PDF Document';
+
 class GradeSheetCard extends StatelessWidget {
   const GradeSheetCard({
     super.key,
-    this.title = 'Grade Sheet',
-    this.subtitle = 'Latest Grade Sheet inside the app',
+    this.title = kGradeSheetTitle,
+    this.subtitle = kGradeSheetCardSubtitle,
   });
 
   final String title;

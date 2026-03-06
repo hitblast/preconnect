@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:preconnect/api/grade_sheet_service.dart';
+import 'package:preconnect/pages/shared_widgets/grade_sheet_card.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 
 class GradeSheetViewerPage extends StatefulWidget {
@@ -45,8 +46,8 @@ class _GradeSheetViewerPageState extends State<GradeSheetViewerPage> {
   @override
   Widget build(BuildContext context) {
     return BracuPageScaffold(
-      title: 'Grade Sheet',
-      subtitle: 'PDF Document',
+      title: kGradeSheetTitle,
+      subtitle: kGradeSheetViewerSubtitle,
       icon: Icons.picture_as_pdf_outlined,
       body: FutureBuilder<GradeSheetFile?>(
         future: _future,

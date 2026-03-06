@@ -564,6 +564,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         ..clear()
         ..addAll(nextVisible);
     });
+    _updatePollingStrategy();
   }
 
   List<_SeatStatusCardData> _filterCards(
@@ -625,6 +626,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         _isInitialLoading = isInitialLoading;
       }
     });
+    _updatePollingStrategy();
   }
 
   void _sortCardsByCourseAndSection(List<_SeatStatusCardData> cards) {
@@ -716,10 +718,49 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       _stopSeatStatusStream();
       return;
     }
-    _startSeatStatusStream();
+    if (!_shouldUseLiveSeatStream()) {
+      _stopSeatStatusStream();
+    } else {
+      _startSeatStatusStream();
+    }
     if (_cards.isEmpty) {
       unawaited(_refreshDetailsFromApi());
     }
+  }
+
+  bool _shouldUseLiveSeatStream() {
+    final source = _visibleCards.isNotEmpty ? _visibleCards : _cards;
+    if (source.isEmpty) return false;
+
+    final now = DateTime.now();
+    final today = normalizeWeekday(DateFormat('EEEE').format(now));
+    final nowMinutes = now.hour * 60 + now.minute;
+
+    for (final card in source) {
+      for (final entry in <SeatStatusClassSchedule>[
+        ...card.classSchedule,
+        ...card.labSchedule,
+      ]) {
+        if (normalizeWeekday(entry.day) != today) continue;
+
+        final startMinutes = BracuTime.toMinutes(entry.startTime);
+        if (startMinutes == null) continue;
+        final endMinutes = BracuTime.toMinutes(entry.endTime);
+
+        final startsWithinOneHour =
+            startMinutes >= nowMinutes && startMinutes - nowMinutes <= 60;
+        final isOngoing =
+            endMinutes != null &&
+            nowMinutes >= startMinutes &&
+            nowMinutes <= endMinutes;
+
+        if (startsWithinOneHour || isOngoing) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   Future<void> _refreshDetailsFromApi() async {

@@ -745,7 +745,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
             Positioned(
               top: -80,
               right: -60,
-              child: _DecorBlob(
+              child: DecorBlob(
                 color: _primary.withValues(alpha: 0.12),
                 size: 200,
               ),
@@ -753,7 +753,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
             Positioned(
               bottom: -90,
               left: -70,
-              child: _DecorBlob(
+              child: DecorBlob(
                 color: _accent.withValues(alpha: 0.10),
                 size: 220,
               ),
@@ -1854,25 +1854,6 @@ class _RamadanCountdownDigital extends StatelessWidget {
           if (i != units.length - 1) const SizedBox(width: 8),
         ],
       ],
-    );
-  }
-}
-
-class _DecorBlob extends StatelessWidget {
-  const _DecorBlob({required this.color, required this.size});
-
-  final Color color;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(size / 2),
-      ),
     );
   }
 }
