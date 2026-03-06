@@ -231,7 +231,7 @@ class _HeroCard extends StatelessWidget {
     return Column(
       children: [
         Container(
-          height: 210,
+          height: 164,
           width: double.infinity,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
@@ -244,37 +244,29 @@ class _HeroCard extends StatelessWidget {
             children: [
               Positioned(
                 top: 18,
-                left: 16,
-                child: _BadgeIcon(
-                  icon: Icons.school_outlined,
-                  color: BracuPalette.accent,
-                ),
-              ),
-              Positioned(
-                top: 22,
-                right: 16,
+                left: 20,
                 child: _BadgeIcon(
                   icon: Icons.schedule_outlined,
                   color: const Color(0xFF7C56FF),
                 ),
               ),
               Positioned(
-                bottom: 20,
-                left: 20,
+                top: 18,
+                right: 20,
                 child: _BadgeIcon(
-                  icon: Icons.alarm_outlined,
-                  color: const Color(0xFFEF6C35),
+                  icon: Icons.school_outlined,
+                  color: BracuPalette.accent,
                 ),
               ),
               Positioned(
-                bottom: 26,
-                right: 20,
+                bottom: 18,
+                left: 0,
+                right: 0,
                 child: _BadgeIcon(
                   icon: Icons.people_outline,
                   color: const Color(0xFF5B8DEF),
                 ),
               ),
-              _BrandLockup(isDark: isDark),
             ],
           ),
         ),
@@ -292,37 +284,6 @@ class _HeroCard extends StatelessWidget {
   }
 }
 
-class _BrandLockup extends StatelessWidget {
-  const _BrandLockup({required this.isDark});
-
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: Align(
-        alignment: Alignment.center,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Transform.translate(
-            offset: const Offset(10, 0),
-            child: Text(
-              'PreConnect',
-              style: TextStyle(
-                color: BracuPalette.textPrimary(context),
-                fontSize: 30,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.8,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _BadgeIcon extends StatelessWidget {
   const _BadgeIcon({required this.icon, required this.color});
 
@@ -331,14 +292,18 @@ class _BadgeIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.13),
-        borderRadius: BorderRadius.circular(12),
+    return Align(
+      alignment: Alignment.center,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.13),
+          shape: BoxShape.circle,
+          border: Border.all(color: color.withValues(alpha: 0.18)),
+        ),
+        child: Icon(icon, size: 20, color: color),
       ),
-      child: Icon(icon, size: 19, color: color),
     );
   }
 }
