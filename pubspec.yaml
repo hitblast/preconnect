@@ -2,7 +2,7 @@ name: preconnect
 description: "Your personalised student portal for BRAC University"
 publish_to: 'none'
 
-version: 1.4.8+202602480
+version: 1.5.0+202603000
 
 environment:
   sdk: ^3.8.1
@@ -30,7 +30,6 @@ dependencies:
   image_picker: ^1.2.1
   share_plus: ^12.0.1
   path_provider: ^2.1.5
-  flutter_pdfview: ^1.4.0+1
   in_app_update: ^4.2.5
   in_app_review: ^2.0.11
   package_info_plus: ^9.0.0
@@ -41,7 +40,6 @@ dependencies:
 
 dev_dependencies:
   flutter_lints: ^6.0.0
-  flutter_native_splash: ^2.4.7
 
 flutter_native_splash:
   color: "#EAF4FF"
