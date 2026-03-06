@@ -3,7 +3,7 @@ import 'package:preconnect/pages/grade_sheet_viewer.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 
 const kGradeSheetTitle = 'Grade Sheet';
-const kGradeSheetCardSubtitle = 'Latest Grade Sheet inside the app';
+const kGradeSheetCardSubtitle = 'Latest in-app Grade Sheet';
 const kGradeSheetViewerSubtitle = 'PDF Document';
 
 class GradeSheetCard extends StatelessWidget {

@@ -398,7 +398,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                 return const Padding(
                   padding: EdgeInsets.only(top: 28),
                   child: Center(
-                    child: BracuLoading(label: 'Loading seats...'),
+                    child: BracuLoading(label: 'Loading sections...'),
                   ),
                 );
               }

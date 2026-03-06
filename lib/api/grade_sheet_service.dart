@@ -115,20 +115,36 @@ class GradeSheetService {
 
   Future<File> _gradeSheetFile(String profileId) async {
     final dir = await getApplicationSupportDirectory();
+    final fileName = await gradeSheetFileName(profileId: profileId);
+    return File('${dir.path}/$fileName.pdf');
+  }
+
+  Future<String> gradeSheetFileName({String? profileId}) async {
     final prefs = SharedPreferencesAsync();
     final fullName = (await prefs.getString('fullName') ?? '').trim();
     final studentId = (await prefs.getString('studentId') ?? '').trim();
     final safeName = fullName
         .replaceAll(RegExp(r'[\\/:*?"<>|]+'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
+        .trim()
+        .replaceAll(' ', '_');
+    final safeStudentId = studentId
+        .replaceAll(RegExp(r'[\\/:*?"<>|]+'), '')
         .trim();
-    final fileId =
-        safeName.isNotEmpty && studentId.isNotEmpty
-        ? '${safeName}_$studentId'
-        : (safeName.isNotEmpty
-              ? safeName
-              : (studentId.isNotEmpty ? studentId : profileId));
-    return File('${dir.path}/$fileId.pdf');
+
+    if (safeName.isNotEmpty && safeStudentId.isNotEmpty) {
+      return '${safeName}_${safeStudentId}_Grade Sheet_PreConnect';
+    }
+    if (safeName.isNotEmpty) {
+      return '${safeName}_Grade Sheet_PreConnect';
+    }
+    if (safeStudentId.isNotEmpty) {
+      return '${safeStudentId}_Grade Sheet_PreConnect';
+    }
+    final fallbackId = (profileId ?? '').trim();
+    return fallbackId.isEmpty
+        ? 'Grade Sheet_PreConnect'
+        : '${fallbackId}_Grade Sheet_PreConnect';
   }
 
   Uint8List? _extractPdfBytes(Uint8List rawBytes, String rawBody) {

@@ -49,9 +49,10 @@ class _GradeSheetViewerPageState extends State<GradeSheetViewerPage> {
       _isSharing = true;
     });
     try {
+      final fileName = await GradeSheetService().gradeSheetFileName();
       await SharePlus.instance.share(
         ShareParams(
-          files: <XFile>[XFile(gradeSheet.file.path)],
+          files: <XFile>[XFile(gradeSheet.file.path, name: '$fileName.pdf')],
           text: kGradeSheetTitle,
         ),
       );

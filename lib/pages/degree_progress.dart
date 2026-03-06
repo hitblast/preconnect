@@ -8,6 +8,7 @@ import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/model/progress_info.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/all_courses.dart';
+import 'package:preconnect/pages/cgpa_calculator.dart';
 import 'package:preconnect/pages/requirement_courses.dart';
 import 'package:preconnect/pages/shared_widgets/grade_sheet_card.dart';
 import 'package:preconnect/pages/shared_widgets/progress_bar.dart';
@@ -304,40 +305,33 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _Metric(
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _Metric(
                             title: 'Total',
                             value: _formatCredit(summaryTotal),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: _Metric(
+                          const SizedBox(width: 10),
+                          _Metric(
                             title: 'Done',
                             value: _formatCredit(summaryCompleted),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: _Metric(
+                          const SizedBox(width: 10),
+                          _Metric(
                             title: 'Attempt',
                             value: _formatCredit(attemptedCredit),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: _Metric(title: 'CGPA', value: _cgpa),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: _Metric(
+                          const SizedBox(width: 10),
+                          _Metric(title: 'CGPA', value: _cgpa),
+                          const SizedBox(width: 10),
+                          _Metric(
                             title: 'Left',
                             value: _formatCredit(remainingCredit),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Row(
@@ -416,6 +410,68 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                           ),
                         ),
                         icon: const Icon(Icons.tune, size: 16),
+                        label: const Text('Open'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              BracuCard(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'CGPA Calculator',
+                              style: TextStyle(
+                                color: BracuPalette.textPrimary(context),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Based on your progress',
+                              style: TextStyle(
+                                color: BracuPalette.textSecondary(context),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => CgpaCalculatorPage(
+                                info: info,
+                                currentSections: currentSectionsForDisplay,
+                                currentCgpa: _cgpa,
+                              ),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: BracuPalette.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: const Icon(Icons.calculate_outlined, size: 16),
                         label: const Text('Open'),
                       ),
                     ],
@@ -1102,12 +1158,13 @@ class _Metric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: BracuPalette.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
+        color: BracuPalette.textSecondary(context).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
@@ -1115,17 +1172,18 @@ class _Metric extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               color: BracuPalette.textSecondary(context),
-              fontSize: 8,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 4),
           Text(
             value,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: BracuPalette.textPrimary(context),
               fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
