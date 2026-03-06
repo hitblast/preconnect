@@ -83,28 +83,31 @@ class _ExamCountdownDigital extends StatelessWidget {
     final seconds = safeSeconds % 60;
 
     Widget cell(String value, String label) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: BracuPalette.textPrimary(context),
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              fontFeatures: const [FontFeature.tabularFigures()],
+      return SizedBox(
+        width: 48,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                color: BracuPalette.textPrimary(context),
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              color: BracuPalette.textSecondary(context),
-              fontWeight: FontWeight.w600,
-              fontSize: 10,
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                color: BracuPalette.textSecondary(context),
+                fontWeight: FontWeight.w600,
+                fontSize: 10,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     }
 
@@ -115,17 +118,12 @@ class _ExamCountdownDigital extends StatelessWidget {
       );
     }
 
-    final units = <({String value, String label})>[];
-    if (days > 0) {
-      units.add((value: days.toString(), label: 'Days'));
-    }
-    if (hours > 0) {
-      units.add((value: hours.toString().padLeft(2, '0'), label: 'Hours'));
-    }
-    if (minutes > 0) {
-      units.add((value: minutes.toString().padLeft(2, '0'), label: 'Minutes'));
-    }
-    units.add((value: seconds.toString().padLeft(2, '0'), label: 'Seconds'));
+    final units = <({String value, String label})>[
+      (value: days.toString(), label: 'Days'),
+      (value: hours.toString().padLeft(2, '0'), label: 'Hours'),
+      (value: minutes.toString().padLeft(2, '0'), label: 'Minutes'),
+      (value: seconds.toString().padLeft(2, '0'), label: 'Seconds'),
+    ];
 
     return Row(
       mainAxisSize: MainAxisSize.min,

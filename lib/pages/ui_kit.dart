@@ -901,7 +901,32 @@ class BracuLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.shrink();
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.4,
+                color: BracuPalette.primary,
+              ),
+            ),
+            if (label.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: BracuPalette.textSecondary(context)),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 

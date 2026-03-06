@@ -254,9 +254,7 @@ class _CaptiveWifiPageState extends State<CaptiveWifiPage> {
 
   CaptiveWifiApiStatus? _statusFromNetwork(AndroidNetworkStatus? status) {
     if (status == null) return null;
-    final rawUrl = (status.captiveWifiUrl ?? '').trim();
-    if (rawUrl.isEmpty) return null;
-    final parsedUrl = _validatedHttpUri(rawUrl);
+    final parsedUrl = _currentPortalUriFromStatus(status);
     if (parsedUrl == null) return null;
 
     final expiry = status.sessionExpiryTimeMillis;
@@ -544,7 +542,19 @@ class _CaptiveWifiPageState extends State<CaptiveWifiPage> {
   Future<Uri?> _currentCaptiveWifiApiUri() async {
     if (!AndroidNetworkAssist.isSupported) return null;
     final status = await AndroidNetworkAssist.getNetworkStatus();
-    return _validatedHttpUri(status?.captiveWifiUrl?.trim() ?? '');
+    if (status == null) return null;
+    return _currentPortalUriFromStatus(status);
+  }
+
+  Uri? _currentPortalUriFromStatus(AndroidNetworkStatus status) {
+    final parsedUrl = _validatedHttpUri(status.captiveWifiUrl?.trim() ?? '');
+    if (parsedUrl != null) {
+      return parsedUrl;
+    }
+    if (status.transport == 'wifi' && status.captive) {
+      return CaptiveWifiHttpService.defaultProbeUri;
+    }
+    return null;
   }
 
   _CaptiveWifiForm? _extractLoginForm({

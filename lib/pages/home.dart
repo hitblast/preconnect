@@ -5,9 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/auth_service.dart';
 import 'package:preconnect/api/profile_service.dart';
-import 'package:preconnect/api/progress_service.dart';
 import 'package:preconnect/api/schedule_service.dart';
-import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/app.dart';
 import 'package:preconnect/pages/class_schedule.dart';
 import 'package:preconnect/pages/exam_schedule.dart';
@@ -72,7 +70,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  HomeTab selectedTab = HomeTab.settings;
+  HomeTab selectedTab = HomeTab.dashboard;
   StreamSubscription<HomeTab>? _shortcutTabSubscription;
 
   late final Map<HomeTab, WidgetBuilder> pages = {
@@ -93,7 +91,7 @@ class _HomePageState extends State<HomePage> {
     HomeTab.devs: (_) => const DevsPage(),
   };
   late final List<HomeTab> _tabOrder = HomeTab.values;
-  final Set<HomeTab> _builtTabs = {HomeTab.settings};
+  final Set<HomeTab> _builtTabs = {HomeTab.dashboard};
 
   @override
   void initState() {
@@ -110,10 +108,6 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
       _setTab(tab);
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || selectedTab != HomeTab.settings) return;
-      _setTab(HomeTab.dashboard);
-    });
   }
 
   @override
@@ -123,6 +117,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _setTab(HomeTab tab) {
+    if (selectedTab == tab) {
+      HomeTabRegistry.setActive(tab);
+      return;
+    }
     final shouldJumpClass = tab == HomeTab.studentSchedule;
     final shouldJumpExam = tab == HomeTab.examSchedule;
     setState(() {
@@ -335,8 +333,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
       });
     }
     unawaited(_refreshCaptiveStatus());
-    unawaited(_preloadDegreeProgress());
-    unawaited(_preloadSeatStatus());
     RefreshBus.instance.addListener(_onRefreshSignal);
   }
 
@@ -354,12 +350,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
       return;
     }
     if (RefreshBus.instance.isReason('home_card_settings_changed')) {
-      setState(() {
-        _future = _loadData().then((data) {
-          _latestData = data;
-          return data;
-        });
-      });
+      unawaited(_reloadCardVisibilityOnly());
       unawaited(_refreshCaptiveStatus());
       return;
     }
@@ -368,27 +359,44 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     }
   }
 
+  Future<void> _reloadCardVisibilityOnly() async {
+    final visibility = await HomeCardPreferences.load();
+    if (!mounted) return;
+    setState(() {
+      if (_latestData != null) {
+        _latestData = _latestData!.copyWith(cardVisibility: visibility);
+      }
+    });
+  }
+
   Future<_HomeData> _loadData({bool forceRefresh = false}) async {
+    final cardVisibility = await HomeCardPreferences.load();
+    final needsSchedule =
+        cardVisibility.showTodaySchedule || cardVisibility.showExamCountdownCard;
+    final needsRamadan =
+        cardVisibility.showRamadanCard || cardVisibility.showTodaySchedule;
+    final needsHoliday = cardVisibility.showTodaySchedule;
+
     final profileFuture = forceRefresh
         ? ProfileService().fetchProfile()
         : ProfileService().getProfile();
-    final scheduleFuture = forceRefresh
-        ? ScheduleService().fetchStudentSchedule()
-        : ScheduleService().getStudentSchedule();
-    final ramadanFuture = RamadanTiming.getRamadanStatus(
-      forceRefresh: forceRefresh,
-    );
-    final holidayFuture = HolidayTiming.getTodayStatus(
-      forceRefresh: forceRefresh,
-    );
-    final cardVisibilityFuture = HomeCardPreferences.load();
+    final scheduleFuture = needsSchedule
+        ? (forceRefresh
+              ? ScheduleService().fetchStudentSchedule()
+              : ScheduleService().getStudentSchedule())
+        : Future<String?>.value(null);
+    final ramadanFuture = needsRamadan
+        ? RamadanTiming.getRamadanStatus(forceRefresh: forceRefresh)
+        : Future<RamadanStatus>.value(const RamadanStatus(isRamadan: false));
+    final holidayFuture = needsHoliday
+        ? HolidayTiming.getTodayStatus(forceRefresh: forceRefresh)
+        : Future<HolidayStatus>.value(HolidayStatus.empty);
 
     final results = await Future.wait<dynamic>([
       profileFuture,
       scheduleFuture,
       ramadanFuture,
       holidayFuture,
-      cardVisibilityFuture,
     ]);
 
     Map<String, String?>? profile = results[0] as Map<String, String?>?;
@@ -396,11 +404,16 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     final ramadan = results[2] as RamadanStatus;
     final isRamadan = ramadan.isRamadan;
     final holidayStatus = results[3] as HolidayStatus;
-    final cardVisibility = results[4] as HomeCardVisibility;
 
-    if (!forceRefresh) {
-      profile ??= await ProfileService().fetchProfile();
-      scheduleJson ??= await ScheduleService().fetchStudentSchedule();
+    if (!forceRefresh && (profile == null || (needsSchedule && scheduleJson == null))) {
+      final fallbackResults = await Future.wait<dynamic>([
+        profile == null ? ProfileService().fetchProfile() : Future.value(profile),
+        scheduleJson == null && needsSchedule
+            ? ScheduleService().fetchStudentSchedule()
+            : Future.value(scheduleJson),
+      ]);
+      profile = fallbackResults[0] as Map<String, String?>?;
+      scheduleJson = fallbackResults[1] as String?;
     }
 
     final photoUrl = ApiConfig.photoUrl(profile?['photoFilePath']);
@@ -444,18 +457,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     );
   }
 
-  Future<void> _preloadDegreeProgress({bool forceRefresh = false}) async {
-    if (forceRefresh) {
-      await ProgressService().fetchProgress();
-      return;
-    }
-    await ProgressService().getProgress();
-  }
-
-  Future<void> _preloadSeatStatus() async {
-    await SeatStatusService().preloadSeatStatusCache();
-  }
-
   Future<void> _handleRefresh({bool notify = true}) async {
     if (_isRefreshing) return;
     if (!await ensureOnline(context, notify: notify)) {
@@ -468,7 +469,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
       setState(() {
         _latestData = fresh;
       });
-      await _preloadSeatStatus();
       unawaited(_refreshCaptiveStatus());
       if (notify) {
         RefreshBus.instance.notify(reason: 'home_dashboard');
@@ -490,12 +490,17 @@ class _HomeDashboardState extends State<_HomeDashboard> {
           return;
         }
       }
-      if (!mounted) return;
+      const next = CaptiveWifiStatus(
+        state: CaptiveWifiState.unknown,
+        httpStatusCode: null,
+      );
+      if (!mounted ||
+          (_captiveStatus?.state == next.state &&
+              _captiveStatus?.httpStatusCode == next.httpStatusCode)) {
+        return;
+      }
       setState(() {
-        _captiveStatus = const CaptiveWifiStatus(
-          state: CaptiveWifiState.unknown,
-          httpStatusCode: null,
-        );
+        _captiveStatus = next;
       });
     } finally {
       _isCheckingCaptive = false;
@@ -514,6 +519,10 @@ class _HomeDashboardState extends State<_HomeDashboard> {
           : CaptiveWifiState.offline,
       httpStatusCode: null,
     );
+    if (_captiveStatus?.state == mapped.state &&
+        _captiveStatus?.httpStatusCode == mapped.httpStatusCode) {
+      return;
+    }
     setState(() {
       _captiveStatus = mapped;
     });
@@ -766,24 +775,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                         sehri: ramadan.sehriEndsAt,
                         iftar: ramadan.iftarAt,
                       );
-                      final orderedPrayerKeys = const [
-                        'Fajr',
-                        'Dhuhr',
-                        'Asr',
-                        'Maghrib',
-                        'Isha',
-                      ];
-                      final prayerEntries = <(String, String)>[];
-                      for (final key in orderedPrayerKeys) {
-                        final value = ramadan.prayerTimes[key];
-                        if (value == null || value.trim().isEmpty) continue;
-                        prayerEntries.add((key, value));
-                      }
-                      for (final entry in ramadan.prayerTimes.entries) {
-                        if (orderedPrayerKeys.contains(entry.key)) continue;
-                        if (entry.value.trim().isEmpty) continue;
-                        prayerEntries.add((entry.key, entry.value));
-                      }
                       final holidayStatus =
                           data?.holiday ?? HolidayStatus.empty;
                       final cardVisibility =
@@ -1022,40 +1013,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                         ),
                                         const SizedBox(height: 12),
                                       ],
-                                      if (prayerEntries.isNotEmpty)
-                                        Column(
-                                          children: [
-                                            for (
-                                              var i = 0;
-                                              i < prayerEntries.length;
-                                              i++
-                                            ) ...[
-                                              _RamadanTimeRow(
-                                                label: prayerEntries[i].$1,
-                                                value: BracuTime.format(
-                                                  prayerEntries[i].$2,
-                                                ),
-                                              ),
-                                              if (i != prayerEntries.length - 1)
-                                                Divider(
-                                                  height: 10,
-                                                  thickness: 1,
-                                                  color:
-                                                      BracuPalette.textSecondary(
-                                                        context,
-                                                      ).withValues(
-                                                        alpha:
-                                                            Theme.of(
-                                                                  context,
-                                                                ).brightness ==
-                                                                Brightness.dark
-                                                            ? 0.20
-                                                            : 0.12,
-                                                      ),
-                                                ),
-                                            ],
-                                          ],
-                                        ),
                                     ],
                                   ),
                                 ),
@@ -1708,38 +1665,6 @@ class _ScheduleTile extends StatelessWidget {
   }
 }
 
-class _RamadanTimeRow extends StatelessWidget {
-  const _RamadanTimeRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: BracuPalette.textPrimary(context),
-          ),
-        ),
-        const Spacer(),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: BracuPalette.textSecondary(context),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _RamadanHeroTime extends StatelessWidget {
   const _RamadanHeroTime({
     required this.label,
@@ -1887,39 +1812,39 @@ class _RamadanCountdownDigital extends StatelessWidget {
     final seconds = safeSeconds % 60;
 
     Widget cell(String value, String label) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: BracuPalette.textPrimary(context),
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              fontFeatures: const [FontFeature.tabularFigures()],
+      return SizedBox(
+        width: 52,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                color: BracuPalette.textPrimary(context),
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              color: BracuPalette.textSecondary(context),
-              fontWeight: FontWeight.w600,
-              fontSize: 10,
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                color: BracuPalette.textSecondary(context),
+                fontWeight: FontWeight.w600,
+                fontSize: 10,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     }
 
-    final units = <({String value, String label})>[];
-    if (hours > 0) {
-      units.add((value: hours.toString().padLeft(2, '0'), label: 'Hours'));
-    }
-    if (minutes > 0) {
-      units.add((value: minutes.toString().padLeft(2, '0'), label: 'Minutes'));
-    }
-    units.add((value: seconds.toString().padLeft(2, '0'), label: 'Seconds'));
+    final units = <({String value, String label})>[
+      (value: hours.toString().padLeft(2, '0'), label: 'Hours'),
+      (value: minutes.toString().padLeft(2, '0'), label: 'Minutes'),
+      (value: seconds.toString().padLeft(2, '0'), label: 'Seconds'),
+    ];
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -1972,6 +1897,19 @@ class _HomeData {
   final RamadanStatus ramadan;
   final HolidayStatus holiday;
   final HomeCardVisibility cardVisibility;
+
+  _HomeData copyWith({HomeCardVisibility? cardVisibility}) {
+    return _HomeData(
+      profile: profile,
+      entries: entries,
+      photoUrl: photoUrl,
+      sections: sections,
+      isRamadan: isRamadan,
+      ramadan: ramadan,
+      holiday: holiday,
+      cardVisibility: cardVisibility ?? this.cardVisibility,
+    );
+  }
 }
 
 class _ScheduleEntry {

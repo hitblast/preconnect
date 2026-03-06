@@ -46,7 +46,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _setShowRamadanCard(bool value) async {
     await _setVisibility(
-      label: 'Ramadan & Prayer Times',
+      label: 'Ramadan Times',
       value: value,
       applyLocal: () => _showRamadanCard = value,
       persist: HomeCardPreferences.setShowRamadanCard,
@@ -210,8 +210,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   _ToggleRow(
-                    title: 'Ramadan & Prayer Times',
-                    subtitle: 'Show Ramadan and prayer times',
+                    title: 'Ramadan Times',
+                    subtitle: 'Show Sehri and Iftar times',
                     value: _showRamadanCard,
                     onChanged: _setShowRamadanCard,
                   ),

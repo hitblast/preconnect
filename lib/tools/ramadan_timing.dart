@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/tools/time_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -10,14 +11,12 @@ class RamadanStatus {
     this.ramadanDay,
     this.sehriEndsAt,
     this.iftarAt,
-    this.prayerTimes = const {},
   });
 
   final bool isRamadan;
   final int? ramadanDay;
   final String? sehriEndsAt;
   final String? iftarAt;
-  final Map<String, String> prayerTimes;
 
   Map<String, dynamic> toCacheJson() {
     return <String, dynamic>{
@@ -25,7 +24,6 @@ class RamadanStatus {
       'ramadanDay': ramadanDay,
       'sehriEndsAt': sehriEndsAt,
       'iftarAt': iftarAt,
-      'prayerTimes': prayerTimes,
     };
   }
 
@@ -42,7 +40,7 @@ class RamadanStatus {
 class RamadanTiming {
   RamadanTiming._();
 
-  static const String _statusUrl = 'https://preconnect.app/api/ramadan';
+  static String get _statusUrl => '${ApiConfig.seatStatusProxyBase}/ramadan';
   static const Duration _requestTimeout = Duration(seconds: 2);
   static const Duration _cacheTtl = Duration(hours: 6);
   static const String _prefsStatusKey = 'ramadan_status_json';
@@ -215,7 +213,6 @@ class RamadanTiming {
         ramadanDay: day > 0 ? day : null,
         sehriEndsAt: cached?.sehriEndsAt,
         iftarAt: cached?.iftarAt,
-        prayerTimes: cached?.prayerTimes ?? const {},
       );
     }
 
@@ -260,23 +257,12 @@ class RamadanTiming {
     };
     final sehriEndsAt = _asTimeString(payload['sehriEndsAt']);
     final iftarAt = _asTimeString(payload['iftarAt']);
-    final prayerTimes = <String, String>{};
-    final prayerTimesRaw = payload['prayerTimes'];
-    if (prayerTimesRaw is Map) {
-      for (final entry in prayerTimesRaw.entries) {
-        final key = entry.key?.toString().trim() ?? '';
-        final value = _asTimeString(entry.value);
-        if (key.isEmpty || value == null) continue;
-        prayerTimes[key] = value;
-      }
-    }
 
     return RamadanStatus(
       isRamadan: isRamadan,
       ramadanDay: ramadanDay,
       sehriEndsAt: sehriEndsAt,
       iftarAt: iftarAt,
-      prayerTimes: prayerTimes,
     );
   }
 
@@ -290,7 +276,6 @@ class RamadanTiming {
   static bool _isCompleteStatus(RamadanStatus? status) {
     if (status == null) return false;
     if (!status.isRamadan) return true;
-    if (status.prayerTimes.isNotEmpty) return true;
     if (status.sehriEndsAt != null || status.iftarAt != null) return true;
     return false;
   }

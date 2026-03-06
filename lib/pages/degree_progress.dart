@@ -399,9 +399,7 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                 ),
               ),
               const SizedBox(height: 14),
-              const GradeSheetCard(
-                subtitle: 'Latest Grade Sheet inside the app',
-              ),
+              const GradeSheetCard(),
               const SizedBox(height: 14),
               if (info.headerProgress.isNotEmpty) ...[
                 const BracuSectionTitle(title: 'Requirement Progress'),

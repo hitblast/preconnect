@@ -360,36 +360,43 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 
   @override
   Widget build(BuildContext context) {
-    final content = _isInitialLoading
-        ? BracuRefreshPlaceholder(
+    final showLoadingState =
+        _isInitialLoading || (_cards.isEmpty && _isDetailsRefreshing);
+    final hasCards = _cards.isNotEmpty;
+    final hasVisibleCards = _visibleCards.isNotEmpty;
+    final itemCount = hasVisibleCards ? _visibleCards.length + 1 : 2;
+
+    return BracuPageScaffold(
+      title: 'Seat Status',
+      subtitle: 'Live Sections',
+      icon: Icons.insights_outlined,
+      body: Stack(
+        children: [
+          BracuRefreshListBuilder(
             onRefresh: _handleRefresh,
-            child: const BracuLoading(label: 'Loading seats...'),
-          )
-        : _cards.isEmpty
-        ? BracuRefreshListBuilder(
-            onRefresh: _handleRefresh,
-            itemCount: 2,
+            itemCount: itemCount,
             itemBuilder: (context, index) {
               if (index == 0) {
                 return _buildFilterHeader(context);
               }
-              return const BracuCard(
-                child: BracuEmptyState(message: 'No section data available'),
-              );
-            },
-          )
-        : BracuRefreshListBuilder(
-            onRefresh: _handleRefresh,
-            itemCount: _visibleCards.isEmpty ? 2 : _visibleCards.length + 1,
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                return _buildFilterHeader(context);
-              }
-              if (_visibleCards.isEmpty) {
-                return const BracuCard(
-                  child: BracuEmptyState(
-                    message: 'No matching section found',
+              if (showLoadingState) {
+                return const Padding(
+                  padding: EdgeInsets.only(top: 28),
+                  child: Center(
+                    child: BracuLoading(label: 'Loading seats...'),
                   ),
+                );
+              }
+              if (!hasCards) {
+                return const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: BracuEmptyState(message: 'No section data available'),
+                );
+              }
+              if (!hasVisibleCards) {
+                return const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: BracuEmptyState(message: 'No matching section found'),
                 );
               }
               final item = _visibleCards[index - 1];
@@ -398,15 +405,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                 child: _SeatStatusCard(item: item),
               );
             },
-          );
-
-    return BracuPageScaffold(
-      title: 'Seat Status',
-      subtitle: 'Live Sections',
-      icon: Icons.insights_outlined,
-      body: Stack(
-        children: [
-          content,
+          ),
           if (_isSavingCache)
             Positioned.fill(
               child: ColoredBox(
@@ -550,6 +549,13 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       availableOnly: resolvedAvailableOnly,
       dayFilter: resolvedDayFilter,
     );
+    final filtersChanged =
+        resolvedAvailableOnly != _availableOnly ||
+        resolvedDayFilter != _selectedDayFilter ||
+        resolvedQuery != _searchQuery;
+    if (!filtersChanged && !_areCardListsDifferent(_visibleCards, nextVisible)) {
+      return;
+    }
     setState(() {
       _availableOnly = resolvedAvailableOnly;
       _selectedDayFilter = resolvedDayFilter;
@@ -601,6 +607,13 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       dayFilter: _selectedDayFilter,
     );
     if (!mounted) return;
+    final cardsChanged = _areCardListsDifferent(_cards, nextCards);
+    final visibleChanged = _areCardListsDifferent(_visibleCards, nextVisible);
+    final loadingChanged =
+        isInitialLoading != null && _isInitialLoading != isInitialLoading;
+    if (!cardsChanged && !visibleChanged && !loadingChanged) {
+      return;
+    }
     setState(() {
       _cards
         ..clear()
@@ -711,7 +724,13 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 
   Future<void> _refreshDetailsFromApi() async {
     if (_isDetailsRefreshing) return;
-    _isDetailsRefreshing = true;
+    if (mounted && _cards.isEmpty) {
+      setState(() {
+        _isDetailsRefreshing = true;
+      });
+    } else {
+      _isDetailsRefreshing = true;
+    }
     try {
       final details = await _service.fetchAllSectionsDetailsFromApi();
       if (details.isNotEmpty) {
@@ -724,7 +743,13 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         });
       }
     } finally {
-      _isDetailsRefreshing = false;
+      if (mounted && _cards.isEmpty) {
+        setState(() {
+          _isDetailsRefreshing = false;
+        });
+      } else {
+        _isDetailsRefreshing = false;
+      }
     }
   }
 
