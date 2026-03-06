@@ -48,6 +48,9 @@ class ApiConfig {
   static String programCurriculumsPath(String portfolioId) =>
       '/reg/v1/student-portfolio/$portfolioId/program-curriculums';
 
+  static String gradeSheetPath(String profileId) =>
+      '/data/document/grade-sheet-web?id=$profileId';
+
   static const Map<String, String> apiHeaders = {
     'X-REALM': 'bracu',
     'Accept': 'application/json',

@@ -9,6 +9,7 @@ import 'package:preconnect/model/progress_info.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/all_courses.dart';
 import 'package:preconnect/pages/requirement_courses.dart';
+import 'package:preconnect/pages/shared_widgets/grade_sheet_card.dart';
 import 'package:preconnect/pages/shared_widgets/progress_bar.dart';
 import 'package:preconnect/pages/shared_widgets/section_badge.dart';
 import 'package:preconnect/pages/ui_kit.dart';
@@ -396,6 +397,10 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 14),
+              const GradeSheetCard(
+                subtitle: 'Latest Grade Sheet inside the app',
               ),
               const SizedBox(height: 14),
               if (info.headerProgress.isNotEmpty) ...[
@@ -1026,10 +1031,7 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
 enum _WishlistBasis { prerequisiteSatisfied, noPrerequisite }
 
 class _WishlistCourse {
-  const _WishlistCourse({
-    required this.course,
-    required this.basis,
-  });
+  const _WishlistCourse({required this.course, required this.basis});
 
   final CurriculumCourse course;
   final _WishlistBasis basis;
