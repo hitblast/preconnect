@@ -247,7 +247,6 @@ class _StudentProfileState extends State<StudentProfile>
           CardSection(
             profile: _profile,
             photoUrl: _photoUrl,
-            cachedImageFile: _cachedImageFile,
           ),
           const SizedBox(height: 18),
           AcademicSummaryCard(

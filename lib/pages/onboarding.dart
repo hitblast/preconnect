@@ -263,7 +263,7 @@ class _HeroCard extends StatelessWidget {
                 left: 0,
                 right: 0,
                 child: _BadgeIcon(
-                  icon: Icons.people_outline,
+                  icon: Icons.insights_outlined,
                   color: const Color(0xFF5B8DEF),
                 ),
               ),

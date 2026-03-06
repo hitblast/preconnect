@@ -6,25 +6,21 @@ class StudentOverviewCard extends StatelessWidget {
     super.key,
     required this.studentId,
     required this.shortCode,
-    required this.phoneNumber,
     required this.department,
     required this.currentSemester,
     required this.currentSessionSemesterId,
     required this.onOpenSettings,
     required this.onLogout,
-    this.showStudentContactCards = true,
     this.countdown,
   });
 
   final String studentId;
   final String shortCode;
-  final String phoneNumber;
   final String department;
   final String currentSemester;
   final String currentSessionSemesterId;
   final VoidCallback onOpenSettings;
   final Future<void> Function() onLogout;
-  final bool showStudentContactCards;
   final Widget? countdown;
 
   @override
@@ -63,39 +59,14 @@ class StudentOverviewCard extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (showStudentContactCards) ...[
-                  _OverviewHeader(
-                    isDark: isDark,
-                    studentId: studentId,
-                    shortCode: shortCode,
-                    department: department,
-                    currentSemester: currentSemester,
-                    currentSessionSemesterId: currentSessionSemesterId,
-                  ),
-                  const SizedBox(height: 12),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final half = (constraints.maxWidth - 12) / 2;
-                      return Row(
-                        children: [
-                          _OverviewTile(
-                            label: 'Student ID',
-                            value: studentId,
-                            width: half,
-                            enableCopy: true,
-                          ),
-                          const SizedBox(width: 12),
-                          _OverviewTile(
-                            label: 'Phone Number',
-                            value: phoneNumber,
-                            width: half,
-                            enableCopy: true,
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
+                _OverviewHeader(
+                  isDark: isDark,
+                  studentId: studentId,
+                  shortCode: shortCode,
+                  department: department,
+                  currentSemester: currentSemester,
+                  currentSessionSemesterId: currentSessionSemesterId,
+                ),
                 if (countdown != null) ...[
                   const SizedBox(height: 10),
                   countdown!,
@@ -216,74 +187,5 @@ class _OverviewHeader extends StatelessWidget {
         : (studentId.isEmpty ? '' : studentId);
     final right = semester.isEmpty ? '' : semester;
     return '${left.toUpperCase()} ${right.toUpperCase()}'.trim();
-  }
-}
-
-class _OverviewTile extends StatelessWidget {
-  const _OverviewTile({
-    required this.label,
-    required this.value,
-    required this.width,
-    this.enableCopy = false,
-  });
-
-  final String label;
-  final String value;
-  final double width;
-  final bool enableCopy;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tileColor = BracuPalette.card(context);
-    final baseBorderColor = BracuPalette.textSecondary(
-      context,
-    ).withValues(alpha: isDark ? 0.35 : 0.18);
-    return Container(
-      width: width,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: tileColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: baseBorderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: TextStyle(
-              color: BracuPalette.textSecondary(context),
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 6),
-          enableCopy
-              ? GestureDetector(
-                  onTap: () => copyToClipboard(context, value),
-                  child: Text(
-                    value.toUpperCase(),
-                    style: TextStyle(
-                      color: BracuPalette.textPrimary(context),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                    ),
-                  ),
-                )
-              : Text(
-                  value.toUpperCase(),
-                  style: TextStyle(
-                    color: BracuPalette.textPrimary(context),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    height: 1.2,
-                  ),
-                ),
-        ],
-      ),
-    );
   }
 }

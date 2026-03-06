@@ -13,6 +13,8 @@ class PersonalInfoCard extends StatelessWidget {
       context,
     ).withValues(alpha: isDark ? 0.35 : 0.18);
     final rows = <({String label, String value})>[
+      (label: 'Student ID', value: (profile['studentId'] ?? '').trim()),
+      (label: 'Phone Number', value: (profile['mobileNo'] ?? '').trim()),
       (
         label: 'Permanent Address',
         value: (profile['permanentAddress'] ?? '').trim(),
@@ -71,6 +73,8 @@ class PersonalInfoCard extends StatelessWidget {
               label: rows[i].label,
               value: rows[i].value,
               enableCopy:
+                  rows[i].label == 'Student ID' ||
+                  rows[i].label == 'Phone Number' ||
                   rows[i].label == 'Father Mobile' ||
                   rows[i].label == 'Mother Mobile' ||
                   rows[i].label == 'Local Guardian Mobile',

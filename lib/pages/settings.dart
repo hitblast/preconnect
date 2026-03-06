@@ -17,9 +17,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _showQuickAccessSection = true;
   bool _showRamadanCard = true;
   bool _showExamCountdownCard = true;
-  bool _showExamCountdownDaysOnly = false;
   bool _showTodaySchedule = true;
-  bool _showStudentContactCards = true;
   bool _appLockEnabled = false;
 
   @override
@@ -36,9 +34,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _showQuickAccessSection = visibility.showQuickAccessSection;
       _showRamadanCard = visibility.showRamadanCard;
       _showExamCountdownCard = visibility.showExamCountdownCard;
-      _showExamCountdownDaysOnly = visibility.showExamCountdownDaysOnly;
       _showTodaySchedule = visibility.showTodaySchedule;
-      _showStudentContactCards = visibility.showStudentContactCards;
       _appLockEnabled = appLockEnabled;
       _isLoading = false;
     });
@@ -71,30 +67,12 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Future<void> _setShowExamCountdownDaysOnly(bool value) async {
-    await _setVisibility(
-      label: 'Exam Days Only',
-      value: value,
-      applyLocal: () => _showExamCountdownDaysOnly = value,
-      persist: HomeCardPreferences.setShowExamCountdownDaysOnly,
-    );
-  }
-
   Future<void> _setShowTodaySchedule(bool value) async {
     await _setVisibility(
       label: 'Today\'s Schedule',
       value: value,
       applyLocal: () => _showTodaySchedule = value,
       persist: HomeCardPreferences.setShowTodaySchedule,
-    );
-  }
-
-  Future<void> _setShowStudentContactCards(bool value) async {
-    await _setVisibility(
-      label: 'Student Info',
-      value: value,
-      applyLocal: () => _showStudentContactCards = value,
-      persist: HomeCardPreferences.setShowStudentContactCards,
     );
   }
 
@@ -193,23 +171,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   _ToggleRow(
-                    title: 'Exam Days Only',
-                    subtitle: 'Show only days in countdown',
-                    value: _showExamCountdownDaysOnly,
-                    onChanged: _showExamCountdownCard
-                        ? _setShowExamCountdownDaysOnly
-                        : null,
-                  ),
-                  Divider(
-                    height: 12,
-                    thickness: 1,
-                    color: BracuPalette.textSecondary(context).withValues(
-                      alpha: Theme.of(context).brightness == Brightness.dark
-                          ? 0.20
-                          : 0.12,
-                    ),
-                  ),
-                  _ToggleRow(
                     title: 'Ramadan Times',
                     subtitle: 'Show Sehri and Iftar times',
                     value: _showRamadanCard,
@@ -226,7 +187,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   _ToggleRow(
                     title: 'Today\'s Schedule',
-                    subtitle: 'Show today heading and class list',
+                    subtitle: 'Show today\'s class schedule',
                     value: _showTodaySchedule,
                     onChanged: _setShowTodaySchedule,
                   ),
@@ -240,23 +201,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   _ToggleRow(
-                    title: 'Student Info',
-                    subtitle: 'Show student info and phone number',
-                    value: _showStudentContactCards,
-                    onChanged: _setShowStudentContactCards,
-                  ),
-                  Divider(
-                    height: 12,
-                    thickness: 1,
-                    color: BracuPalette.textSecondary(context).withValues(
-                      alpha: Theme.of(context).brightness == Brightness.dark
-                          ? 0.20
-                          : 0.12,
-                    ),
-                  ),
-                  _ToggleRow(
                     title: 'Quick Access',
-                    subtitle: 'Show quick shortcuts section',
+                    subtitle: 'Show quick shortcuts on home',
                     value: _showQuickAccessSection,
                     onChanged: _setShowQuickAccessSection,
                   ),

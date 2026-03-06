@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:barcode_widget/barcode_widget.dart';
@@ -13,12 +12,10 @@ class CardSection extends StatefulWidget {
     super.key,
     required this.profile,
     required this.photoUrl,
-    this.cachedImageFile,
   });
 
   final Map<String, String?>? profile;
   final String? photoUrl;
-  final File? cachedImageFile;
 
   @override
   State<CardSection> createState() => _CardSectionState();
@@ -26,19 +23,8 @@ class CardSection extends StatefulWidget {
 
 class _CardSectionState extends State<CardSection> {
   bool _showBack = false;
-  Axis _flipAxis = Axis.horizontal;
-  double _flipDirection = 1;
 
-  void _toggleCard({
-    Axis axis = Axis.horizontal,
-    double direction = 1,
-  }) {
-    setState(() {
-      _flipAxis = axis;
-      _flipDirection = direction == 0 ? 1 : direction.sign;
-      _showBack = !_showBack;
-    });
-  }
+  void _toggleCard() => setState(() => _showBack = !_showBack);
 
   @override
   Widget build(BuildContext context) {
@@ -66,26 +52,6 @@ class _CardSectionState extends State<CardSection> {
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => _toggleCard(),
-          onDoubleTap: () => _toggleCard(),
-          onPanEnd: (details) {
-            final dx = details.velocity.pixelsPerSecond.dx;
-            final dy = details.velocity.pixelsPerSecond.dy;
-            final absDx = dx.abs();
-            final absDy = dy.abs();
-            const minVelocity = 40.0;
-            if (absDx < minVelocity && absDy < minVelocity) return;
-            if (absDx >= absDy) {
-              _toggleCard(
-                axis: Axis.horizontal,
-                direction: dx >= 0 ? 1 : -1,
-              );
-              return;
-            }
-            _toggleCard(
-              axis: Axis.vertical,
-              direction: dy >= 0 ? 1 : -1,
-            );
-          },
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 380),
             switchInCurve: Curves.easeInOutCubic,
@@ -112,16 +78,7 @@ class _CardSectionState extends State<CardSection> {
                     alignment: Alignment.center,
                     transform: Matrix4.identity()
                       ..setEntry(3, 2, 0.0015)
-                      ..rotateY(
-                        _flipAxis == Axis.horizontal
-                            ? rotation.value * _flipDirection
-                            : 0,
-                      )
-                      ..rotateX(
-                        _flipAxis == Axis.vertical
-                            ? rotation.value * _flipDirection
-                            : 0,
-                      ),
+                      ..rotateY(rotation.value),
                     child: builtChild,
                   );
                 },

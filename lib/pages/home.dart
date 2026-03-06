@@ -834,7 +834,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                             StudentOverviewCard(
                               studentId: profile['studentId'] ?? '',
                               shortCode: profile['shortCode'] ?? '',
-                              phoneNumber: profile['mobileNo'] ?? '',
                               department: profile['departmentName'] ?? '',
                               currentSemester: profile['currentSemester'] ?? '',
                               currentSessionSemesterId:
@@ -842,8 +841,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                               onOpenSettings: () =>
                                   widget.onNavigate(HomeTab.settings),
                               onLogout: widget.onLogout,
-                              showStudentContactCards:
-                                  cardVisibility.showStudentContactCards,
                               countdown:
                                   !cardVisibility.showExamCountdownCard ||
                                       nextExam == null
@@ -862,8 +859,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                             ? '${nextExam.courseCode} ${nextExam.type} Exam'
                                             : '${nextExam.type} Exam',
                                         targetDateTime: nextExam.time,
-                                        daysOnly: cardVisibility
-                                            .showExamCountdownDaysOnly,
                                       ),
                                     ),
                             ),
