@@ -218,7 +218,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       sectionId: sectionId,
       courseCode: 'SEC$sectionId',
       sectionName: '--',
-      courseName: 'Loading section details...',
+      courseName: 'Loading...',
       facultyInitial: 'TBA',
       facultyName: '',
       facultyEmail: '',
@@ -398,7 +398,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                 return const Padding(
                   padding: EdgeInsets.only(top: 28),
                   child: Center(
-                    child: BracuLoading(label: 'Loading sections...'),
+                    child: BracuLoading(label: 'Loading...'),
                   ),
                 );
               }

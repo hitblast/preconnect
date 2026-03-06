@@ -218,11 +218,11 @@ jobs:
 
       - name: Build Android APK (Release)
         if: matrix.platform == 'android' && steps.android_signing.outputs.enabled == 'true'
-        run: flutter build apk --release --build-name ${{ needs.prepare-version.outputs.version_name }} --build-number ${{ needs.prepare-version.outputs.version_code }} --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
+        run: flutter build apk --release --target-platform android-arm64 --build-name ${{ needs.prepare-version.outputs.version_name }} --build-number ${{ needs.prepare-version.outputs.version_code }} --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
 
       - name: Build Android AAB (Release)
         if: matrix.platform == 'android' && steps.android_signing.outputs.enabled == 'true'
-        run: flutter build appbundle --release --build-name ${{ needs.prepare-version.outputs.version_name }} --build-number ${{ needs.prepare-version.outputs.version_code }} --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
+        run: flutter build appbundle --release --target-platform android-arm64 --build-name ${{ needs.prepare-version.outputs.version_name }} --build-number ${{ needs.prepare-version.outputs.version_code }} --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
 
       - name: Build iOS App (Release, No Codesign)
         if: matrix.platform == 'ios'

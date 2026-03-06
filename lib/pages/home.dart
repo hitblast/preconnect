@@ -372,7 +372,8 @@ class _HomeDashboardState extends State<_HomeDashboard> {
   Future<_HomeData> _loadData({bool forceRefresh = false}) async {
     final cardVisibility = await HomeCardPreferences.load();
     final needsSchedule =
-        cardVisibility.showTodaySchedule || cardVisibility.showExamCountdownCard;
+        cardVisibility.showTodaySchedule ||
+        cardVisibility.showExamCountdownCard;
     final needsRamadan =
         cardVisibility.showRamadanCard || cardVisibility.showTodaySchedule;
     final needsHoliday = cardVisibility.showTodaySchedule;
@@ -405,9 +406,12 @@ class _HomeDashboardState extends State<_HomeDashboard> {
     final isRamadan = ramadan.isRamadan;
     final holidayStatus = results[3] as HolidayStatus;
 
-    if (!forceRefresh && (profile == null || (needsSchedule && scheduleJson == null))) {
+    if (!forceRefresh &&
+        (profile == null || (needsSchedule && scheduleJson == null))) {
       final fallbackResults = await Future.wait<dynamic>([
-        profile == null ? ProfileService().fetchProfile() : Future.value(profile),
+        profile == null
+            ? ProfileService().fetchProfile()
+            : Future.value(profile),
         scheduleJson == null && needsSchedule
             ? ScheduleService().fetchStudentSchedule()
             : Future.value(scheduleJson),
@@ -946,7 +950,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                             ],
                             if (cardVisibility.showRamadanCard && isRamadan)
                               Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
+                                padding: const EdgeInsets.only(bottom: 8),
                                 child: BracuCard(
                                   child: Column(
                                     crossAxisAlignment:
@@ -1006,14 +1010,19 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                               ),
                                           ],
                                         ),
-                                        const SizedBox(height: 12),
+                                        const SizedBox(height: 2),
                                       ],
                                     ],
                                   ),
                                 ),
                               ),
                             if (cardVisibility.showQuickAccessSection) ...[
-                              const SizedBox(height: 10),
+                              SizedBox(
+                                height:
+                                    cardVisibility.showRamadanCard && isRamadan
+                                    ? 0
+                                    : 10,
+                              ),
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
