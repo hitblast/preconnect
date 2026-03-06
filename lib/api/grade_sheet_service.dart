@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -24,6 +25,13 @@ class GradeSheetService {
   final ApiClient _client = ApiClient();
   final Map<String, Future<GradeSheetFile?>> _inFlight =
       <String, Future<GradeSheetFile?>>{};
+  final StreamController<GradeSheetFile?> _streamController =
+      StreamController<GradeSheetFile?>.broadcast();
+
+  Stream<GradeSheetFile?> watchGradeSheet() async* {
+    yield await getGradeSheet();
+    yield* _streamController.stream;
+  }
 
   Future<GradeSheetFile?> fetchGradeSheet({bool fromGet = false}) async {
     final key = 'gradesheet|$fromGet';
@@ -63,13 +71,19 @@ class GradeSheetService {
       );
       final bytes = _extractPdfBytes(response.bodyBytes, response.body);
       if (bytes == null || bytes.isEmpty) {
-        return fromGet ? null : getGradeSheet(fromFetch: true);
+        final fallback = fromGet ? null : await getGradeSheet(fromFetch: true);
+        _publish(fallback);
+        return fallback;
       }
 
       final file = await _writePdfFile(profileId, bytes);
-      return GradeSheetFile(file: file, fromCache: false);
+      final result = GradeSheetFile(file: file, fromCache: false);
+      _publish(result);
+      return result;
     } catch (_) {
-      return fromGet ? null : getGradeSheet(fromFetch: true);
+      final fallback = fromGet ? null : await getGradeSheet(fromFetch: true);
+      _publish(fallback);
+      return fallback;
     }
   }
 
@@ -83,7 +97,9 @@ class GradeSheetService {
 
     final file = await _gradeSheetFile(profileId);
     if (await file.exists()) {
-      return GradeSheetFile(file: file, fromCache: true);
+      final result = GradeSheetFile(file: file, fromCache: true);
+      _publish(result);
+      return result;
     }
 
     if (fromFetch) return null;
@@ -99,7 +115,20 @@ class GradeSheetService {
 
   Future<File> _gradeSheetFile(String profileId) async {
     final dir = await getApplicationSupportDirectory();
-    return File('${dir.path}/grade_sheet_$profileId.pdf');
+    final prefs = SharedPreferencesAsync();
+    final fullName = (await prefs.getString('fullName') ?? '').trim();
+    final studentId = (await prefs.getString('studentId') ?? '').trim();
+    final safeName = fullName
+        .replaceAll(RegExp(r'[\\/:*?"<>|]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final fileId =
+        safeName.isNotEmpty && studentId.isNotEmpty
+        ? '${safeName}_$studentId'
+        : (safeName.isNotEmpty
+              ? safeName
+              : (studentId.isNotEmpty ? studentId : profileId));
+    return File('${dir.path}/$fileId.pdf');
   }
 
   Uint8List? _extractPdfBytes(Uint8List rawBytes, String rawBody) {
@@ -147,5 +176,10 @@ class GradeSheetService {
       }
     }
     return output.replaceAll(RegExp(r'\s+'), '');
+  }
+
+  void _publish(GradeSheetFile? value) {
+    if (_streamController.isClosed) return;
+    _streamController.add(value);
   }
 }

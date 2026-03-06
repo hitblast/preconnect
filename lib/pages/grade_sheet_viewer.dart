@@ -15,14 +15,14 @@ class GradeSheetViewerPage extends StatefulWidget {
 }
 
 class _GradeSheetViewerPageState extends State<GradeSheetViewerPage> {
-  late Future<GradeSheetFile?> _future;
+  late final Stream<GradeSheetFile?> _stream;
   bool _isRefreshing = false;
   bool _isSharing = false;
 
   @override
   void initState() {
     super.initState();
-    _future = GradeSheetService().getGradeSheet();
+    _stream = GradeSheetService().watchGradeSheet();
   }
 
   Future<void> _refresh() async {
@@ -31,11 +31,9 @@ class _GradeSheetViewerPageState extends State<GradeSheetViewerPage> {
       _isRefreshing = true;
     });
     try {
-      final next = await GradeSheetService().fetchGradeSheet();
+      await GradeSheetService().fetchGradeSheet();
       if (!mounted) return;
-      setState(() {
-        _future = Future<GradeSheetFile?>.value(next);
-      });
+      showAppSnackBar(context, 'Grade sheet refreshed');
     } finally {
       if (mounted) {
         setState(() {
@@ -71,12 +69,13 @@ class _GradeSheetViewerPageState extends State<GradeSheetViewerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return BracuPageScaffold(
       title: kGradeSheetTitle,
       subtitle: kGradeSheetViewerSubtitle,
       icon: Icons.picture_as_pdf_outlined,
-      body: FutureBuilder<GradeSheetFile?>(
-        future: _future,
+      body: StreamBuilder<GradeSheetFile?>(
+        stream: _stream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return BracuRefreshPlaceholder(
@@ -103,6 +102,15 @@ class _GradeSheetViewerPageState extends State<GradeSheetViewerPage> {
               PDFView(
                 key: ValueKey<String>(file.path),
                 filePath: file.path,
+                fitPolicy: FitPolicy.BOTH,
+                pageFling: false,
+                pageSnap: false,
+                nightMode: isDark,
+                backgroundColor: isDark
+                    ? const Color(0xFF05070B)
+                    : const Color(0xFFF6FAFF),
+                enableRenderDuringScale: true,
+                useBestQuality: true,
               ),
               Positioned(
                 right: 16,

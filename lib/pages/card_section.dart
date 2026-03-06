@@ -1,13 +1,13 @@
-import 'dart:math' as math;
-
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_flip_card/flutter_flip_card.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/cached_image.dart';
 
-const String _bracuLogoUrl = 'https://cse.sds.bracu.ac.bd/img/logo.png';
+const String _bracuLogoUrl =
+    'https://www.bracu.ac.bd/sites/default/files/resources/media/bracu_logo_12-0-2022.png';
 
-class CardSection extends StatefulWidget {
+class CardSection extends StatelessWidget {
   const CardSection({
     super.key,
     required this.profile,
@@ -18,17 +18,8 @@ class CardSection extends StatefulWidget {
   final String? photoUrl;
 
   @override
-  State<CardSection> createState() => _CardSectionState();
-}
-
-class _CardSectionState extends State<CardSection> {
-  bool _showBack = false;
-
-  void _toggleCard() => setState(() => _showBack = !_showBack);
-
-  @override
   Widget build(BuildContext context) {
-    final profile = widget.profile ?? {};
+    final profile = this.profile ?? {};
     final fullName = (profile['fullName'] ?? '').trim();
     final degreeName = (profile['program'] ?? '').trim();
     final studentId = (profile['studentId'] ?? '').trim();
@@ -39,7 +30,7 @@ class _CardSectionState extends State<CardSection> {
         ? ''
         : '31-12-${(enrolledSession ~/ 10) + 5}';
     final bloodGroup = (profile['bloodGroup'] ?? '').trim();
-    final photoUrl = widget.photoUrl;
+    final photoUrl = this.photoUrl;
     final displayName = fullName.isNotEmpty ? fullName : 'BRACU Student';
     final displayProgram = degreeName.isNotEmpty ? degreeName : '';
     final displayStudentId = studentId.isNotEmpty ? studentId : '';
@@ -49,56 +40,18 @@ class _CardSectionState extends State<CardSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 4),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _toggleCard(),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 380),
-            switchInCurve: Curves.easeInOutCubic,
-            switchOutCurve: Curves.easeInOutCubic,
-            layoutBuilder: (currentChild, previousChildren) {
-              return Stack(
-                alignment: Alignment.center,
-                children: <Widget>[
-                  ...previousChildren,
-                  ...(currentChild == null ? const <Widget>[] : <Widget>[currentChild]),
-                ],
-              );
-            },
-            transitionBuilder: (child, animation) {
-              final rotation = Tween<double>(
-                begin: math.pi / 2,
-                end: 0,
-              ).animate(animation);
-              return AnimatedBuilder(
-                animation: rotation,
-                child: child,
-                builder: (context, builtChild) {
-                  return Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.identity()
-                      ..setEntry(3, 2, 0.0015)
-                      ..rotateY(rotation.value),
-                    child: builtChild,
-                  );
-                },
-              );
-            },
-            child: _showBack
-                ? _CardBack(
-                    key: const ValueKey<String>('card-back'),
-                    displayStudentId: displayStudentId,
-                  )
-                : _CardFront(
-                    key: const ValueKey<String>('card-front'),
-                    displayName: displayName,
-                    displayProgram: displayProgram,
-                    displayStudentId: displayStudentId,
-                    displayBloodGroup: displayBloodGroup,
-                    validation: validation,
-                    photoUrl: photoUrl,
-                  ),
+        GestureFlipCard(
+          animationDuration: const Duration(milliseconds: 300),
+          axis: FlipAxis.vertical,
+          frontWidget: _CardFront(
+            displayName: displayName,
+            displayProgram: displayProgram,
+            displayStudentId: displayStudentId,
+            displayBloodGroup: displayBloodGroup,
+            validation: validation,
+            photoUrl: photoUrl,
           ),
+          backWidget: _CardBack(displayStudentId: displayStudentId),
         ),
       ],
     );
@@ -107,7 +60,6 @@ class _CardSectionState extends State<CardSection> {
 
 class _CardFront extends StatelessWidget {
   const _CardFront({
-    super.key,
     required this.displayName,
     required this.displayProgram,
     required this.displayStudentId,
@@ -211,7 +163,7 @@ class _CardFront extends StatelessWidget {
                         children: [
                           const Opacity(
                             opacity: 0.06,
-                            child: _BracuLogo(width: 120, height: 120),
+                            child: _BracuLogo(width: 136, height: 136),
                           ),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
@@ -300,7 +252,6 @@ class _CardFront extends StatelessWidget {
 
 class _CardBack extends StatelessWidget {
   const _CardBack({
-    super.key,
     required this.displayStudentId,
   });
 
@@ -327,7 +278,7 @@ class _CardBack extends StatelessWidget {
         children: [
           const Opacity(
             opacity: 0.1,
-            child: _BracuLogo(width: 140, height: 120),
+            child: _BracuLogo(width: 150, height: 130),
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(48, 24, 2, 12),
@@ -463,7 +414,10 @@ class _InfoRow extends StatelessWidget {
 }
 
 class _BracuLogo extends StatelessWidget {
-  const _BracuLogo({required this.width, required this.height});
+  const _BracuLogo({
+    required this.width,
+    required this.height,
+  });
 
   final double width;
   final double height;
