@@ -1,9 +1,10 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:preconnect/api/api_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-typedef HolidayItem = ({String date, String name});
+typedef HolidayItem = ({String startDate, String endDate, String label});
 
 class HolidayStatus {
   const HolidayStatus({
@@ -22,21 +23,31 @@ class HolidayStatus {
   final List<String> todayHolidayNames;
   final List<HolidayItem> nextHolidaysThisYear;
 
-  String get displayNames => todayHolidayNames.isEmpty
-      ? 'Today is a holiday.'
-      : todayHolidayNames.join(' • ');
+  String get displayNames => todayHolidayNames.join(' • ');
 
   Map<String, dynamic> toCacheJson() {
     return <String, dynamic>{
       'isTodayHoliday': isTodayHoliday,
       'todayHolidayNames': todayHolidayNames,
       'nextHolidaysThisYear': nextHolidaysThisYear
-          .map((item) => {'date': item.date, 'name': item.name})
+          .map(
+            (item) => {
+              'startDate': item.startDate,
+              'endDate': item.endDate,
+              'label': item.label,
+            },
+          )
           .toList(),
     };
   }
 
-  static HolidayStatus fromApi(Map<String, dynamic> json) {
+  static HolidayStatus fromApi(dynamic json) {
+    if (json is List) {
+      return _fromRawHolidayList(json);
+    }
+    if (json is! Map<String, dynamic>) {
+      return HolidayStatus.empty;
+    }
     return HolidayStatus(
       isTodayHoliday: json['isTodayHoliday'] == true,
       todayHolidayNames: _namesFromAny(json['todayHolidays']),
@@ -62,7 +73,10 @@ class HolidayStatus {
     for (final item in source) {
       final raw = item is String
           ? item
-          : (item is Map ? Map<String, dynamic>.from(item)['name'] : null);
+          : (item is Map
+                ? (Map<String, dynamic>.from(item)['label'] ??
+                      Map<String, dynamic>.from(item)['name'])
+                : null);
       final name = _clean(raw);
       if (name == null || !seen.add(name)) continue;
       names.add(name);
@@ -78,12 +92,13 @@ class HolidayStatus {
     for (final item in source) {
       if (item is! Map) continue;
       final map = Map<String, dynamic>.from(item);
-      final date = _clean(map['date']);
-      final name = _clean(map['name']);
-      if (date == null || name == null) continue;
-      final key = '$date|$name';
+      final startDate = _clean(map['startDate']) ?? _clean(map['date']);
+      final endDate = _clean(map['endDate']) ?? startDate;
+      final label = _clean(map['label']) ?? _clean(map['name']);
+      if (startDate == null || endDate == null || label == null) continue;
+      final key = '$startDate|$endDate|$label';
       if (!seen.add(key)) continue;
-      items.add((date: date, name: name));
+      items.add((startDate: startDate, endDate: endDate, label: label));
     }
     return items;
   }
@@ -93,12 +108,53 @@ class HolidayStatus {
     final trimmed = value.trim();
     return trimmed.isEmpty ? null : trimmed;
   }
+
+  static HolidayStatus _fromRawHolidayList(List<dynamic> source) {
+    final todayIso = HolidayTiming._toIsoDate(DateTime.now());
+    final nextHolidays = <HolidayItem>[];
+    final todayHolidayNames = <String>[];
+    final nextSeen = <String>{};
+    final todaySeen = <String>{};
+
+    for (final item in source) {
+      if (item is! Map) continue;
+      final map = Map<String, dynamic>.from(item);
+      final startDate = _clean(map['startDate']);
+      final endDate = _clean(map['endDate']);
+      final label = _clean(map['label']);
+      if (startDate == null || endDate == null || label == null) continue;
+      final isCurrentOrUpcoming = endDate.compareTo(todayIso) >= 0;
+
+      final nextKey = '$startDate|$endDate|$label';
+      if (isCurrentOrUpcoming && nextSeen.add(nextKey)) {
+        nextHolidays.add((
+          startDate: startDate,
+          endDate: endDate,
+          label: label,
+        ));
+      }
+
+      if (startDate.compareTo(todayIso) <= 0 &&
+          endDate.compareTo(todayIso) >= 0) {
+        if (todaySeen.add(label)) {
+          todayHolidayNames.add(label);
+        }
+      }
+    }
+
+    nextHolidays.sort((a, b) => a.startDate.compareTo(b.startDate));
+    return HolidayStatus(
+      isTodayHoliday: todayHolidayNames.isNotEmpty,
+      todayHolidayNames: todayHolidayNames,
+      nextHolidaysThisYear: nextHolidays,
+    );
+  }
 }
 
 class HolidayTiming {
   HolidayTiming._();
 
-  static const String _statusUrl = 'https://preconnect.app/api/holiday';
+  static String get _statusUrl => '${ApiConfig.seatStatusProxyBase}/holiday';
   static const Duration _requestTimeout = Duration(seconds: 3);
   static const Duration _cacheTtl = Duration(hours: 6);
   static const String _prefsStatusKey = 'holiday_status_json';
@@ -219,7 +275,7 @@ class HolidayTiming {
       }
 
       final payload = jsonDecode(response.body);
-      if (payload is! Map<String, dynamic>) {
+      if (payload is! List && payload is! Map<String, dynamic>) {
         return (
           value: _cachedStatus ?? HolidayStatus.empty,
           fromNetwork: false,
@@ -254,8 +310,10 @@ class HolidayTiming {
     final todayIso = _toIsoDate(now);
     final names = <String>[];
     for (final holiday in holidays) {
-      if (holiday.date != todayIso || names.contains(holiday.name)) continue;
-      names.add(holiday.name);
+      if (holiday.startDate.compareTo(todayIso) > 0) continue;
+      if (holiday.endDate.compareTo(todayIso) < 0) continue;
+      if (names.contains(holiday.label)) continue;
+      names.add(holiday.label);
     }
     return names;
   }
