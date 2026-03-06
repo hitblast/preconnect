@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
+import 'package:barcode_widget/barcode_widget.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/api/schedule_service.dart';
-import 'package:preconnect/tools/qrpainter.dart';
 import 'package:archive/archive.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:path_provider/path_provider.dart';
@@ -318,12 +318,18 @@ class _ShareSchedulePageState extends State<ShareSchedulePage> {
                       return SizedBox(
                         width: size,
                         height: size,
-                        child: CustomPaint(
-                          size: Size.square(size),
-                          painter: QrPainter(
-                            _base64Data!,
-                            fgColor: const Color(0xFF000000),
-                            bgColor: const Color(0xFFFFFFFF),
+                        child: BarcodeWidget(
+                          barcode: Barcode.qrCode(),
+                          data: _base64Data!,
+                          color: const Color(0xFF000000),
+                          backgroundColor: const Color(0xFFFFFFFF),
+                          errorBuilder: (context, error) => Center(
+                            child: Text(
+                              'Unable to generate QR',
+                              style: TextStyle(
+                                color: BracuPalette.textSecondary(context),
+                              ),
+                            ),
                           ),
                         ),
                       );

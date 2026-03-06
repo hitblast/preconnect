@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/model/seat_status_info.dart';
+import 'package:preconnect/pages/shared_widgets/show_more_button.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/cached_image.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
@@ -22,6 +23,7 @@ class SeatStatusPage extends StatefulWidget {
 
 class _SeatStatusPageState extends State<SeatStatusPage>
     with WidgetsBindingObserver {
+  static const int _seatStatusChunkSize = 14;
   static const List<String> _weekdayOrder = <String>[
     'SUNDAY',
     'MONDAY',
@@ -51,6 +53,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   bool _isSavingCache = false;
   bool _availableOnly = false;
   String _selectedDayFilter = '';
+  int _visibleCardCount = _seatStatusChunkSize;
   final Set<String> _pendingInitials = <String>{};
   http.Client? _streamClient;
   StreamSubscription<String>? _streamSubscription;
@@ -130,6 +133,11 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     if (!await ensureOnline(context, notify: notify)) {
       return;
     }
+    if (_visibleCardCount != _seatStatusChunkSize && mounted) {
+      setState(() {
+        _visibleCardCount = _seatStatusChunkSize;
+      });
+    }
     await _refreshDetailsFromApi();
     if (notify) {
       RefreshBus.instance.notify(reason: 'seat_status');
@@ -150,11 +158,11 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         _detailsCache
           ..clear()
           ..addAll(cached);
-        await _loadCachedStaffInfoForDetails(cached.values);
-        _queueStaffInfoResolve(cached.values);
         final cachedCards = _buildCardsFromDetailsMap(cached);
         _sortCardsByCourseAndSection(cachedCards);
         _applyCardsSnapshot(cachedCards, isInitialLoading: false);
+        unawaited(_loadCachedStaffInfoForDetails(cached.values));
+        _queueStaffInfoResolve(cached.values);
       }
       _cacheLoaded = true;
     }
@@ -189,8 +197,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     _detailsCache
       ..clear()
       ..addAll(detailsMap);
-    await _loadCachedStaffInfoForDetails(detailsMap.values);
-    _queueStaffInfoResolve(detailsMap.values);
     final updated = _buildCardsFromDetailsMap(detailsMap);
     _sortCardsByCourseAndSection(updated);
     if (_areCardListsDifferent(_cards, updated)) {
@@ -200,6 +206,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         _isInitialLoading = false;
       });
     }
+    unawaited(_loadCachedStaffInfoForDetails(detailsMap.values));
+    _queueStaffInfoResolve(detailsMap.values);
   }
 
   _SeatStatusCardData _buildFallbackCard({
@@ -364,7 +372,14 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         _isInitialLoading || (_cards.isEmpty && _isDetailsRefreshing);
     final hasCards = _cards.isNotEmpty;
     final hasVisibleCards = _visibleCards.isNotEmpty;
-    final itemCount = hasVisibleCards ? _visibleCards.length + 1 : 2;
+    final visibleCardsForDisplay = _visibleCards
+        .take(_visibleCardCount)
+        .toList(growable: false);
+    final hasMoreVisibleCards =
+        _visibleCards.length > visibleCardsForDisplay.length;
+    final itemCount = hasVisibleCards
+        ? visibleCardsForDisplay.length + (hasMoreVisibleCards ? 2 : 1)
+        : 2;
 
     return BracuPageScaffold(
       title: 'Seat Status',
@@ -399,7 +414,19 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                   child: BracuEmptyState(message: 'No matching section found'),
                 );
               }
-              final item = _visibleCards[index - 1];
+              if (index - 1 >= visibleCardsForDisplay.length) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: ShowMoreButton(
+                    onPressed: () {
+                      setState(() {
+                        _visibleCardCount += _seatStatusChunkSize;
+                      });
+                    },
+                  ),
+                );
+              }
+              final item = visibleCardsForDisplay[index - 1];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _SeatStatusCard(item: item),
@@ -560,6 +587,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       _availableOnly = resolvedAvailableOnly;
       _selectedDayFilter = resolvedDayFilter;
       _searchQuery = resolvedQuery;
+      _visibleCardCount = _seatStatusChunkSize;
       _visibleCards
         ..clear()
         ..addAll(nextVisible);
@@ -619,6 +647,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       _cards
         ..clear()
         ..addAll(nextCards);
+      _visibleCardCount = _seatStatusChunkSize;
       _visibleCards
         ..clear()
         ..addAll(nextVisible);
@@ -907,7 +936,16 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     if (initials.isEmpty) return;
     final cached = await _service.loadCachedStaffInfoByInitials(initials);
     if (cached.isEmpty) return;
-    _staffInfoByInitial.addAll(cached);
+    var changed = false;
+    for (final entry in cached.entries) {
+      if (_staffInfoByInitial.containsKey(entry.key)) continue;
+      _staffInfoByInitial[entry.key] = entry.value;
+      changed = true;
+    }
+    if (!changed || !mounted || _detailsCache.isEmpty) return;
+    final refreshed = _buildCardsFromDetailsMap(_detailsCache);
+    _sortCardsByCourseAndSection(refreshed);
+    _applyCardsSnapshot(refreshed, isInitialLoading: false);
   }
 
   Future<void> _resolvePendingStaffInfo() async {

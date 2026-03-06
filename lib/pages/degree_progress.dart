@@ -12,6 +12,7 @@ import 'package:preconnect/pages/requirement_courses.dart';
 import 'package:preconnect/pages/shared_widgets/grade_sheet_card.dart';
 import 'package:preconnect/pages/shared_widgets/progress_bar.dart';
 import 'package:preconnect/pages/shared_widgets/section_badge.dart';
+import 'package:preconnect/pages/shared_widgets/show_more_button.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
@@ -24,6 +25,8 @@ class DegreeProgressPage extends StatefulWidget {
 }
 
 class _DegreeProgressPageState extends State<DegreeProgressPage> {
+  static const int _coursesChunkSize = 7;
+
   late Future<ProgressInfo?> _future;
   ProgressInfo? _latestInfo;
   bool _isRefreshing = false;
@@ -31,6 +34,9 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
   String _fullProgramName = '';
   ProgressSummary? _summary;
   List<section.Section> _currentSemesterSections = const [];
+  int _wishlistVisibleCount = _coursesChunkSize;
+  int _currentVisibleCount = _coursesChunkSize;
+  int _completedVisibleCount = _coursesChunkSize;
 
   @override
   void initState() {
@@ -118,6 +124,15 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
   Future<void> _refresh({bool notify = true}) async {
     if (_isRefreshing) return;
     if (!await ensureOnline(context, notify: notify)) return;
+    if (_wishlistVisibleCount != _coursesChunkSize ||
+        _currentVisibleCount != _coursesChunkSize ||
+        _completedVisibleCount != _coursesChunkSize) {
+      setState(() {
+        _wishlistVisibleCount = _coursesChunkSize;
+        _currentVisibleCount = _coursesChunkSize;
+        _completedVisibleCount = _coursesChunkSize;
+      });
+    }
     _isRefreshing = true;
     try {
       final freshInfo = await ProgressService().fetchProgress();
@@ -262,6 +277,15 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
             info: info,
             currentSections: _currentSemesterSections,
           );
+          final wishlistCoursesForDisplay = wishlistCourses
+              .take(_wishlistVisibleCount)
+              .toList();
+          final currentSectionsVisible = currentSectionsForDisplay
+              .take(_currentVisibleCount)
+              .toList();
+          final topCoursesVisible = topCourses
+              .take(_completedVisibleCount)
+              .toList();
 
           return BracuRefreshList(
             onRefresh: _refresh,
@@ -551,7 +575,7 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                   ),
                 )
               else ...[
-                ...wishlistCourses.map((course) {
+                ...wishlistCoursesForDisplay.map((course) {
                   final item = course.course;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
@@ -622,12 +646,23 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                     ),
                   );
                 }),
+                if (wishlistCourses.length > wishlistCoursesForDisplay.length)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: ShowMoreButton(
+                      onPressed: () {
+                        setState(() {
+                          _wishlistVisibleCount += _coursesChunkSize;
+                        });
+                      },
+                    ),
+                  ),
                 const SizedBox(height: 4),
               ],
               if (currentSectionsForDisplay.isNotEmpty) ...[
                 const BracuSectionTitle(title: 'Current Semester Courses'),
                 const SizedBox(height: 10),
-                ...currentSectionsForDisplay.map((current) {
+                ...currentSectionsVisible.map((current) {
                   final isRequired =
                       mandatoryByCode[current.courseCode.toUpperCase()] ??
                       _isLikelyRequired(current.courseType);
@@ -712,6 +747,18 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                     ),
                   );
                 }),
+                if (currentSectionsForDisplay.length >
+                    currentSectionsVisible.length)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: ShowMoreButton(
+                      onPressed: () {
+                        setState(() {
+                          _currentVisibleCount += _coursesChunkSize;
+                        });
+                      },
+                    ),
+                  ),
                 const SizedBox(height: 4),
               ],
               const BracuSectionTitle(title: 'Completed Courses'),
@@ -726,7 +773,7 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                   ),
                 )
               else
-                ...topCourses.map((course) {
+                ...topCoursesVisible.map((course) {
                   final semester = formatSemesterTitle(course.semesterSession);
                   final titleLine = semester.isEmpty
                       ? course.code
@@ -808,6 +855,17 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                     ),
                   );
                 }),
+              if (topCourses.length > topCoursesVisible.length)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: ShowMoreButton(
+                    onPressed: () {
+                      setState(() {
+                        _completedVisibleCount += _coursesChunkSize;
+                      });
+                    },
+                  ),
+                ),
             ],
           );
         },

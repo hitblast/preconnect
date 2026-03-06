@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/pages/home.dart';
 import 'package:preconnect/pages/login.dart';
@@ -300,7 +299,6 @@ class _BrandLockup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final logoColor = BracuPalette.textPrimary(context);
     return SizedBox(
       width: double.infinity,
       child: Align(
@@ -309,15 +307,13 @@ class _BrandLockup extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Transform.translate(
             offset: const Offset(10, 0),
-            child: SvgPicture.network(
-              'https://preconnect.app/logo.svg',
-              width: 210,
-              height: 56,
-              colorFilter: ColorFilter.mode(logoColor, BlendMode.srcIn),
-              placeholderBuilder: (_) => const SizedBox(
-                width: 210,
-                height: 56,
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            child: Text(
+              'PreConnect',
+              style: TextStyle(
+                color: BracuPalette.textPrimary(context),
+                fontSize: 30,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.8,
               ),
             ),
           ),
