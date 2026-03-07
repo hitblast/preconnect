@@ -391,6 +391,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             themeMode: mode,
             builder: (context, child) {
               final isDark = Theme.of(context).brightness == Brightness.dark;
+              final mediaQuery = MediaQuery.of(context);
               final overlayStyle = SystemUiOverlayStyle(
                 statusBarColor: Colors.transparent,
                 systemStatusBarContrastEnforced: false,
@@ -406,14 +407,32 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     ? Brightness.light
                     : Brightness.dark,
               );
+              final content = Stack(
+                children: [
+                  child ?? const SizedBox.shrink(),
+                  if (_appLockEnabled && !_isUnlocked)
+                    Positioned.fill(child: _buildLockLayer(context)),
+                ],
+              );
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: overlayStyle,
-                child: Stack(
-                  children: [
-                    child ?? const SizedBox.shrink(),
-                    if (_appLockEnabled && !_isUnlocked)
-                      Positioned.fill(child: _buildLockLayer(context)),
-                  ],
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 900) {
+                      return content;
+                    }
+                    return Container(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      alignment: Alignment.center,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: 480,
+                          minHeight: mediaQuery.size.height,
+                        ),
+                        child: content,
+                      ),
+                    );
+                  },
                 ),
               );
             },
