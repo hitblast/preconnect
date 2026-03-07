@@ -278,6 +278,50 @@ String formatSectionBadge(String? sectionName) {
 
 const EdgeInsets kBracuPageListPadding = EdgeInsets.fromLTRB(20, 8, 20, 28);
 
+double bracuContentMaxWidth(BuildContext context) {
+  final width = MediaQuery.sizeOf(context).width;
+  if (width >= 1200) return 920;
+  if (width >= 840) return 860;
+  if (width >= 600) return 760;
+  return width;
+}
+
+EdgeInsets bracuAdaptivePagePadding(BuildContext context) {
+  final width = MediaQuery.sizeOf(context).width;
+  if (width >= 1200) {
+    return const EdgeInsets.fromLTRB(28, 12, 28, 36);
+  }
+  if (width >= 840) {
+    return const EdgeInsets.fromLTRB(24, 10, 24, 32);
+  }
+  if (width >= 600) {
+    return const EdgeInsets.fromLTRB(22, 10, 22, 30);
+  }
+  return kBracuPageListPadding;
+}
+
+class BracuConstrainedContent extends StatelessWidget {
+  const BracuConstrainedContent({
+    super.key,
+    required this.child,
+    this.alignment = Alignment.topCenter,
+  });
+
+  final Widget child;
+  final Alignment alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: alignment,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: bracuContentMaxWidth(context)),
+        child: child,
+      ),
+    );
+  }
+}
+
 class BracuRefreshList extends StatefulWidget {
   const BracuRefreshList({
     super.key,
@@ -351,15 +395,21 @@ class _BracuRefreshListState extends State<BracuRefreshList> {
 
   @override
   Widget build(BuildContext context) {
+    final effectivePadding =
+        widget.padding == kBracuPageListPadding
+            ? bracuAdaptivePagePadding(context)
+            : widget.padding;
     return Stack(
       children: [
         RefreshIndicator(
           onRefresh: widget.onRefresh,
-          child: ListView(
-            controller: _controller,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: widget.padding,
-            children: widget.children,
+          child: BracuConstrainedContent(
+            child: ListView(
+              controller: _controller,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: effectivePadding,
+              children: widget.children,
+            ),
           ),
         ),
         _BracuScrollTopButton(visible: _showScrollTop, onTap: _scrollToTop),
@@ -444,16 +494,22 @@ class _BracuRefreshListBuilderState extends State<BracuRefreshListBuilder> {
 
   @override
   Widget build(BuildContext context) {
+    final effectivePadding =
+        widget.padding == kBracuPageListPadding
+            ? bracuAdaptivePagePadding(context)
+            : widget.padding;
     return Stack(
       children: [
         RefreshIndicator(
           onRefresh: widget.onRefresh,
-          child: ListView.builder(
-            controller: _controller,
-            padding: widget.padding,
-            physics: const AlwaysScrollableScrollPhysics(),
-            itemCount: widget.itemCount,
-            itemBuilder: widget.itemBuilder,
+          child: BracuConstrainedContent(
+            child: ListView.builder(
+              controller: _controller,
+              padding: effectivePadding,
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: widget.itemCount,
+              itemBuilder: widget.itemBuilder,
+            ),
           ),
         ),
         _BracuScrollTopButton(visible: _showScrollTop, onTap: _scrollToTop),
@@ -539,15 +595,21 @@ class _BracuRefreshScrollState extends State<BracuRefreshScroll> {
 
   @override
   Widget build(BuildContext context) {
+    final effectivePadding =
+        widget.padding == kBracuPageListPadding
+            ? bracuAdaptivePagePadding(context)
+            : widget.padding;
     return Stack(
       children: [
         RefreshIndicator(
           onRefresh: widget.onRefresh,
-          child: SingleChildScrollView(
-            controller: _controller,
-            padding: widget.padding,
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: widget.child,
+          child: BracuConstrainedContent(
+            child: SingleChildScrollView(
+              controller: _controller,
+              padding: effectivePadding,
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: widget.child,
+            ),
           ),
         ),
         _BracuScrollTopButton(visible: _showScrollTop, onTap: _scrollToTop),
@@ -702,18 +764,20 @@ class BracuPageScaffold extends StatelessWidget {
                   ),
                   Column(
                     children: [
-                      Padding(
-                        padding: showBack
-                            ? const EdgeInsets.fromLTRB(6, 12, 20, 8)
-                            : const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                        child: _PageHeader(
-                          title: title,
-                          subtitle: subtitle,
-                          icon: icon,
-                          actions: actions,
-                          showMenu: showMenu,
-                          showBack: showBack,
-                          onHeaderTap: onHeaderTap,
+                      BracuConstrainedContent(
+                        child: Padding(
+                          padding: showBack
+                              ? const EdgeInsets.fromLTRB(6, 12, 20, 8)
+                              : const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                          child: _PageHeader(
+                            title: title,
+                            subtitle: subtitle,
+                            icon: icon,
+                            actions: actions,
+                            showMenu: showMenu,
+                            showBack: showBack,
+                            onHeaderTap: onHeaderTap,
+                          ),
                         ),
                       ),
                       Expanded(child: body),
