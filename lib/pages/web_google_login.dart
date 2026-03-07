@@ -20,6 +20,9 @@ class WebGoogleLoginPage extends StatefulWidget {
 
 class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
   final WebLoginBrokerService _broker = WebLoginBrokerService();
+  static String? _cachedGoogleEmail;
+  static WebLoginRequestPayload? _cachedRequest;
+  static String? _cachedError;
   bool _initializing = true;
   bool _signingIn = false;
   String? _error;
@@ -45,13 +48,25 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
   Future<void> _initialize() async {
     await FirebaseBootstrap.initializeIfNeeded();
     if (!mounted) return;
+    final cachedRequest = _cachedRequest;
+    final cachedEmail = _cachedGoogleEmail;
     setState(() {
       _initializing = false;
       if (!FirebaseBootstrap.isAvailable) {
         _error =
             'Firebase web auth is not configured. Run flutterfire configure and update firebase_options.dart.';
+      } else {
+        _error = _cachedError;
+        _googleEmail = cachedEmail;
+        if (cachedRequest != null && !cachedRequest.isExpired) {
+          _request = cachedRequest;
+        }
       }
     });
+    final request = _request;
+    if (request != null && !request.isExpired) {
+      _startPolling(request);
+    }
   }
 
   Future<void> _signInWithGoogle() async {
@@ -68,17 +83,30 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
       if (email.isEmpty) {
         throw Exception('Google did not return an email address.');
       }
-      final session = await _broker.createSession(googleEmail: email);
-      _startPolling(session.request);
+      final cachedRequest = _cachedRequest;
+      final normalizedEmail = email.toLowerCase();
+      final shouldReuse =
+          cachedRequest != null &&
+          !cachedRequest.isExpired &&
+          (_cachedGoogleEmail ?? '').toLowerCase() == normalizedEmail;
+      final request =
+          shouldReuse
+              ? cachedRequest
+              : (await _broker.createSession(googleEmail: email)).request;
+      _cachedGoogleEmail = email;
+      _cachedRequest = request;
+      _cachedError = null;
+      _startPolling(request);
       if (!mounted) return;
       setState(() {
         _googleEmail = email;
-        _request = session.request;
+        _request = request;
       });
     } catch (e) {
       if (!mounted) return;
+      _cachedError = e.toString().replaceFirst('Exception: ', '');
       setState(() {
-        _error = e.toString().replaceFirst('Exception: ', '');
+        _error = _cachedError;
       });
     } finally {
       if (mounted) {
@@ -112,15 +140,18 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
         if (status.expired) {
           _pollTimer?.cancel();
           _countdownTimer?.cancel();
+          _cachedRequest = null;
+          _cachedError = 'QR expired. Sign in with Google again to refresh it.';
           if (!mounted) return;
           setState(() {
-            _error = 'QR expired. Sign in with Google again to refresh it.';
+            _error = _cachedError;
             _request = null;
           });
           return;
         }
         if (!status.approved) return;
         _pollTimer?.cancel();
+        _countdownTimer?.cancel();
         final payload = await _broker.consume(_request!);
         await WebLoginSessionStore.save(
           accessToken: payload.accessToken,
@@ -128,15 +159,18 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
           sessionExpiresAtMillis: payload.sessionExpiresAtMillis,
           googleEmail: _googleEmail ?? payload.studentEmail,
         );
+        _cachedRequest = null;
+        _cachedError = null;
         RefreshBus.instance.notify(reason: 'auth');
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomePage()),
         );
       } catch (e) {
+        final message = e.toString().replaceFirst('Exception: ', '');
         if (!mounted) return;
         setState(() {
-          _error = e.toString().replaceFirst('Exception: ', '');
+          _error = message;
         });
       }
     });
