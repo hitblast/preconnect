@@ -421,7 +421,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     if (constraints.maxWidth < 900) {
                       return content;
                     }
-                    const shellWidth = 480.0;
+                    const shellWidth = 420.0;
                     final shellSize = Size(shellWidth, mediaQuery.size.height);
                     final shellMediaQuery = mediaQuery.copyWith(
                       size: shellSize,
