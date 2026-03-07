@@ -421,15 +421,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     if (constraints.maxWidth < 900) {
                       return content;
                     }
+                    const shellWidth = 480.0;
+                    final shellSize = Size(shellWidth, mediaQuery.size.height);
+                    final shellMediaQuery = mediaQuery.copyWith(
+                      size: shellSize,
+                    );
                     return Container(
                       color: Theme.of(context).scaffoldBackgroundColor,
                       alignment: Alignment.center,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: 480,
-                          minHeight: mediaQuery.size.height,
+                      child: SizedBox(
+                        width: shellWidth,
+                        height: mediaQuery.size.height,
+                        child: MediaQuery(
+                          data: shellMediaQuery,
+                          child: content,
                         ),
-                        child: content,
                       ),
                     );
                   },
