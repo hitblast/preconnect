@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 enum HomeTab {
   settings,
+  notifications,
   dashboard,
   profile,
   studentSchedule,

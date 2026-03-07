@@ -18,6 +18,7 @@ import 'package:preconnect/pages/share_schedule.dart';
 import 'package:preconnect/pages/scan_schedule.dart';
 import 'package:preconnect/pages/friend_schedule.dart';
 import 'package:preconnect/pages/devs.dart';
+import 'package:preconnect/pages/notifications.dart';
 import 'package:preconnect/pages/settings.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/pages/home_sections/exam_countdown.dart';
@@ -75,6 +76,7 @@ class _HomePageState extends State<HomePage> {
 
   late final Map<HomeTab, WidgetBuilder> pages = {
     HomeTab.settings: (_) => const SettingsPage(),
+    HomeTab.notifications: (_) => const NotificationsPage(),
     HomeTab.dashboard: (_) => _HomeDashboard(
       onNavigate: _setTab,
       onLogout: () => _confirmLogout(context),
@@ -842,6 +844,8 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                               currentSemester: profile['currentSemester'] ?? '',
                               currentSessionSemesterId:
                                   profile['currentSessionSemesterId'] ?? '',
+                              onOpenNotifications: () =>
+                                  widget.onNavigate(HomeTab.notifications),
                               onOpenSettings: () =>
                                   widget.onNavigate(HomeTab.settings),
                               onLogout: widget.onLogout,

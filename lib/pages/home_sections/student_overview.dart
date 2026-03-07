@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:preconnect/api/notification_service.dart';
 import 'package:preconnect/pages/ui_kit.dart';
+import 'package:preconnect/tools/refresh_bus.dart';
 
 class StudentOverviewCard extends StatelessWidget {
   const StudentOverviewCard({
@@ -9,6 +11,7 @@ class StudentOverviewCard extends StatelessWidget {
     required this.department,
     required this.currentSemester,
     required this.currentSessionSemesterId,
+    required this.onOpenNotifications,
     required this.onOpenSettings,
     required this.onLogout,
     this.countdown,
@@ -19,6 +22,7 @@ class StudentOverviewCard extends StatelessWidget {
   final String department;
   final String currentSemester;
   final String currentSessionSemesterId;
+  final VoidCallback onOpenNotifications;
   final VoidCallback onOpenSettings;
   final Future<void> Function() onLogout;
   final Widget? countdown;
@@ -46,6 +50,8 @@ class StudentOverviewCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                _NotificationsIconButton(onTap: onOpenNotifications),
                 const SizedBox(width: 8),
                 _IconButton(
                   icon: Icons.settings_outlined,
@@ -76,6 +82,84 @@ class StudentOverviewCard extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _NotificationsIconButton extends StatefulWidget {
+  const _NotificationsIconButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_NotificationsIconButton> createState() =>
+      _NotificationsIconButtonState();
+}
+
+class _NotificationsIconButtonState extends State<_NotificationsIconButton> {
+  late Future<NotificationsFeed?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = NotificationService().getRecentNotifications();
+    RefreshBus.instance.addListener(_onRefreshSignal);
+  }
+
+  @override
+  void dispose() {
+    RefreshBus.instance.removeListener(_onRefreshSignal);
+    super.dispose();
+  }
+
+  void _onRefreshSignal() {
+    if (!mounted || !RefreshBus.instance.isReason('notifications')) return;
+    setState(() {
+      _future = NotificationService().getRecentNotifications();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<NotificationsFeed?>(
+      future: _future,
+      builder: (context, snapshot) {
+        final newCount = snapshot.data?.newCount ?? 0;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            _IconButton(
+              icon: Icons.notifications_outlined,
+              onTap: widget.onTap,
+            ),
+            if (newCount > 0)
+              Positioned(
+                top: -4,
+                right: -4,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 18),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD63B3B),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    newCount > 9 ? '9+' : '$newCount',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

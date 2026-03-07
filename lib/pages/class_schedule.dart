@@ -475,7 +475,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
                 : null;
             final dayDateLabel = dayDate == null
                 ? ''
-                : DateFormat('dd MMMM yyyy').format(dayDate);
+                : DateFormat('d MMMM, yyyy').format(dayDate);
 
             children.add(
               Column(

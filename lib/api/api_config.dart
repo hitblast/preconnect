@@ -13,8 +13,7 @@ class ApiConfig {
 
   static const String connectApiBase = 'https://connect.bracu.ac.bd/api';
   static const String cdnBase = 'https://connect.bracu.ac.bd/cdn';
-  static const String seatStatusProxyBase =
-      'https://api.preconnect.app';
+  static const String seatStatusProxyBase = 'https://api.preconnect.app';
 
   static const String clientId = 'slm';
   static const String redirectUri = 'https://connect.bracu.ac.bd/';
@@ -50,6 +49,10 @@ class ApiConfig {
 
   static String gradeSheetPath(String profileId) =>
       '/data/document/grade-sheet-web?id=$profileId';
+
+  static const String recentNotificationsPath = '/ns/notifications/recent';
+
+  static String notificationViewPath(int id) => '/ns/notifications/view/$id';
 
   static const Map<String, String> apiHeaders = {
     'X-REALM': 'bracu',
