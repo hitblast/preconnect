@@ -204,7 +204,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(
-                  '1. Continue with Google using your student email.\n2. Open PreConnect on your phone.\n3. Go to Settings > Login to Web and scan the QR.',
+                  '1. Login with Google using your student email.\n2. Open PreConnect on your phone.\n3. Go to Settings > Login to Web and scan the QR.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: BracuPalette.textSecondary(context)),
                 ),
@@ -220,14 +220,14 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
                     label: Text(
                       _signingIn
                           ? 'Connecting Google...'
-                          : 'Continue with Google',
+                          : 'Login with Google',
                     ),
                   ),
                 ),
                 if ((_googleEmail ?? '').isNotEmpty) ...[
                   const SizedBox(height: 10),
                   Text(
-                    'Google account: $_googleEmail',
+                    'Account: $_googleEmail',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: BracuPalette.textPrimary(context)),
                   ),
@@ -240,7 +240,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
             child: _request == null
                 ? Text(
                     _initializing
-                        ? 'Preparing Google sign-in...'
+                        ? 'Preparing Google login...'
                         : 'Sign in with Google to generate the browser QR.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: BracuPalette.textSecondary(context)),
