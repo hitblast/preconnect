@@ -15,6 +15,7 @@ import 'package:preconnect/tools/play_install_referrer.dart';
 import 'package:preconnect/tools/play_integrity.dart';
 import 'package:preconnect/tools/app_lock_service.dart';
 import 'package:preconnect/tools/token_storage.dart';
+import 'package:preconnect/tools/web_login_session_store.dart';
 
 class AppBootstrapState {
   const AppBootstrapState({
@@ -37,7 +38,14 @@ class MyApp extends StatefulWidget {
     final prefs = await SharedPreferences.getInstance();
     final savedTheme = prefs.getString('themeMode') ?? 'system';
     final token = await TokenStorage.instance.read(key: 'access_token');
-    final hasToken = token != null && token.isNotEmpty;
+    var hasToken = token != null && token.isNotEmpty;
+    if (kIsWeb && hasToken) {
+      hasToken = await WebLoginSessionStore.hasValidSession();
+      if (!hasToken) {
+        await TokenStorage.instance.deleteAll();
+        await WebLoginSessionStore.clear();
+      }
+    }
     final canOpenOffline = !hasToken && _hasOfflineSnapshot(prefs);
     return AppBootstrapState(
       themeMode: _decodeTheme(savedTheme),

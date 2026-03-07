@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:preconnect/pages/captive_wifi.dart';
 import 'package:preconnect/pages/ui_kit.dart';
+import 'package:preconnect/pages/web_login_setup.dart';
 import 'package:preconnect/tools/app_lock_service.dart';
 import 'package:preconnect/tools/home_card_preferences.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
@@ -144,6 +145,34 @@ class _SettingsPageState extends State<SettingsPage> {
                   child: const ListTile(
                     leading: Icon(Icons.wifi_rounded, size: 20),
                     title: Text('Wi-Fi Auto Login Setup'),
+                    trailing: Icon(Icons.chevron_right_rounded, size: 20),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const WebLoginSetupPage()),
+                  );
+                },
+                child: Ink(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: BracuPalette.textSecondary(
+                        context,
+                      ).withValues(alpha: 0.18),
+                    ),
+                  ),
+                  child: const ListTile(
+                    leading: Icon(Icons.language_rounded, size: 20),
+                    title: Text('Login to Web'),
+                    subtitle: Text('Scan the QR shown in Chrome'),
                     trailing: Icon(Icons.chevron_right_rounded, size: 20),
                   ),
                 ),

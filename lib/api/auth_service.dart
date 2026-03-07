@@ -1,13 +1,17 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/friend_schedule_store.dart';
 import 'package:preconnect/tools/cached_image.dart';
+import 'package:preconnect/tools/firebase_bootstrap.dart';
 import 'package:preconnect/tools/profile_image_cache.dart';
 import 'package:preconnect/tools/token_storage.dart';
+import 'package:preconnect/tools/web_login_session_store.dart';
 
 enum TokenRefreshStatus { refreshed, invalidSession, retryableFailure }
 
@@ -26,7 +30,7 @@ class AuthService {
   Future<void> logout() async {
     try {
       final refreshToken = await _storage.read(key: 'refresh_token');
-      if (refreshToken != null && refreshToken.isNotEmpty) {
+      if (!kIsWeb && refreshToken != null && refreshToken.isNotEmpty) {
         await http
             .post(
               Uri.parse(ApiConfig.logoutEndpoint),
@@ -39,11 +43,20 @@ class AuthService {
             .timeout(_authRequestTimeout);
       }
     } catch (_) {}
+    if (kIsWeb) {
+      await FirebaseBootstrap.initializeIfNeeded();
+      if (FirebaseBootstrap.isAvailable) {
+        try {
+          await FirebaseAuth.instance.signOut();
+        } catch (_) {}
+      }
+    }
     await _clearLocalSessionData();
   }
 
   Future<void> _clearLocalSessionData() async {
     await _storage.deleteAll();
+    await WebLoginSessionStore.clear();
     final asyncPrefs = SharedPreferencesAsync();
     await asyncPrefs.clear();
     final prefs = await SharedPreferences.getInstance();
@@ -54,6 +67,9 @@ class AuthService {
   }
 
   Future<TokenRefreshStatus> refreshTokenStatus() async {
+    if (kIsWeb && !await WebLoginSessionStore.hasValidSession()) {
+      return TokenRefreshStatus.invalidSession;
+    }
     try {
       final refreshToken = await _storage.read(key: 'refresh_token');
       if (refreshToken == null || refreshToken.isEmpty) {
@@ -102,11 +118,18 @@ class AuthService {
   }
 
   Future<bool> isLoggedIn() async {
+    if (kIsWeb && !await WebLoginSessionStore.hasValidSession()) {
+      return false;
+    }
     final token = await _storage.read(key: 'access_token');
     return token != null && token.isNotEmpty;
   }
 
   Future<bool> ensureSignedIn() async {
+    if (kIsWeb && !await WebLoginSessionStore.hasValidSession()) {
+      await logout();
+      return false;
+    }
     final accessToken = await _storage.read(key: 'access_token');
     if (accessToken == null || accessToken.isEmpty) return false;
 

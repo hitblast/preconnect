@@ -16,6 +16,7 @@ import 'package:preconnect/tools/token_storage.dart';
 import 'package:preconnect/tools/user_agent.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/pages/ui_kit.dart';
+import 'package:preconnect/pages/web_google_login.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -212,18 +213,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     if (kIsWeb) {
-      return Scaffold(
-        body: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              "Login is not supported on this platform.\n\n"
-              "Run this app on Android/iOS (or macOS) to sign in via BRACU SSO.",
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-      );
+      return const WebGoogleLoginPage();
     }
 
     return Scaffold(
