@@ -62,10 +62,70 @@ jobs:
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
 
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: prepare-version
+    permissions:
+      contents: write
+    outputs:
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Prepare Release Metadata
+        id: meta
+        shell: bash
+        run: |
+          RELEASE_TAG="v${{ needs.prepare-version.outputs.version_name }}+${{ needs.prepare-version.outputs.version_code }}"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+          LAST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)
+          if [ -n "$LAST_TAG" ]; then
+            RANGE="$LAST_TAG..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+
+          NOTES_FILE="release-notes.md"
+          {
+            echo "# PreConnect Release Notes"
+            echo
+            echo "## Version"
+            echo "- Version: ${{ needs.prepare-version.outputs.version_name }}+${{ needs.prepare-version.outputs.version_code }}"
+            echo "- Commit: ${{ github.sha }}"
+            echo
+            echo "## Changes"
+            if [ "$RANGE" = "HEAD" ]; then
+              git log --max-count=100 --pretty=format:'- %s (%h)'
+            else
+              git log "$RANGE" --pretty=format:'- %s (%h)'
+            fi
+            echo
+          } > "$NOTES_FILE"
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release create "${{ steps.meta.outputs.release_tag }}" \
+            --title "PreConnect ${{ steps.meta.outputs.release_tag }}" \
+            --notes-file release-notes.md \
+            --target "${{ github.sha }}" || \
+          gh release edit "${{ steps.meta.outputs.release_tag }}" \
+            --title "PreConnect ${{ steps.meta.outputs.release_tag }}" \
+            --notes-file release-notes.md
+
   deploy-web:
     name: Deploy Web
-    needs: prepare-version
+    needs: [prepare-version, create-release]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       SEAT_STATUS_PROXY_BASE: ${{ secrets.SEAT_STATUS_PROXY_BASE }}
       PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER: ${{ secrets.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
@@ -117,6 +177,12 @@ jobs:
           path: artifacts/*
           if-no-files-found: error
 
+      - name: Upload Web Release Asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ needs.create-release.outputs.release_tag }}" artifacts/* --clobber
+
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
@@ -126,10 +192,12 @@ jobs:
 
   build-platforms:
     name: Build (${{ matrix.platform }})
-    needs: prepare-version
+    needs: [prepare-version, create-release]
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.allow_failure }}
     timeout-minutes: 60
+    permissions:
+      contents: write
     env:
       SEAT_STATUS_PROXY_BASE: ${{ secrets.SEAT_STATUS_PROXY_BASE }}
       PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER: ${{ secrets.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
@@ -386,81 +454,17 @@ jobs:
           path: artifacts/*
           if-no-files-found: ignore
 
-  publish-release:
-    name: Publish Release
-    runs-on: ubuntu-latest
-    needs: [prepare-version, build-platforms, deploy-web]
-    timeout-minutes: 15
-    permissions:
-      contents: write
-      actions: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Download Artifacts
-        uses: actions/download-artifact@v8
-        with:
-          pattern: "*-artifacts"
-          merge-multiple: true
-          path: artifacts
-
-      - name: Check Artifacts
-        id: assets
+      - name: Upload Release Assets
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           if [ -d artifacts ] && find artifacts -type f -print -quit | grep -q .; then
-            echo "has_assets=true" >> $GITHUB_OUTPUT
+            gh release upload "${{ needs.create-release.outputs.release_tag }}" artifacts/* --clobber
           else
-            echo "has_assets=false" >> $GITHUB_OUTPUT
-            echo "No artifacts were produced."
-            exit 0
+            echo "No packaged artifacts for ${{ matrix.platform }}."
           fi
-
-      - name: Generate Release Notes From Commits
-        id: notes
-        if: steps.assets.outputs.has_assets == 'true'
-        shell: bash
-        run: |
-          LAST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)
-          if [ -n "$LAST_TAG" ]; then
-            RANGE="$LAST_TAG..HEAD"
-          else
-            RANGE="HEAD"
-          fi
-
-          NOTES_FILE="release-notes.md"
-          {
-            echo "# PreConnect Release Notes"
-            echo
-            echo "## Version"
-            echo "- Version: ${{ needs.prepare-version.outputs.version_name }}+${{ needs.prepare-version.outputs.version_code }}"
-            echo "- Commit: ${{ github.sha }}"
-            echo
-            echo "## Changes"
-            if [ "$RANGE" = "HEAD" ]; then
-              git log --max-count=100 --pretty=format:'- %s (%h)'
-            else
-              git log "$RANGE" --pretty=format:'- %s (%h)'
-            fi
-            echo
-          } > "$NOTES_FILE"
-
-          echo "file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
-
-      - name: Create GitHub Release
-        if: steps.assets.outputs.has_assets == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.prepare-version.outputs.version_name }}+${{ needs.prepare-version.outputs.version_code }}
-          target_commitish: ${{ github.sha }}
-          name: PreConnect v${{ needs.prepare-version.outputs.version_name }}+${{ needs.prepare-version.outputs.version_code }}
-          body_path: ${{ steps.notes.outputs.file }}
-          files: |
-            artifacts/**
 
   publish-google-play:
     name: Publish Google Play Open Testing (Android)
