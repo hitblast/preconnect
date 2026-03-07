@@ -64,6 +64,7 @@ jobs:
 
   deploy-web:
     name: Deploy Web
+    needs: prepare-version
     runs-on: ubuntu-latest
     env:
       SEAT_STATUS_PROXY_BASE: ${{ secrets.SEAT_STATUS_PROXY_BASE }}
@@ -102,6 +103,19 @@ jobs:
           --dart-define=FIREBASE_IOS_APP_ID=${{ env.FIREBASE_IOS_APP_ID }}
           --dart-define=FIREBASE_MACOS_API_KEY=${{ env.FIREBASE_MACOS_API_KEY }}
           --dart-define=FIREBASE_MACOS_APP_ID=${{ env.FIREBASE_MACOS_APP_ID }}
+
+      - name: Package Web Release
+        run: |
+          mkdir -p artifacts
+          cd build/web
+          zip -r "$GITHUB_WORKSPACE/artifacts/PreConnect-web-release-${{ needs.prepare-version.outputs.version_name }}+${{ needs.prepare-version.outputs.version_code }}.zip" .
+
+      - name: Upload Web Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-artifacts
+          path: artifacts/*
+          if-no-files-found: error
 
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
@@ -375,7 +389,7 @@ jobs:
   publish-release:
     name: Publish Release
     runs-on: ubuntu-latest
-    needs: [prepare-version, build-platforms]
+    needs: [prepare-version, build-platforms, deploy-web]
     timeout-minutes: 15
     permissions:
       contents: write
