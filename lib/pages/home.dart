@@ -1618,56 +1618,82 @@ class _ScheduleTile extends StatelessWidget {
     return BracuCard(
       isHighlighted: isHighlighted,
       highlightColor: BracuPalette.primary,
-      child: Row(
-        children: [
-          SectionBadge(label: badge, color: color),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: textPrimary,
-                  ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final rightColumnWidth =
+              (constraints.maxWidth * 0.30).clamp(96.0, 128.0);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SectionBadge(label: badge, color: color),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                        color: textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w400,
-                    color: textSecondary,
+              ),
+              if (trailing != null) ...[
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: rightColumnWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        trailing!,
+                        textAlign: TextAlign.right,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
+                      ),
+                      if (trailingSub != null &&
+                          trailingSub!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          trailingSub!,
+                          textAlign: TextAlign.right,
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
-            ),
-          ),
-          if (trailing != null)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  trailing!,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: textPrimary,
-                  ),
-                ),
-                if (trailingSub != null && trailingSub!.trim().isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    trailingSub!,
-                    style: TextStyle(fontSize: 11, color: textSecondary),
-                  ),
-                ],
-              ],
-            ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
