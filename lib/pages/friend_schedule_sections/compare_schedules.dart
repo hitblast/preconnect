@@ -326,8 +326,6 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
     final now = DateTime.now();
     DateTime? currentEnd;
     String? currentKey;
-    DateTime? nextStart;
-    String? nextKey;
 
     for (final entry in entries) {
       final startMinutes = entry.startMinutes;
@@ -373,21 +371,20 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
         );
       }
 
+      if (daysAhead != 0) {
+        continue;
+      }
+
       final isCurrent = !now.isBefore(start) && now.isBefore(end);
       if (isCurrent) {
         if (currentEnd == null || end.isBefore(currentEnd)) {
           currentEnd = end;
           currentKey = entry.key;
         }
-      } else if (start.isAfter(now)) {
-        if (nextStart == null || start.isBefore(nextStart)) {
-          nextStart = start;
-          nextKey = entry.key;
-        }
       }
     }
 
-    return currentKey ?? nextKey;
+    return currentKey;
   }
 
   List<_DayCompareEntry> _buildEntries(

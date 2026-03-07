@@ -143,8 +143,6 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
     final now = DateTime.now();
     DateTime? currentEnd;
     String? currentKey;
-    DateTime? nextStart;
-    String? nextKey;
 
     for (final entry in flatEntries) {
       final day = entry['day']?.toString() ?? '';
@@ -192,21 +190,20 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
         );
       }
 
+      if (daysAhead != 0) {
+        continue;
+      }
+
       final isCurrent = !now.isBefore(startTime) && now.isBefore(endTime);
       if (isCurrent) {
         if (currentEnd == null || endTime.isBefore(currentEnd)) {
           currentEnd = endTime;
           currentKey = key;
         }
-      } else if (startTime.isAfter(now)) {
-        if (nextStart == null || startTime.isBefore(nextStart)) {
-          nextStart = startTime;
-          nextKey = key;
-        }
       }
     }
 
-    return currentKey ?? nextKey;
+    return currentKey;
   }
 
   @override

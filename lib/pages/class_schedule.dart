@@ -25,6 +25,15 @@ class ClassSchedule extends StatefulWidget {
 
 class _ClassScheduleState extends State<ClassSchedule> {
   static const int _initialVisibleWeekCount = 1;
+  static const List<String> _weekdayNames = <String>[
+    'MONDAY',
+    'TUESDAY',
+    'WEDNESDAY',
+    'THURSDAY',
+    'FRIDAY',
+    'SATURDAY',
+    'SUNDAY',
+  ];
 
   late Future<_ScheduleData> _future;
   final ScrollController _scrollController = ScrollController();
@@ -102,7 +111,8 @@ class _ClassScheduleState extends State<ClassSchedule> {
       final isRamadan = await ramadanFuture;
       return _ScheduleData(
         grouped: {},
-        nextSchedule: null,
+        scrollSchedule: null,
+        scrollDateTime: null,
         isRamadan: isRamadan,
       );
     }
@@ -120,8 +130,8 @@ class _ClassScheduleState extends State<ClassSchedule> {
     }
 
     final Map<String, List<Map<String, dynamic>>> grouped = {};
-    section.ClassSchedule? nextSchedule;
-    DateTime? nextDateTime;
+    section.ClassSchedule? scrollSchedule;
+    DateTime? scrollDateTime;
     final now = DateTime.now();
     final nowMinutes = now.hour * 60 + now.minute;
 
@@ -149,9 +159,9 @@ class _ClassScheduleState extends State<ClassSchedule> {
             nowMinutes: nowMinutes,
           );
           if (candidate != null &&
-              (nextDateTime == null || candidate.isBefore(nextDateTime))) {
-            nextDateTime = candidate;
-            nextSchedule = classSchedule;
+              (scrollDateTime == null || candidate.isBefore(scrollDateTime))) {
+            scrollDateTime = candidate;
+            scrollSchedule = classSchedule;
           }
         }
       }
@@ -187,7 +197,8 @@ class _ClassScheduleState extends State<ClassSchedule> {
     }
     return _ScheduleData(
       grouped: grouped,
-      nextSchedule: nextSchedule,
+      scrollSchedule: scrollSchedule,
+      scrollDateTime: scrollDateTime,
       isRamadan: isRamadan,
     );
   }
@@ -382,18 +393,42 @@ class _ClassScheduleState extends State<ClassSchedule> {
     return DateTime(date.year, date.month, date.day, startHour, startMinute);
   }
 
-  DateTime? _dateForWeekday(String day, {int weekOffset = 0}) {
-    final targetWeekday = BracuTime.weekdayFromName(day);
-    if (targetWeekday == null) return null;
+  List<_RenderedScheduleSection> _buildRenderedSections(
+    Map<String, List<Map<String, dynamic>>> grouped, {
+    required bool shouldHighlightCurrentSemester,
+  }) {
+    if (!shouldHighlightCurrentSemester) {
+      return _weekdayNames
+          .where(grouped.containsKey)
+          .map(
+            (day) => _RenderedScheduleSection(
+              day: day,
+              date: null,
+              weekOffset: 0,
+            ),
+          )
+          .toList();
+    }
+
     final now = DateTime.now();
-    final startOfWeek = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(Duration(days: now.weekday - 1));
-    return startOfWeek.add(
-      Duration(days: (weekOffset * 7) + targetWeekday - 1),
-    );
+    final today = DateTime(now.year, now.month, now.day);
+    final totalDays = _visibleWeekCount * 7;
+    final sections = <_RenderedScheduleSection>[];
+
+    for (var dayOffset = 0; dayOffset < totalDays; dayOffset++) {
+      final date = today.add(Duration(days: dayOffset));
+      final day = _weekdayNames[date.weekday - 1];
+      if (!grouped.containsKey(day)) continue;
+      sections.add(
+        _RenderedScheduleSection(
+          day: day,
+          date: date,
+          weekOffset: dayOffset ~/ 7,
+        ),
+      );
+    }
+
+    return sections;
   }
 
   @override
@@ -420,7 +455,8 @@ class _ClassScheduleState extends State<ClassSchedule> {
           }
 
           final grouped = snapshot.data?.grouped ?? {};
-          final nextSchedule = snapshot.data?.nextSchedule;
+          final scrollSchedule = snapshot.data?.scrollSchedule;
+          final scrollDateTime = snapshot.data?.scrollDateTime;
           final shouldHighlightCurrentSemester =
               _selectedSemesterSessionId == null;
           final isRamadan = snapshot.data?.isRamadan ?? false;
@@ -433,35 +469,10 @@ class _ClassScheduleState extends State<ClassSchedule> {
             );
           }
 
-          final keys = grouped.keys.toList();
-          List<String> days = [
-            "SATURDAY",
-            "SUNDAY",
-            "MONDAY",
-            "TUESDAY",
-            "WEDNESDAY",
-            "THURSDAY",
-            "FRIDAY",
-          ];
-          days = days.where((day) => keys.contains(day)).toList();
-          final sections = <_RenderedScheduleSection>[];
-          if (shouldHighlightCurrentSemester) {
-            for (
-              var weekOffset = 0;
-              weekOffset < _visibleWeekCount;
-              weekOffset++
-            ) {
-              for (final day in days) {
-                sections.add(
-                  _RenderedScheduleSection(day: day, weekOffset: weekOffset),
-                );
-              }
-            }
-          } else {
-            for (final day in days) {
-              sections.add(_RenderedScheduleSection(day: day, weekOffset: 0));
-            }
-          }
+          final sections = _buildRenderedSections(
+            grouped,
+            shouldHighlightCurrentSemester: shouldHighlightCurrentSemester,
+          );
 
           final children = <Widget>[];
           String? highlightToken;
@@ -470,9 +481,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
             final sectionInfo = sections[i];
             final day = sectionInfo.day;
             final schedules = grouped[day]!;
-            final dayDate = shouldHighlightCurrentSemester
-                ? _dateForWeekday(day, weekOffset: sectionInfo.weekOffset)
-                : null;
+            final dayDate = sectionInfo.date;
             final dayDateLabel = dayDate == null
                 ? ''
                 : DateFormat('d MMMM, yyyy').format(dayDate);
@@ -524,11 +533,15 @@ class _ClassScheduleState extends State<ClassSchedule> {
                       isRamadan: isRamadan,
                     );
 
-                    final isHighlighted =
+                    final isScrollTarget =
                         shouldHighlightCurrentSemester &&
-                        sectionInfo.weekOffset == 0 &&
-                        nextSchedule == s;
-                    if (isHighlighted) {
+                        scrollSchedule == s &&
+                        scrollDateTime != null &&
+                        dayDate != null &&
+                        scrollDateTime.year == dayDate.year &&
+                        scrollDateTime.month == dayDate.month &&
+                        scrollDateTime.day == dayDate.day;
+                    if (isScrollTarget) {
                       highlightToken =
                           '${sectionInfo.weekOffset}_${day}_${s.startTime}_${s.endTime}_$code';
                       _highlightKey ??= GlobalKey();
@@ -536,9 +549,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: BracuCard(
-                        key: isHighlighted ? _highlightKey : null,
-                        isHighlighted: isHighlighted,
-                        highlightColor: BracuPalette.primary,
+                        key: isScrollTarget ? _highlightKey : null,
                         child: LayoutBuilder(
                           builder: (context, constraints) {
                             return Row(
@@ -705,18 +716,25 @@ class _ClassScheduleState extends State<ClassSchedule> {
 class _ScheduleData {
   const _ScheduleData({
     required this.grouped,
-    required this.nextSchedule,
+    required this.scrollSchedule,
+    required this.scrollDateTime,
     required this.isRamadan,
   });
 
   final Map<String, List<Map<String, dynamic>>> grouped;
-  final section.ClassSchedule? nextSchedule;
+  final section.ClassSchedule? scrollSchedule;
+  final DateTime? scrollDateTime;
   final bool isRamadan;
 }
 
 class _RenderedScheduleSection {
-  const _RenderedScheduleSection({required this.day, required this.weekOffset});
+  const _RenderedScheduleSection({
+    required this.day,
+    required this.date,
+    required this.weekOffset,
+  });
 
   final String day;
+  final DateTime? date;
   final int weekOffset;
 }
