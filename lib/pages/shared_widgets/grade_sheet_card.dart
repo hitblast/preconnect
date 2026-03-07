@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:preconnect/pages/grade_sheet_viewer.dart';
+import 'package:flutter/services.dart';
+import 'package:native_file_preview/native_file_preview.dart';
+import 'package:preconnect/api/grade_sheet_service.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 
 const kGradeSheetTitle = 'Grade Sheet';
-const kGradeSheetCardSubtitle = 'Open or share your latest grade sheet';
-const kGradeSheetViewerSubtitle = 'PDF Viewer';
+const kGradeSheetCardSubtitle = 'Open your latest grade sheet PDF';
 
-class GradeSheetCard extends StatelessWidget {
+class GradeSheetCard extends StatefulWidget {
   const GradeSheetCard({
     super.key,
     this.title = kGradeSheetTitle,
@@ -15,6 +16,49 @@ class GradeSheetCard extends StatelessWidget {
 
   final String title;
   final String subtitle;
+
+  @override
+  State<GradeSheetCard> createState() => _GradeSheetCardState();
+}
+
+class _GradeSheetCardState extends State<GradeSheetCard> {
+  final NativeFilePreview _nativeFilePreview = NativeFilePreview();
+  bool _isOpening = false;
+
+  Future<void> _openGradeSheet() async {
+    if (_isOpening) return;
+    setState(() {
+      _isOpening = true;
+    });
+    try {
+      final gradeSheet = await GradeSheetService().fetchGradeSheet(
+        fromGet: true,
+      );
+      if (!mounted) return;
+      if (gradeSheet == null) {
+        showAppSnackBar(context, 'Could not fetch the latest grade sheet');
+        return;
+      }
+      await _nativeFilePreview.previewFile(gradeSheet.file.path);
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      final message = switch (error.code) {
+        'NO_APP_FOUND' => 'No app found to open this PDF.',
+        'FILE_NOT_FOUND' => 'The PDF file was not found.',
+        _ => error.message ?? 'Could not open the PDF.',
+      };
+      showAppSnackBar(context, message);
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(context, 'Could not open the PDF.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isOpening = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +72,7 @@ class GradeSheetCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    widget.title,
                     style: TextStyle(
                       color: BracuPalette.textPrimary(context),
                       fontSize: 14,
@@ -37,7 +81,7 @@ class GradeSheetCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    subtitle,
+                    widget.subtitle,
                     style: TextStyle(
                       color: BracuPalette.textSecondary(context),
                       fontSize: 11,
@@ -49,13 +93,7 @@ class GradeSheetCard extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const GradeSheetViewerPage(),
-                  ),
-                );
-              },
+              onPressed: _isOpening ? null : _openGradeSheet,
               style: ElevatedButton.styleFrom(
                 backgroundColor: BracuPalette.primary,
                 foregroundColor: Colors.white,
@@ -68,8 +106,17 @@ class GradeSheetCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-              label: const Text('Open'),
+              icon: _isOpening
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.picture_as_pdf_outlined, size: 16),
+              label: Text(_isOpening ? 'Opening' : 'Open'),
             ),
           ],
         ),

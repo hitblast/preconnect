@@ -162,17 +162,20 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
     final deltaColor = delta >= 0
         ? BracuPalette.accent
         : BracuPalette.warning;
+    final selectedRetakes = _selectedRetakeCourses;
     final stats = <({String title, String value})>[
       (title: 'Current', value: expectedResult.currentCgpaLabel),
       (title: 'Expected', value: expectedResult.expectedCgpaLabel),
-      (title: 'Selected', value: expectedResult.selectedGpaLabel),
       (
         title: 'Delta',
         value:
             '${expectedResult.cgpaDelta >= 0 ? '+' : ''}${expectedResult.cgpaDelta.toStringAsFixed(3)}',
       ),
-      (title: 'Courses', value: '${_currentCourses.length}'),
-      (title: 'Retakes', value: '${_selectedRetakeCourses.length}'),
+      (
+        title: 'Courses',
+        value: '${_currentCourses.length + selectedRetakes.length}',
+      ),
+      (title: 'Retakes', value: '${selectedRetakes.length}'),
       (title: 'Credits', value: _formatCredit(expectedResult.selectedCredits)),
     ];
     return BracuCard(
@@ -191,18 +194,21 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: [
-                ...List.generate(stats.length, (index) {
-                  final item = stats[index];
-                  return Padding(
-                    padding: EdgeInsets.only(right: index == stats.length - 1 ? 0 : 10),
+              children: List.generate(stats.length, (index) {
+                final item = stats[index];
+                return Padding(
+                  padding: EdgeInsets.only(
+                    right: index == stats.length - 1 ? 0 : 10,
+                  ),
+                  child: SizedBox(
+                    width: 96,
                     child: _Metric(
                       title: item.title,
                       value: item.value,
                     ),
-                  );
-                }),
-              ],
+                  ),
+                );
+              }),
             ),
           ),
           const SizedBox(height: 12),

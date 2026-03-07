@@ -305,33 +305,36 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _Metric(
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _Metric(
                             title: 'Total',
                             value: _formatCredit(summaryTotal),
                           ),
-                          const SizedBox(width: 10),
-                          _Metric(
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _Metric(
                             title: 'Done',
                             value: _formatCredit(summaryCompleted),
                           ),
-                          const SizedBox(width: 10),
-                          _Metric(
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _Metric(
                             title: 'Attempt',
                             value: _formatCredit(attemptedCredit),
                           ),
-                          const SizedBox(width: 10),
-                          _Metric(title: 'CGPA', value: _cgpa),
-                          const SizedBox(width: 10),
-                          _Metric(
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _Metric(
                             title: 'Left',
                             value: _formatCredit(remainingCredit),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 10),
                     Row(

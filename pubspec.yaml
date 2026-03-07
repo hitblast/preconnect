@@ -24,6 +24,7 @@ dependencies:
   mobile_scanner: ^7.2.0
   archive: ^4.0.9
   flutter_alarmkit: ^0.0.10
+  native_file_preview: ^1.0.1
   barcode_widget: ^2.0.4
   flutter_flip_card: ^0.0.6
   url_launcher: ^6.3.2
@@ -58,5 +59,3 @@ flutter_native_splash:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/pdf_viewer/
