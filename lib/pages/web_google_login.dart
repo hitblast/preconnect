@@ -22,12 +22,14 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
   final WebLoginBrokerService _broker = WebLoginBrokerService();
   static String? _cachedGoogleEmail;
   static WebLoginRequestPayload? _cachedRequest;
+  static String? _cachedRequestQrData;
   static String? _cachedError;
   bool _initializing = true;
   bool _signingIn = false;
   String? _error;
   String? _googleEmail;
   WebLoginRequestPayload? _request;
+  String? _requestQrData;
   Timer? _pollTimer;
   Timer? _countdownTimer;
   int _secondsLeft = 0;
@@ -50,6 +52,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
     if (!mounted) return;
     final cachedRequest = _cachedRequest;
     final cachedEmail = _cachedGoogleEmail;
+    final cachedQrData = _cachedRequestQrData;
     setState(() {
       _initializing = false;
       if (!FirebaseBootstrap.isAvailable) {
@@ -60,6 +63,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
         _googleEmail = cachedEmail;
         if (cachedRequest != null && !cachedRequest.isExpired) {
           _request = cachedRequest;
+          _requestQrData = cachedQrData ?? cachedRequest.toQrData();
         }
       }
     });
@@ -93,14 +97,20 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
           shouldReuse
               ? cachedRequest
               : (await _broker.createSession(googleEmail: email)).request;
+      final qrData =
+          shouldReuse && (_cachedRequestQrData ?? '').isNotEmpty
+              ? _cachedRequestQrData!
+              : request.toQrData();
       _cachedGoogleEmail = email;
       _cachedRequest = request;
+      _cachedRequestQrData = qrData;
       _cachedError = null;
       _startPolling(request);
       if (!mounted) return;
       setState(() {
         _googleEmail = email;
         _request = request;
+        _requestQrData = qrData;
       });
     } catch (e) {
       if (!mounted) return;
@@ -141,11 +151,13 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
           _pollTimer?.cancel();
           _countdownTimer?.cancel();
           _cachedRequest = null;
+          _cachedRequestQrData = null;
           _cachedError = 'QR expired. Sign in with Google again to refresh it.';
           if (!mounted) return;
           setState(() {
             _error = _cachedError;
             _request = null;
+            _requestQrData = null;
           });
           return;
         }
@@ -160,6 +172,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
           googleEmail: _googleEmail ?? payload.studentEmail,
         );
         _cachedRequest = null;
+        _cachedRequestQrData = null;
         _cachedError = null;
         RefreshBus.instance.notify(reason: 'auth');
         if (!mounted) return;
@@ -238,7 +251,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
                           aspectRatio: 1,
                           child: BarcodeWidget(
                             barcode: Barcode.qrCode(),
-                            data: _request!.toQrData(),
+                            data: _requestQrData ?? _request!.toQrData(),
                             color: Colors.black,
                             backgroundColor: Colors.white,
                           ),
