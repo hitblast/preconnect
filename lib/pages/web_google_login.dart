@@ -242,6 +242,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
                     _initializing
                         ? 'Preparing Google sign-in...'
                         : 'Sign in with Google to generate the browser QR.',
+                    textAlign: TextAlign.center,
                     style: TextStyle(color: BracuPalette.textSecondary(context)),
                   )
                 : Column(
