@@ -201,10 +201,11 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
         children: [
           BracuCard(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(
                   '1. Continue with Google using your student email.\n2. Open PreConnect on your phone.\n3. Go to Settings > Login to Web and scan the QR.',
+                  textAlign: TextAlign.center,
                   style: TextStyle(color: BracuPalette.textSecondary(context)),
                 ),
                 const SizedBox(height: 14),
@@ -227,6 +228,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
                   const SizedBox(height: 10),
                   Text(
                     'Google account: $_googleEmail',
+                    textAlign: TextAlign.center,
                     style: TextStyle(color: BracuPalette.textPrimary(context)),
                   ),
                 ],
