@@ -172,7 +172,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   child: const ListTile(
                     leading: Icon(Icons.language_rounded, size: 20),
                     title: Text('Login to Web'),
-                    subtitle: Text('Scan the QR shown in Chrome'),
                     trailing: Icon(Icons.chevron_right_rounded, size: 20),
                   ),
                 ),

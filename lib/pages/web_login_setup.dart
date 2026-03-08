@@ -85,7 +85,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       final googleEmail = request.googleEmail.trim().toLowerCase();
       if (studentEmail != googleEmail) {
         throw Exception(
-          'Google email does not match your student email.\n\nBrowser: ${request.googleEmail}\nApp: $studentEmail',
+          'email does not match your student email.\n\nBrowser: ${request.googleEmail}\nApp: $studentEmail',
         );
       }
       final approved = await AppLockService().authenticate(
@@ -197,7 +197,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                     _status ??
                         (_busy
                             ? 'Checking the email match and approving login...'
-                            : 'Approval only succeeds if the browser Google email matches your student email.'),
+                            : 'Approval only succeeds if the browser email matches your student email.'),
                     style: TextStyle(
                       color: BracuPalette.textSecondary(context),
                     ),
