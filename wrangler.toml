@@ -1,0 +1,7 @@
+name = "preconnect-web"
+compatibility_date = "2026-03-08"
+workers_dev = false
+
+[assets]
+directory = "./build/web"
+not_found_handling = "single-page-application"

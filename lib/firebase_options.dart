@@ -29,7 +29,7 @@ class DefaultFirebaseOptions {
     appId: String.fromEnvironment('FIREBASE_WEB_APP_ID'),
     messagingSenderId: _messagingSenderId,
     projectId: _projectId,
-    authDomain: 'web.preconnect.app',
+    authDomain: 'preconnect-bracu.firebaseapp.com',
     storageBucket: _storageBucket,
   );
 
