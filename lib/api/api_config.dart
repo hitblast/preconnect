@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ApiConfig {
   ApiConfig._();
@@ -11,7 +12,8 @@ class ApiConfig {
   static const String logoutEndpoint = '$ssoBase/logout';
   static const String authEndpoint = '$ssoBase/auth';
 
-  static const String connectApiBase = 'https://connect.bracu.ac.bd/api';
+  static String get connectApiBase =>
+      kIsWeb ? '$seatStatusProxyBase/connect' : 'https://connect.bracu.ac.bd/api';
   static const String cdnBase = 'https://connect.bracu.ac.bd/cdn';
   static const String seatStatusProxyBase = 'https://api.preconnect.app';
   static const String webLoginBrokerBase = seatStatusProxyBase;
