@@ -24,7 +24,6 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
   bool _busy = false;
   String? _status;
   bool _loadingSessions = false;
-  String? _sessionsError;
   List<WebActiveSession> _activeSessions = const <WebActiveSession>[];
 
   @override
@@ -75,7 +74,6 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
     if (!mounted) return;
     setState(() {
       _loadingSessions = true;
-      _sessionsError = null;
     });
     try {
       final accessToken =
@@ -89,10 +87,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
         _activeSessions = sessions;
       });
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _sessionsError = e.toString().replaceFirst('Exception: ', '');
-      });
+      // quiet when session endpoints are unavailable.
     } finally {
       if (mounted) {
         setState(() {
@@ -298,13 +293,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                   ],
                 ),
                 if (_loadingSessions) const LinearProgressIndicator(minHeight: 2),
-                if (_sessionsError != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _sessionsError!,
-                    style: const TextStyle(color: Colors.redAccent),
-                  ),
-                ] else if (!_loadingSessions && _activeSessions.isEmpty) ...[
+                if (!_loadingSessions && _activeSessions.isEmpty) ...[
                   const SizedBox(height: 8),
                   Text(
                     'No active browser sessions.',

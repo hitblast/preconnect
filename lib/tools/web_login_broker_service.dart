@@ -162,6 +162,10 @@ class WebLoginBrokerService {
           body: jsonEncode({'accessToken': accessToken}),
         )
         .timeout(_timeout);
+    if (response.statusCode == 404) {
+      // Backward compatibility: old broker builds may not expose this endpoint.
+      return const <WebActiveSession>[];
+    }
     if (response.statusCode != 200) {
       throw Exception('Unable to load active web sessions');
     }
@@ -191,6 +195,9 @@ class WebLoginBrokerService {
           }),
         )
         .timeout(_timeout);
+    if (response.statusCode == 404) {
+      throw Exception('Session logout is not available on current server build');
+    }
     if (response.statusCode != 200) {
       throw Exception('Unable to revoke web session');
     }
@@ -207,6 +214,9 @@ class WebLoginBrokerService {
           body: jsonEncode({'accessToken': accessToken}),
         )
         .timeout(_timeout);
+    if (response.statusCode == 404) {
+      throw Exception('Session logout is not available on current server build');
+    }
     if (response.statusCode != 200) {
       throw Exception('Unable to revoke all web sessions');
     }

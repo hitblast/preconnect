@@ -104,7 +104,14 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
   @override
   Widget build(BuildContext context) {
     final expectedResult = _buildExpectedResult();
-    final retakeCourses = _selectedRetakeCourses;
+    final completedCodes = _completedEffectiveCodes;
+    final autoRetakeCurrentCourses = _currentCourses
+        .where((draft) => completedCodes.contains(draft.codeValue))
+        .toList()
+      ..sort((a, b) => compareNaturalText(a.codeValue, b.codeValue));
+    final manualRetakeCourses = _selectedRetakeCourses
+        .where((draft) => !completedCodes.contains(draft.codeValue))
+        .toList();
     return BracuPageScaffold(
       title: 'Expected CGPA',
       subtitle: 'Grade Calculator',
@@ -113,11 +120,17 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
         padding: kBracuPageListPadding,
         children: [
           _buildSummaryCard(context, expectedResult),
-          if (retakeCourses.isNotEmpty) ...[
+          if (autoRetakeCurrentCourses.isNotEmpty || manualRetakeCourses.isNotEmpty) ...[
             const SizedBox(height: 14),
             const BracuSectionTitle(title: 'Retake Courses'),
             const SizedBox(height: 10),
-            ...retakeCourses.map((draft) {
+            ...autoRetakeCurrentCourses.map((draft) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _buildCurrentRetakeCourseCard(context, draft),
+              );
+            }),
+            ...manualRetakeCourses.map((draft) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: _buildRetakeCourseCard(context, draft),
@@ -151,6 +164,16 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
     final list = _completedCourses.where((draft) => draft.hasRetakeSelection).toList();
     list.sort((a, b) => compareNaturalText(a.codeValue, b.codeValue));
     return list;
+  }
+
+  Set<String> get _completedEffectiveCodes {
+    final codes = <String>{};
+    for (final draft in _completedCourses) {
+      final snapshot = draft.toCompletedSnapshot();
+      if (!snapshot.countsToGpa || snapshot.code.isEmpty) continue;
+      codes.add(snapshot.code);
+    }
+    return codes;
   }
 
   Widget _buildSummaryCard(
@@ -240,6 +263,7 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
     BuildContext context,
     _CurrentCourseDraft draft,
   ) {
+    final isRetake = _completedEffectiveCodes.contains(draft.codeValue);
     return InkWell(
       borderRadius: BorderRadius.circular(18),
       onTap: () async {
@@ -267,10 +291,50 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
           codeLine: draft.codeValue,
           titleLine: draft.titleValue,
           creditLine: draft.creditValue,
-          statusLabel: draft.isRequired ? 'Required' : 'Elective',
-          statusColor: draft.isRequired
-              ? BracuPalette.warning
-              : BracuPalette.accent,
+          statusLabel: isRetake
+              ? 'Retake'
+              : (draft.isRequired ? 'Required' : 'Elective'),
+          statusColor: isRetake
+              ? BracuPalette.info
+              : (draft.isRequired ? BracuPalette.warning : BracuPalette.accent),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentRetakeCourseCard(
+    BuildContext context,
+    _CurrentCourseDraft draft,
+  ) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () async {
+        final selected = await _pickGrade(
+          courseCode: draft.codeValue,
+          subtitle: 'Choose retake grade',
+          currentGrade: draft.grade,
+          resetGrade: 'A',
+        );
+        if (!mounted || selected == null) return;
+        final wasReset = selected == 'A' && draft.grade != 'A';
+        setState(() {
+          draft.grade = selected;
+        });
+        _showCalculatorSnackBar(
+          wasReset
+              ? '${draft.codeValue} retake reset to A'
+              : '${draft.codeValue} retake set to $selected',
+        );
+      },
+      child: BracuCard(
+        child: _buildCourseCard(
+          context,
+          badgeLabel: draft.grade,
+          codeLine: draft.codeValue,
+          titleLine: draft.titleValue,
+          creditLine: draft.creditValue,
+          statusLabel: 'Retake',
+          statusColor: BracuPalette.info,
         ),
       ),
     );
@@ -456,16 +520,30 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
     var selectedQualityPoints = 0.0;
     var totalCredits = baseline.totalCredits;
     var totalQualityPoints = baseline.qualityPoints;
-    final retakeByCode = {
+    final manualRetakeByCode = {
       for (final draft in _selectedRetakeCourses) draft.codeValue: draft,
     };
+    final autoRetakeByCode = <String, _CourseSnapshot>{};
+    for (final draft in _currentCourses) {
+      final snapshot = draft.toSnapshot();
+      if (!snapshot.countsToGpa || snapshot.code.isEmpty) continue;
+      if (!baseline.effectiveByCode.containsKey(snapshot.code)) continue;
+      autoRetakeByCode[snapshot.code] = snapshot;
+    }
+    final retakeCodes = <String>{
+      ...manualRetakeByCode.keys,
+      ...autoRetakeByCode.keys,
+    };
 
-    for (final draft in retakeByCode.values) {
-      final completedSnapshot = draft.toCompletedSnapshot();
-      final retakeSnapshot = draft.toRetakeSnapshot();
-      if (!completedSnapshot.countsToGpa || !retakeSnapshot.countsToGpa) {
+    for (final code in retakeCodes) {
+      final completedSnapshot = baseline.effectiveByCode[code];
+      if (completedSnapshot == null || !completedSnapshot.countsToGpa) {
         continue;
       }
+      final manualDraft = manualRetakeByCode[code];
+      final retakeSnapshot = autoRetakeByCode[code] ?? manualDraft?.toRetakeSnapshot();
+      if (retakeSnapshot == null || !retakeSnapshot.countsToGpa) continue;
+
       selectedCredits += retakeSnapshot.credit;
       selectedQualityPoints += retakeSnapshot.qualityPoints;
       totalQualityPoints +=
@@ -475,7 +553,7 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
     for (final draft in _currentCourses) {
       final snapshot = draft.toSnapshot();
       if (!snapshot.countsToGpa) continue;
-      if (retakeByCode.containsKey(snapshot.code)) continue;
+      if (retakeCodes.contains(snapshot.code)) continue;
       selectedCredits += snapshot.credit;
       selectedQualityPoints += snapshot.qualityPoints;
       totalCredits += snapshot.credit;
