@@ -626,6 +626,7 @@ class SeatStatusStaffInfo {
     required this.email,
     required this.departmentId,
     required this.designationId,
+    required this.photoUrl,
   });
 
   final int staffId;
@@ -634,6 +635,7 @@ class SeatStatusStaffInfo {
   final String email;
   final int? departmentId;
   final int? designationId;
+  final String photoUrl;
 
   factory SeatStatusStaffInfo.fromJson(Map<String, dynamic> json) {
     return SeatStatusStaffInfo(
@@ -643,6 +645,7 @@ class SeatStatusStaffInfo {
       email: '${json['email'] ?? ''}'.trim(),
       departmentId: int.tryParse('${json['departmentId'] ?? ''}'),
       designationId: int.tryParse('${json['designationId'] ?? ''}'),
+      photoUrl: '${json['photoUrl'] ?? json['imageUrl'] ?? ''}'.trim(),
     );
   }
 
@@ -654,6 +657,7 @@ class SeatStatusStaffInfo {
       'email': email,
       'departmentId': departmentId,
       'designationId': designationId,
+      'photoUrl': photoUrl,
     };
   }
 }

@@ -104,6 +104,7 @@ String? _lastSnackMessage;
 Timer? _snackAutoTimer;
 
 void showAppSnackBar(BuildContext context, String message) {
+  if (kIsWeb) return;
   final trimmed = message.trim();
   if (trimmed.isEmpty) return;
   final now = DateTime.now();

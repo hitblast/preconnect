@@ -128,15 +128,10 @@ class _LoginPageState extends State<LoginPage> {
     var needsRetry = false;
     try {
       final didLogin = await _exchangeCodeForToken(authCode);
-      if (!didLogin) {
-        needsRetry = true;
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Login failed. Please try again.'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+        if (!didLogin) {
+          needsRetry = true;
+          if (mounted) {
+            showAppSnackBar(context, 'Login failed. Please try again.');
         }
       }
     } finally {

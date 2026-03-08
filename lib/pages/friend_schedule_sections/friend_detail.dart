@@ -63,17 +63,11 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
   }
 
   Future<void> _openCompare() async {
-    final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     try {
       final myCourses = await _loadMyCourses();
       if (myCourses == null || myCourses.isEmpty) {
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Please log in to compare schedules'),
-            duration: Duration(seconds: 2),
-          ),
-        );
+        showAppSnackBar(context, 'Please log in to compare schedules');
         return;
       }
       final myProfile = await ProfileService().getProfile();
@@ -89,12 +83,7 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
         ),
       );
     } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Could not parse schedule data.'),
-          duration: Duration(seconds: 3),
-        ),
-      );
+      showAppSnackBar(context, 'Could not parse schedule data.');
     }
   }
 

@@ -2,12 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/model/seat_status_info.dart';
-import 'package:preconnect/pages/shared_widgets/show_more_button.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/cached_image.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
@@ -23,7 +22,6 @@ class SeatStatusPage extends StatefulWidget {
 
 class _SeatStatusPageState extends State<SeatStatusPage>
     with WidgetsBindingObserver {
-  static const int _seatStatusChunkSize = 14;
   static const List<String> _weekdayOrder = <String>[
     'SUNDAY',
     'MONDAY',
@@ -53,7 +51,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   bool _isSavingCache = false;
   bool _availableOnly = false;
   String _selectedDayFilter = '';
-  int _visibleCardCount = _seatStatusChunkSize;
   final Set<String> _pendingInitials = <String>{};
   http.Client? _streamClient;
   StreamSubscription<String>? _streamSubscription;
@@ -132,11 +129,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   Future<void> _handleRefresh({bool notify = true}) async {
     if (!await ensureOnline(context, notify: notify)) {
       return;
-    }
-    if (_visibleCardCount != _seatStatusChunkSize && mounted) {
-      setState(() {
-        _visibleCardCount = _seatStatusChunkSize;
-      });
     }
     await _refreshDetailsFromApi();
     if (notify) {
@@ -223,6 +215,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       facultyName: '',
       facultyEmail: '',
       facultyMeta: '',
+      facultyPhotoUrl: '',
       credits: 0,
       room: '',
       classSchedule: const <SeatStatusClassSchedule>[],
@@ -270,6 +263,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       facultyName: _facultyNameForInitial(main.faculties),
       facultyEmail: _facultyEmailForInitial(main.faculties),
       facultyMeta: _facultyMetaForInitial(main.faculties),
+      facultyPhotoUrl: _facultyPhotoUrlForInitial(main.faculties),
       credits: main.courseCredit,
       room: _pickNonEmpty(main.roomNumber, ''),
       classSchedule: main.sectionSchedule.classSchedules,
@@ -295,6 +289,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         facultyName: _facultyNameForInitial(main.faculties),
         facultyEmail: _facultyEmailForInitial(main.faculties),
         facultyMeta: _facultyMetaForInitial(main.faculties),
+        facultyPhotoUrl: _facultyPhotoUrlForInitial(main.faculties),
         room: _pickNonEmpty(main.roomNumber, ''),
         labRoom: _pickNonEmpty(lab?.roomNumber, ''),
         classSchedule: main.sectionSchedule.classSchedules,
@@ -323,6 +318,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     required String facultyName,
     required String facultyEmail,
     required String facultyMeta,
+    required String facultyPhotoUrl,
     required String room,
     required String labRoom,
     required List<SeatStatusClassSchedule> classSchedule,
@@ -342,7 +338,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         '${midExamDate ?? ''} ${midExamStartTime ?? ''} ${midExamEndTime ?? ''} '
         '${finalExamDate ?? ''} ${finalExamStartTime ?? ''} ${finalExamEndTime ?? ''}';
     return '$courseCode $sectionName $courseName '
-            '$facultyInitial $facultyName $facultyEmail $facultyMeta '
+            '$facultyInitial $facultyName $facultyEmail $facultyMeta $facultyPhotoUrl '
             '$room $labRoom $sectionId $total $consumed $remaining '
             '$scheduleToken $examToken'
         .toLowerCase();
@@ -372,14 +368,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         _isInitialLoading || (_cards.isEmpty && _isDetailsRefreshing);
     final hasCards = _cards.isNotEmpty;
     final hasVisibleCards = _visibleCards.isNotEmpty;
-    final visibleCardsForDisplay = _visibleCards
-        .take(_visibleCardCount)
-        .toList(growable: false);
-    final hasMoreVisibleCards =
-        _visibleCards.length > visibleCardsForDisplay.length;
-    final itemCount = hasVisibleCards
-        ? visibleCardsForDisplay.length + (hasMoreVisibleCards ? 2 : 1)
-        : 2;
+    final itemCount = hasVisibleCards ? _visibleCards.length + 1 : 2;
 
     return BracuPageScaffold(
       title: 'Seat Status',
@@ -414,19 +403,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                   child: BracuEmptyState(message: 'No matching section found'),
                 );
               }
-              if (index - 1 >= visibleCardsForDisplay.length) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: ShowMoreButton(
-                    onPressed: () {
-                      setState(() {
-                        _visibleCardCount += _seatStatusChunkSize;
-                      });
-                    },
-                  ),
-                );
-              }
-              final item = visibleCardsForDisplay[index - 1];
+              final item = _visibleCards[index - 1];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _SeatStatusCard(item: item),
@@ -587,7 +564,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       _availableOnly = resolvedAvailableOnly;
       _selectedDayFilter = resolvedDayFilter;
       _searchQuery = resolvedQuery;
-      _visibleCardCount = _seatStatusChunkSize;
       _visibleCards
         ..clear()
         ..addAll(nextVisible);
@@ -647,7 +623,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       _cards
         ..clear()
         ..addAll(nextCards);
-      _visibleCardCount = _seatStatusChunkSize;
       _visibleCards
         ..clear()
         ..addAll(nextVisible);
@@ -707,6 +682,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     if (x.facultyName != y.facultyName) return false;
     if (x.facultyEmail != y.facultyEmail) return false;
     if (x.facultyMeta != y.facultyMeta) return false;
+    if (x.facultyPhotoUrl != y.facultyPhotoUrl) return false;
     if (x.credits != y.credits) return false;
     if (x.room != y.room) return false;
     if (x.labRoom != y.labRoom) return false;
@@ -1006,6 +982,11 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     }
     return chunks.join(' • ');
   }
+
+  String _facultyPhotoUrlForInitial(String facultyInitial) {
+    final key = facultyInitial.trim().toUpperCase();
+    return (_staffInfoByInitial[key]?.photoUrl ?? '').trim();
+  }
 }
 
 class _SeatStatusCard extends StatelessWidget {
@@ -1017,7 +998,7 @@ class _SeatStatusCard extends StatelessWidget {
     final label = item.facultyInitial.trim().isEmpty
         ? '?'
         : item.facultyInitial.trim().toUpperCase();
-    return _FacultyAvatar(initial: item.facultyInitial, fallbackLabel: label);
+    return _FacultyAvatar(photoUrl: item.facultyPhotoUrl, fallbackLabel: label);
   }
 
   Future<void> _openFacultyEmail(BuildContext context) async {
@@ -1275,11 +1256,11 @@ class _SeatStatusCard extends StatelessWidget {
 
 class _FacultyAvatar extends StatefulWidget {
   const _FacultyAvatar({
-    required this.initial,
+    required this.photoUrl,
     required this.fallbackLabel,
   });
 
-  final String initial;
+  final String photoUrl;
   final String fallbackLabel;
 
   @override
@@ -1287,94 +1268,7 @@ class _FacultyAvatar extends StatefulWidget {
 }
 
 class _FacultyAvatarState extends State<_FacultyAvatar> {
-  static const String _facultyImageApiBase =
-      'https://preconnect.app/api/faculty';
   static const double _avatarSize = 52;
-  static final Map<String, String?> _resolvedImageUrls = <String, String?>{};
-  static final Map<String, Future<String?>> _inFlight =
-      <String, Future<String?>>{};
-
-  String? _resolvedUrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _resolvedUrl = _resolvedImageUrls[_normalizedInitial];
-    if (_resolvedUrl == null && _normalizedInitial != null) {
-      unawaited(_resolveImageUrl());
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _FacultyAvatar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.initial == widget.initial) return;
-    _resolvedUrl = _resolvedImageUrls[_normalizedInitial];
-    if (_resolvedUrl == null && _normalizedInitial != null) {
-      unawaited(_resolveImageUrl());
-    }
-  }
-
-  String? get _normalizedInitial {
-    final normalized = widget.initial.trim().toLowerCase().replaceAll(
-      RegExp(r'[^a-z0-9]'),
-      '',
-    );
-    if (normalized.isEmpty || normalized == 'tba') {
-      return null;
-    }
-    return normalized;
-  }
-
-  Future<void> _resolveImageUrl() async {
-    final initial = _normalizedInitial;
-    if (initial == null) return;
-    final existing = _inFlight[initial];
-    final future = existing ?? _fetchImageUrl(initial);
-    if (existing == null) {
-      _inFlight[initial] = future;
-    }
-    try {
-      final resolved = await future;
-      _resolvedImageUrls[initial] = resolved;
-      if (!mounted || _normalizedInitial != initial) return;
-      setState(() {
-        _resolvedUrl = resolved;
-      });
-    } finally {
-      if (identical(_inFlight[initial], future)) {
-        _inFlight.remove(initial);
-      }
-    }
-  }
-
-  Future<String?> _fetchImageUrl(String initial) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_facultyImageApiBase/$initial'),
-      );
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        return null;
-      }
-      final body = response.body.trim();
-      if (body.isEmpty) return null;
-      if (body.startsWith('http://') || body.startsWith('https://')) {
-        return body;
-      }
-      final decoded = jsonDecode(body);
-      if (decoded is String) return decoded.trim().isEmpty ? null : decoded;
-      if (decoded is Map) {
-        for (final key in <String>['url', 'image', 'imageUrl', 'photoUrl']) {
-          final value = '${decoded[key] ?? ''}'.trim();
-          if (value.startsWith('http://') || value.startsWith('https://')) {
-            return value;
-          }
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
-
   Widget _fallbackAvatar() {
     return Container(
       width: _avatarSize,
@@ -1399,8 +1293,8 @@ class _FacultyAvatarState extends State<_FacultyAvatar> {
   @override
   Widget build(BuildContext context) {
     final fallback = _fallbackAvatar();
-    final resolvedUrl = _resolvedUrl;
-    if (resolvedUrl == null || resolvedUrl.isEmpty) {
+    final resolvedUrl = widget.photoUrl.trim();
+    if (resolvedUrl.isEmpty) {
       return fallback;
     }
     return ClipRRect(
@@ -1635,6 +1529,7 @@ class _SeatStatusCardData {
     required this.facultyName,
     required this.facultyEmail,
     required this.facultyMeta,
+    required this.facultyPhotoUrl,
     required this.credits,
     required this.room,
     required this.classSchedule,
@@ -1660,6 +1555,7 @@ class _SeatStatusCardData {
   final String facultyName;
   final String facultyEmail;
   final String facultyMeta;
+  final String facultyPhotoUrl;
   final int credits;
   final String room;
   final List<SeatStatusClassSchedule> classSchedule;
@@ -1686,6 +1582,7 @@ class _SeatStatusCardData {
       facultyName: facultyName,
       facultyEmail: facultyEmail,
       facultyMeta: facultyMeta,
+      facultyPhotoUrl: facultyPhotoUrl,
       credits: credits,
       room: room,
       classSchedule: classSchedule,
