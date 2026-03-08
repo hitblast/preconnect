@@ -40,7 +40,10 @@ class WebLoginBrokerService {
     final response = await _client
         .post(
           Uri.parse('$_base/web-login/session'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+          },
         )
         .timeout(_timeout);
     if (response.statusCode != 200) {
@@ -64,9 +67,12 @@ class WebLoginBrokerService {
   Future<WebLoginBrokerStatus> getStatus(WebLoginRequestPayload request) async {
     final uri = Uri.parse(
       '$_base/web-login/session/${request.sessionId}'
-      '?sessionToken=${Uri.encodeQueryComponent(request.sessionToken)}',
+      '?sessionToken=${Uri.encodeQueryComponent(request.sessionToken)}'
+      '&_ts=${DateTime.now().millisecondsSinceEpoch}',
     );
-    final response = await _client.get(uri).timeout(_timeout);
+    final response = await _client
+        .get(uri, headers: {'Cache-Control': 'no-store'})
+        .timeout(_timeout);
     if (response.statusCode != 200) {
       throw Exception('Unable to check login status');
     }
@@ -83,7 +89,10 @@ class WebLoginBrokerService {
     final response = await _client
         .post(
           Uri.parse('$_base/web-login/session/${request.sessionId}/consume'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+          },
           body: jsonEncode({'sessionToken': request.sessionToken}),
         )
         .timeout(_timeout);
@@ -103,7 +112,10 @@ class WebLoginBrokerService {
     final response = await _client
         .post(
           Uri.parse('$_base/web-login/session/${request.sessionId}/approve'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+          },
           body: jsonEncode({
             'sessionToken': request.sessionToken,
             'studentEmail': normalizedStudentEmail,

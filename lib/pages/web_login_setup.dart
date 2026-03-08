@@ -137,7 +137,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Open PreConnect in your browser, then scan the browser QR here.',
+                  'Open PreConnect Web, then scan the browser QR here.',
                   style: TextStyle(color: BracuPalette.textSecondary(context)),
                 ),
                 const SizedBox(height: 12),
@@ -193,6 +193,75 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: () => openExternalUrl(
+              context,
+              'https://web.preconnect.app',
+              failureMessage: 'Unable to open web.preconnect.app',
+            ),
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: BracuPalette.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: BracuPalette.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.open_in_new,
+                        color: BracuPalette.primary,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Open PreConnect Web',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: BracuPalette.textPrimary(context),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'PreConnect.app • Prepare. Connect. Succeed.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: BracuPalette.textSecondary(context),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      color: BracuPalette.textSecondary(context),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],

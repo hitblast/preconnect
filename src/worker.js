@@ -11,6 +11,17 @@ function json(data, init = {}) {
   });
 }
 
+function passthroughNoStore(upstream) {
+  const headers = new Headers(upstream.headers);
+  headers.set("cache-control", "no-store, no-cache, must-revalidate");
+  headers.set("pragma", "no-cache");
+  headers.set("expires", "0");
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers,
+  });
+}
+
 function normalizeEmail(input) {
   return `${input || ""}`.trim().toLowerCase();
 }
@@ -51,10 +62,7 @@ async function handleCreateSession(request, env) {
     env,
   );
 
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: upstream.headers,
-  });
+  return passthroughNoStore(upstream);
 }
 
 async function handleSessionProxy(request, url, env) {
@@ -66,10 +74,7 @@ async function handleSessionProxy(request, url, env) {
   if (request.method === "GET" && !action) {
     const qs = url.search || "";
     const upstream = await proxyToBroker(`/web-login/session/${sessionId}${qs}`, {}, env);
-    return new Response(upstream.body, {
-      status: upstream.status,
-      headers: upstream.headers,
-    });
+    return passthroughNoStore(upstream);
   }
 
   if (request.method === "POST" && action === "consume") {
@@ -82,10 +87,7 @@ async function handleSessionProxy(request, url, env) {
       },
       env,
     );
-    return new Response(upstream.body, {
-      status: upstream.status,
-      headers: upstream.headers,
-    });
+    return passthroughNoStore(upstream);
   }
 
   return json({ error: "Method not allowed" }, { status: 405 });

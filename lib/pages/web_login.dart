@@ -7,7 +7,10 @@ import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/web_login_broker_service.dart';
 import 'package:preconnect/tools/web_login_models.dart';
+import 'package:preconnect/tools/web_page_title_stub.dart'
+    if (dart.library.html) 'package:preconnect/tools/web_page_title_web.dart';
 import 'package:preconnect/tools/web_login_session_store.dart';
+import 'package:share_plus/share_plus.dart';
 
 class WebLoginPage extends StatefulWidget {
   const WebLoginPage({super.key});
@@ -17,6 +20,8 @@ class WebLoginPage extends StatefulWidget {
 }
 
 class _WebLoginPageState extends State<WebLoginPage> {
+  static const String _playStoreUrl =
+      'https://play.google.com/store/apps/details?id=com.sabbirba.preconnect';
   final WebLoginBrokerService _broker = WebLoginBrokerService();
   bool _initializing = true;
   bool _signingIn = false;
@@ -26,6 +31,8 @@ class _WebLoginPageState extends State<WebLoginPage> {
   Timer? _pollTimer;
   Timer? _countdownTimer;
   int _secondsLeft = 0;
+  bool _pollInFlight = false;
+  bool _consumeInFlight = false;
 
   bool get _hasActiveQr =>
       _request != null &&
@@ -35,6 +42,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
   @override
   void initState() {
     super.initState();
+    setWebPageTitle('Login to Web');
     _initialize();
   }
 
@@ -42,6 +50,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
   void dispose() {
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
+    setWebPageTitle('');
     super.dispose();
   }
 
@@ -53,6 +62,8 @@ class _WebLoginPageState extends State<WebLoginPage> {
       _request = null;
       _requestQrData = null;
       _secondsLeft = 0;
+      _pollInFlight = false;
+      _consumeInFlight = false;
     });
   }
 
@@ -115,6 +126,8 @@ class _WebLoginPageState extends State<WebLoginPage> {
     });
     _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
       if (_request == null) return;
+      if (_pollInFlight) return;
+      _pollInFlight = true;
       try {
         final status = await _broker.getStatus(_request!);
         if (status.expired) {
@@ -122,6 +135,8 @@ class _WebLoginPageState extends State<WebLoginPage> {
           return;
         }
         if (!status.approved) return;
+        if (_consumeInFlight) return;
+        _consumeInFlight = true;
         _pollTimer?.cancel();
         _countdownTimer?.cancel();
         final payload = await _broker.consume(_request!);
@@ -137,12 +152,79 @@ class _WebLoginPageState extends State<WebLoginPage> {
           context,
         ).pushReplacement(MaterialPageRoute(builder: (_) => const HomePage()));
       } catch (_) {
+        _resetToInitial();
         if (!mounted) return;
         setState(() {
           _statusMessage = 'Unable to complete browser login. Try again.';
         });
+      } finally {
+        _pollInFlight = false;
       }
     });
+  }
+
+  Future<void> _sharePlayStoreLink() async {
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          text: 'Install PreConnect App: $_playStoreUrl',
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      copyToClipboard(context, _playStoreUrl);
+    }
+  }
+
+  Future<void> _showPlayStoreQr() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: BracuPalette.primary.withValues(alpha: 0.18),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Scan to Install PreConnect App',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: BracuPalette.textPrimary(context),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                color: Colors.white,
+                padding: const EdgeInsets.all(12),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: BarcodeWidget(
+                    barcode: Barcode.qrCode(
+                      errorCorrectLevel: BarcodeQRCorrectionLevel.high,
+                    ),
+                    data: _playStoreUrl,
+                    color: Colors.black,
+                    backgroundColor: Colors.white,
+                    drawText: false,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -160,7 +242,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '1. Tap Generate QR Code.\n2. Open PreConnect Settings on your phone.\n3. Login to Web and scan this QR code.',
+                  '1. Tap Generate QR Code.\n2. Open Settings on your phone.\n3. Login to Web and scan this QR code.',
                   textAlign: TextAlign.start,
                   style: TextStyle(color: BracuPalette.textSecondary(context)),
                 ),
@@ -215,6 +297,95 @@ class _WebLoginPageState extends State<WebLoginPage> {
               ),
             ),
           ],
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: () => openExternalUrl(
+              context,
+              _playStoreUrl,
+              failureMessage: 'Unable to open Play Store.',
+            ),
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: BracuPalette.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: BracuPalette.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.android_rounded,
+                        color: BracuPalette.primary,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Get PreConnect App',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: BracuPalette.textPrimary(context),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Install on your phone to scan QR',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: BracuPalette.textSecondary(context),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      color: BracuPalette.textSecondary(context),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _showPlayStoreQr,
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 16),
+                  label: const Text('QR Code'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _sharePlayStoreLink,
+                  icon: const Icon(Icons.share_outlined, size: 16),
+                  label: const Text('Share'),
+                ),
+              ),
+            ],
+          ),
           if (_statusMessage != null) ...[
             const SizedBox(height: 12),
             BracuCard(

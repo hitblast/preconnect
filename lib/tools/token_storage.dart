@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart' show TargetPlatform;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:preconnect/tools/web_kv_store_stub.dart'
+    if (dart.library.html) 'package:preconnect/tools/web_kv_store_web.dart';
 
 class TokenStorage {
   TokenStorage._();
@@ -14,6 +16,10 @@ class TokenStorage {
       !kIsWeb && defaultTargetPlatform != TargetPlatform.macOS;
 
   Future<String?> read({required String key}) async {
+    if (kIsWeb) {
+      final value = webKvGet(key);
+      if (value != null && value.isNotEmpty) return value;
+    }
     if (_useSecure) {
       return _secure.read(key: key);
     }
@@ -22,6 +28,9 @@ class TokenStorage {
   }
 
   Future<void> write({required String key, String? value}) async {
+    if (kIsWeb && webKvSet(key, value)) {
+      return;
+    }
     if (_useSecure) {
       await _secure.write(key: key, value: value);
       return;
@@ -35,6 +44,13 @@ class TokenStorage {
   }
 
   Future<void> deleteAll() async {
+    if (kIsWeb) {
+      webKvClearKeys(const ['access_token', 'refresh_token']);
+      final prefs = SharedPreferencesAsync();
+      await prefs.remove('access_token');
+      await prefs.remove('refresh_token');
+      return;
+    }
     if (_useSecure) {
       await _secure.deleteAll();
       return;
