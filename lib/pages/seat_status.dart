@@ -1008,8 +1008,8 @@ class _SeatStatusCard extends StatelessWidget {
                     Text(
                       item.courseName,
                       style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
                         color: textSecondary,
                       ),
                     ),
