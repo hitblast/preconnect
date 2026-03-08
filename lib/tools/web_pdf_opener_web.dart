@@ -10,7 +10,13 @@ Future<void> openPdfInBrowserImpl({
 }) async {
   final blob = html.Blob(<dynamic>[bytes], 'application/pdf');
   final objectUrl = html.Url.createObjectUrlFromBlob(blob);
-  html.window.open(objectUrl, '_blank');
+  try {
+    html.window.open(objectUrl, '_blank');
+  } catch (_) {
+    // Safari may block popup windows after async work; fallback to same tab.
+    html.window.location.assign(objectUrl);
+    return;
+  }
   Timer(
     const Duration(seconds: 15),
     () => html.Url.revokeObjectUrl(objectUrl),

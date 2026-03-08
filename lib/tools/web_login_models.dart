@@ -25,12 +25,12 @@ class WebLoginRequestPayload {
 
   Map<String, dynamic> toJson() => {
     'v': version,
-    'type': type,
-    'sessionId': sessionId,
-    'sessionToken': sessionToken,
-    'studentEmail': studentEmail,
-    'nonce': nonce,
-    'expiresAt': expiresAtMillis,
+    't': type,
+    'sid': sessionId,
+    'st': sessionToken,
+    'se': studentEmail,
+    'n': nonce,
+    'exp': expiresAtMillis,
   };
 
   String toQrData() {
@@ -46,12 +46,15 @@ class WebLoginRequestPayload {
     final json = jsonDecode(jsonStr) as Map<String, dynamic>;
     return WebLoginRequestPayload(
       version: (json['v'] as num?)?.toInt() ?? 1,
-      type: '${json['type'] ?? ''}',
-      sessionId: '${json['sessionId'] ?? ''}',
-      sessionToken: '${json['sessionToken'] ?? ''}',
-      studentEmail: '${json['studentEmail'] ?? ''}',
-      nonce: '${json['nonce'] ?? ''}',
-      expiresAtMillis: (json['expiresAt'] as num?)?.toInt() ?? 0,
+      type: '${json['t'] ?? json['type'] ?? ''}',
+      sessionId: '${json['sid'] ?? json['sessionId'] ?? ''}',
+      sessionToken: '${json['st'] ?? json['sessionToken'] ?? ''}',
+      studentEmail: '${json['se'] ?? json['studentEmail'] ?? ''}',
+      nonce: '${json['n'] ?? json['nonce'] ?? ''}',
+      expiresAtMillis:
+          (json['exp'] as num?)?.toInt() ??
+          (json['expiresAt'] as num?)?.toInt() ??
+          0,
     );
   }
 }

@@ -208,10 +208,14 @@ class _WebLoginPageState extends State<WebLoginPage> {
                     child: AspectRatio(
                       aspectRatio: 1,
                       child: BarcodeWidget(
-                        barcode: Barcode.qrCode(),
+                        barcode: Barcode.qrCode(
+                          errorCorrectLevel: BarcodeQRCorrectionLevel.high,
+                        ),
                         data: _requestQrData ?? _request!.toQrData(),
                         color: Colors.black,
                         backgroundColor: Colors.white,
+                        drawText: false,
+                        padding: const EdgeInsets.all(16),
                       ),
                     ),
                   ),
