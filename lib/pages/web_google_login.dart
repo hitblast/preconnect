@@ -7,7 +7,6 @@ import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/web_login_broker_service.dart';
 import 'package:preconnect/tools/web_login_models.dart';
-import 'package:preconnect/tools/web_oauth_bridge.dart';
 import 'package:preconnect/tools/web_login_session_store.dart';
 
 class WebLoginPage extends StatefulWidget {
@@ -19,15 +18,12 @@ class WebLoginPage extends StatefulWidget {
 
 class _WebLoginPageState extends State<WebLoginPage> {
   final WebLoginBrokerService _broker = WebLoginBrokerService();
-  final WebOAuthBridge _oauthBridge = createOAuthBridge();
-  static String? _cachedAccountEmail;
   static WebLoginRequestPayload? _cachedRequest;
   static String? _cachedRequestQrData;
   static String? _cachedError;
   bool _initializing = true;
   bool _signingIn = false;
   String? _error;
-  String? _accountEmail;
   WebLoginRequestPayload? _request;
   String? _requestQrData;
   Timer? _pollTimer;
@@ -44,15 +40,6 @@ class _WebLoginPageState extends State<WebLoginPage> {
     if (normalized.contains('session expired') ||
         normalized.contains('expired')) {
       return 'This login session expired. Please generate a new QR code and try again.';
-    }
-    if (normalized.contains('oauth is not configured')) {
-      return 'Sign-in is not ready yet. Please contact the app admin.';
-    }
-    if (normalized.contains('popup')) {
-      return 'Sign-in window was closed or blocked. Allow popups and try again.';
-    }
-    if (normalized.contains('timed out')) {
-      return 'Sign-in took too long. Please try again.';
     }
     if (normalized.contains('network') || normalized.contains('socket')) {
       return 'Something went wrong while contacting the server. Please try again.';
@@ -77,12 +64,10 @@ class _WebLoginPageState extends State<WebLoginPage> {
   Future<void> _initialize() async {
     if (!mounted) return;
     final cachedRequest = _cachedRequest;
-    final cachedEmail = _cachedAccountEmail;
     final cachedQrData = _cachedRequestQrData;
     setState(() {
       _initializing = false;
       _error = _cachedError;
-      _accountEmail = cachedEmail;
       if (cachedRequest != null && !cachedRequest.isExpired) {
         _request = cachedRequest;
         _requestQrData = cachedQrData ?? cachedRequest.toQrData();
@@ -94,39 +79,27 @@ class _WebLoginPageState extends State<WebLoginPage> {
     }
   }
 
-  Future<void> _startWithStudentEmail() async {
+  Future<void> _startLogin() async {
     if (_signingIn) return;
     setState(() {
       _signingIn = true;
       _error = null;
     });
     try {
-      final email = (await _oauthBridge.signInAndGetEmail())
-          .trim()
-          .toLowerCase();
       final cachedRequest = _cachedRequest;
-      final shouldReuse =
-          cachedRequest != null &&
-          !cachedRequest.isExpired &&
-          (_cachedAccountEmail ?? '').toLowerCase() == email;
+      final shouldReuse = cachedRequest != null && !cachedRequest.isExpired;
       final request = shouldReuse
           ? cachedRequest
-          : (await _broker.createSession(
-              authToken: await _broker.requestCustomAuthToken(
-                studentEmail: email,
-              ),
-            )).request;
+          : (await _broker.createSession()).request;
       final qrData = shouldReuse && (_cachedRequestQrData ?? '').isNotEmpty
           ? _cachedRequestQrData!
           : request.toQrData();
-      _cachedAccountEmail = email;
       _cachedRequest = request;
       _cachedRequestQrData = qrData;
       _cachedError = null;
       _startPolling(request);
       if (!mounted) return;
       setState(() {
-        _accountEmail = email;
         _request = request;
         _requestQrData = qrData;
       });
@@ -188,7 +161,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
           accessToken: payload.accessToken,
           refreshToken: payload.refreshToken,
           sessionExpiresAtMillis: payload.sessionExpiresAtMillis,
-          accountEmail: _accountEmail ?? payload.studentEmail,
+          accountEmail: payload.studentEmail,
         );
         _cachedRequest = null;
         _cachedRequestQrData = null;
@@ -223,7 +196,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '1. Continue with your student Google account.\n2. Open PreConnect on your phone.\n3. Go to Settings > Login to Web and scan this QR code.',
+                  '1. Tap Generate QR Code.\n2. Open PreConnect on your phone.\n3. Go to Settings > Login to Web and scan this QR code.',
                   textAlign: TextAlign.start,
                   style: TextStyle(color: BracuPalette.textSecondary(context)),
                 ),
@@ -231,25 +204,13 @@ class _WebLoginPageState extends State<WebLoginPage> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _initializing || _signingIn
-                        ? null
-                        : _startWithStudentEmail,
+                    onPressed: _initializing || _signingIn ? null : _startLogin,
                     icon: const Icon(Icons.login_rounded),
                     label: Text(
-                      _signingIn
-                          ? 'Checking account...'
-                          : 'Continue with Google',
+                      _signingIn ? 'Generating...' : 'Generate QR Code',
                     ),
                   ),
                 ),
-                if ((_accountEmail ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    'Email: $_accountEmail',
-                    textAlign: TextAlign.start,
-                    style: TextStyle(color: BracuPalette.textPrimary(context)),
-                  ),
-                ],
               ],
             ),
           ),
@@ -259,7 +220,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
                 ? Text(
                     _initializing
                         ? 'Preparing login...'
-                        : 'Continue with Google to generate the browser QR.',
+                        : 'Generate a QR code to start browser login.',
                     textAlign: TextAlign.start,
                     style: TextStyle(
                       color: BracuPalette.textSecondary(context),

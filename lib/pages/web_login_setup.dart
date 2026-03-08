@@ -76,18 +76,6 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
         throw Exception('This browser QR is expired.');
       }
       final profile = await ProfileService().getProfile();
-      final studentEmail = (profile?['studentEmail'] ?? profile?['email'] ?? '')
-          .trim()
-          .toLowerCase();
-      if (studentEmail.isEmpty) {
-        throw Exception('Student email is not available on this device.');
-      }
-      final accountEmail = request.accountEmail.trim().toLowerCase();
-      if (studentEmail != accountEmail) {
-        throw Exception(
-          'email does not match your student email.\n\nBrowser: ${request.accountEmail}\nApp: $studentEmail',
-        );
-      }
       final approved = await AppLockService().authenticate(
         reason: 'Approve login to web',
       );
@@ -97,14 +85,15 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       final accessToken =
           (await TokenStorage.instance.read(key: 'access_token'))?.trim() ?? '';
       final refreshToken =
-          (await TokenStorage.instance.read(key: 'refresh_token'))?.trim() ?? '';
+          (await TokenStorage.instance.read(key: 'refresh_token'))?.trim() ??
+          '';
       if (accessToken.isEmpty || refreshToken.isEmpty) {
         throw Exception('Mobile login is required before approving web login.');
       }
       await _broker.approve(
         request: request,
         payload: WebLoginApprovePayload(
-          studentEmail: studentEmail,
+          studentEmail: request.accountEmail,
           studentId: (profile?['studentId'] ?? '').trim(),
           accessToken: accessToken,
           refreshToken: refreshToken,
@@ -148,7 +137,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Open PreConnect in Chrome, enter your student email there, then scan the browser QR here.',
+                  'Open PreConnect in your browser, then scan the browser QR here.',
                   style: TextStyle(color: BracuPalette.textSecondary(context)),
                 ),
                 const SizedBox(height: 12),
@@ -196,8 +185,8 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                   child: Text(
                     _status ??
                         (_busy
-                            ? 'Checking the email match and approving login...'
-                            : 'Approval only succeeds if the browser email matches your student email.'),
+                            ? 'Approving browser login...'
+                            : 'Scan the browser QR and approve login.'),
                     style: TextStyle(
                       color: BracuPalette.textSecondary(context),
                     ),

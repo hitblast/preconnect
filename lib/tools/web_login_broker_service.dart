@@ -6,10 +6,7 @@ import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/tools/web_login_models.dart';
 
 class WebLoginBrokerSession {
-  const WebLoginBrokerSession({
-    required this.request,
-    required this.status,
-  });
+  const WebLoginBrokerSession({required this.request, required this.status});
 
   final WebLoginRequestPayload request;
   final String status;
@@ -33,41 +30,17 @@ class WebLoginBrokerService {
   static const Duration _timeout = Duration(seconds: 12);
   final http.Client _client;
 
-  WebLoginBrokerService({http.Client? client}) : _client = client ?? http.Client();
+  WebLoginBrokerService({http.Client? client})
+    : _client = client ?? http.Client();
 
   String get _origin => kIsWeb ? Uri.base.origin : ApiConfig.webLoginBrokerBase;
   String get _base => kIsWeb ? '$_origin/api' : ApiConfig.webLoginBrokerBase;
 
-  Future<String> requestCustomAuthToken({required String studentEmail}) async {
-    final response = await _client
-        .post(
-          Uri.parse('$_origin/auth/request-token'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'email': studentEmail}),
-        )
-        .timeout(_timeout);
-    if (response.statusCode != 200) {
-      final body = response.body.trim();
-      throw Exception(body.isEmpty ? 'Unable to verify student email' : body);
-    }
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    final token = '${json['token'] ?? ''}'.trim();
-    if (token.isEmpty) {
-      throw Exception('Unable to verify student email');
-    }
-    return token;
-  }
-
-  Future<WebLoginBrokerSession> createSession({
-    required String authToken,
-  }) async {
+  Future<WebLoginBrokerSession> createSession() async {
     final response = await _client
         .post(
           Uri.parse('$_base/web-login/session'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $authToken',
-          },
+          headers: {'Content-Type': 'application/json'},
         )
         .timeout(_timeout);
     if (response.statusCode != 200) {

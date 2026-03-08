@@ -131,9 +131,6 @@ jobs:
       PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER: ${{ secrets.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
-      GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
-      PUBLIC_WEB_ORIGIN: ${{ secrets.PUBLIC_WEB_ORIGIN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -182,21 +179,6 @@ jobs:
           apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
-
-      - name: Sync OAuth Client ID
-        if: ${{ env.GOOGLE_OAUTH_CLIENT_ID != '' }}
-        run: |
-          printf "%s" "${GOOGLE_OAUTH_CLIENT_ID}" | npx wrangler secret put GOOGLE_OAUTH_CLIENT_ID --name preconnect-web
-
-      - name: Sync OAuth Client Secret
-        if: ${{ env.GOOGLE_OAUTH_CLIENT_SECRET != '' }}
-        run: |
-          printf "%s" "${GOOGLE_OAUTH_CLIENT_SECRET}" | npx wrangler secret put GOOGLE_OAUTH_CLIENT_SECRET --name preconnect-web
-
-      - name: Sync Public Web Origin
-        if: ${{ env.PUBLIC_WEB_ORIGIN != '' }}
-        run: |
-          printf "%s" "${PUBLIC_WEB_ORIGIN}" | npx wrangler secret put PUBLIC_WEB_ORIGIN --name preconnect-web
 
   build-platforms:
     name: Build (${{ matrix.platform }})
