@@ -29,23 +29,21 @@ class _WebLoginPageState extends State<WebLoginPage> {
   Timer? _pollTimer;
   Timer? _countdownTimer;
   int _secondsLeft = 0;
+  static const String _qrExpiredMessage =
+      'QR expired. Regenerate to get a new QR code.';
 
   String _toUserMessage(Object error) {
     final raw = error.toString().replaceFirst('Exception: ', '');
     final normalized = raw.toLowerCase();
 
     if (normalized.contains('qr expired')) {
-      return 'This QR code has expired. Sign in again to get a new one.';
+      return _qrExpiredMessage;
     }
     if (normalized.contains('session expired') ||
         normalized.contains('expired')) {
-      return 'This login session expired. Please generate a new QR code and try again.';
+      return _qrExpiredMessage;
     }
-    if (normalized.contains('network') || normalized.contains('socket')) {
-      return 'Something went wrong while contacting the server. Please try again.';
-    }
-
-    return 'Something went wrong. Please try again.';
+    return '';
   }
 
   @override
@@ -59,6 +57,21 @@ class _WebLoginPageState extends State<WebLoginPage> {
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
     super.dispose();
+  }
+
+  void _resetToInitial({bool showExpired = false}) {
+    _pollTimer?.cancel();
+    _countdownTimer?.cancel();
+    _cachedRequest = null;
+    _cachedRequestQrData = null;
+    _cachedError = showExpired ? _qrExpiredMessage : null;
+    if (!mounted) return;
+    setState(() {
+      _request = null;
+      _requestQrData = null;
+      _secondsLeft = 0;
+      _error = showExpired ? _qrExpiredMessage : null;
+    });
   }
 
   Future<void> _initialize() async {
@@ -107,7 +120,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
       if (!mounted) return;
       _cachedError = _toUserMessage(e);
       setState(() {
-        _error = _cachedError;
+        _error = (_cachedError ?? '').isEmpty ? null : _cachedError;
       });
     } finally {
       if (mounted) {
@@ -126,8 +139,12 @@ class _WebLoginPageState extends State<WebLoginPage> {
           ((request.expiresAtMillis - DateTime.now().millisecondsSinceEpoch) /
                   1000)
               .ceil();
+      if (left <= 0) {
+        _resetToInitial(showExpired: true);
+        return;
+      }
       if (!mounted) return;
-      setState(() => _secondsLeft = left < 0 ? 0 : left);
+      setState(() => _secondsLeft = left);
     }
 
     updateCountdown();
@@ -139,18 +156,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
       try {
         final status = await _broker.getStatus(_request!);
         if (status.expired) {
-          _pollTimer?.cancel();
-          _countdownTimer?.cancel();
-          _cachedRequest = null;
-          _cachedRequestQrData = null;
-          _cachedError =
-              'This QR code has expired. Start again to generate a new one.';
-          if (!mounted) return;
-          setState(() {
-            _error = _cachedError;
-            _request = null;
-            _requestQrData = null;
-          });
+          _resetToInitial(showExpired: true);
           return;
         }
         if (!status.approved) return;
@@ -175,7 +181,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
         final message = _toUserMessage(e);
         if (!mounted) return;
         setState(() {
-          _error = message;
+          _error = message.isEmpty ? null : message;
         });
       }
     });
@@ -196,7 +202,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '1. Tap Generate QR Code.\n2. Open PreConnect on your phone.\n3. Go to Settings > Login to Web and scan this QR code.',
+                  '1. Tap Generate QR Code.\n2. Open PreConnect Settings on your phone.\n3. Login to Web and scan this QR code.',
                   textAlign: TextAlign.start,
                   style: TextStyle(color: BracuPalette.textSecondary(context)),
                 ),
@@ -245,7 +251,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
                       Text(
                         _secondsLeft > 0
                             ? 'Waiting for phone approval. QR expires in ${_secondsLeft}s'
-                            : 'QR expired',
+                            : 'QR expired. Regenerate QR Code.',
                         style: TextStyle(
                           color: _secondsLeft > 0
                               ? BracuPalette.textSecondary(context)
