@@ -984,13 +984,6 @@ class _SeatStatusCard extends StatelessWidget {
 
   final _SeatStatusCardData item;
 
-  Widget _facultyAvatar(BuildContext context) {
-    final label = item.facultyInitial.trim().isEmpty
-        ? '?'
-        : item.facultyInitial.trim().toUpperCase();
-    return _FacultyAvatar(fallbackLabel: label);
-  }
-
   Future<void> _openFacultyEmail(BuildContext context) async {
     await openMailComposer(context, item.facultyEmail);
   }
@@ -1048,54 +1041,45 @@ class _SeatStatusCard extends StatelessWidget {
                         item.facultyMeta.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
-                        child: Row(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _facultyAvatar(context),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (item.facultyName.isNotEmpty)
-                                    Text(
-                                      item.facultyName,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                        color: textSecondary,
-                                      ),
-                                    ),
-                                  if (item.facultyEmail.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 1),
-                                      child: GestureDetector(
-                                        onTap: () => _openFacultyEmail(context),
-                                        child: Text(
-                                          item.facultyEmail,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w500,
-                                            color: textSecondary,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  if (item.facultyMeta.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 1),
-                                      child: Text(
-                                        item.facultyMeta,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                            if (item.facultyName.isNotEmpty)
+                              Text(
+                                item.facultyName,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: textSecondary,
+                                ),
                               ),
-                            ),
+                            if (item.facultyEmail.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 1),
+                                child: GestureDetector(
+                                  onTap: () => _openFacultyEmail(context),
+                                  child: Text(
+                                    item.facultyEmail,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            if (item.facultyMeta.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 1),
+                                child: Text(
+                                  item.facultyMeta,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -1241,44 +1225,6 @@ class _SeatStatusCard extends StatelessWidget {
       return '$day $time';
     }).toList();
     return lines;
-  }
-}
-
-class _FacultyAvatar extends StatefulWidget {
-  const _FacultyAvatar({required this.fallbackLabel});
-
-  final String fallbackLabel;
-
-  @override
-  State<_FacultyAvatar> createState() => _FacultyAvatarState();
-}
-
-class _FacultyAvatarState extends State<_FacultyAvatar> {
-  static const double _avatarSize = 52;
-  Widget _fallbackAvatar() {
-    return Container(
-      width: _avatarSize,
-      height: _avatarSize,
-      decoration: BoxDecoration(
-        color: BracuPalette.primary.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        widget.fallbackLabel,
-        style: const TextStyle(
-          color: BracuPalette.primary,
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-        ),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _fallbackAvatar();
   }
 }
 
