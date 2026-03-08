@@ -49,7 +49,8 @@ class WebLoginRequestPayload {
       type: '${json['t'] ?? json['type'] ?? ''}',
       sessionId: '${json['sid'] ?? json['sessionId'] ?? ''}',
       sessionToken: '${json['st'] ?? json['sessionToken'] ?? ''}',
-      studentEmail: '${json['se'] ?? json['studentEmail'] ?? ''}',
+      studentEmail:
+          '${json['se'] ?? json['studentEmail'] ?? json['googleEmail'] ?? json['accountEmail'] ?? ''}',
       nonce: '${json['n'] ?? json['nonce'] ?? ''}',
       expiresAtMillis:
           (json['exp'] as num?)?.toInt() ??

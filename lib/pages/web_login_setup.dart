@@ -76,12 +76,16 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
         throw Exception('This browser QR is expired.');
       }
       final profile = await ProfileService().getProfile();
-      final studentEmail = (profile?['studentEmail'] ?? profile?['email'] ?? '')
+      final profileEmail = (profile?['studentEmail'] ?? profile?['email'] ?? '')
           .trim()
           .toLowerCase();
-      if (studentEmail.isEmpty || !studentEmail.contains('@')) {
+      if (profileEmail.isEmpty || !profileEmail.contains('@')) {
         throw Exception('Student email was not found on this phone.');
       }
+      final qrSessionEmail = request.studentEmail.trim().toLowerCase();
+      final approvalEmail = qrSessionEmail.contains('@')
+          ? qrSessionEmail
+          : profileEmail;
       final approved = await AppLockService().authenticate(
         reason: 'Approve login to web',
       );
@@ -99,7 +103,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       await _broker.approve(
         request: request,
         payload: WebLoginApprovePayload(
-          studentEmail: studentEmail,
+          studentEmail: approvalEmail,
           studentId: (profile?['studentId'] ?? '').trim(),
           accessToken: accessToken,
           refreshToken: refreshToken,
@@ -110,7 +114,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       );
       if (!mounted) return;
       setState(() {
-        _status = 'Web login approved for $studentEmail';
+        _status = 'Web login approved for $approvalEmail';
       });
       showAppSnackBar(context, 'Web login approved');
     } catch (e) {
