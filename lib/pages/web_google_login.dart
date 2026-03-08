@@ -34,6 +34,47 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
   Timer? _countdownTimer;
   int _secondsLeft = 0;
 
+  String _toUserMessage(Object error) {
+    final raw = error.toString().replaceFirst('Exception: ', '');
+    final normalized = raw.toLowerCase();
+
+    if (normalized.contains('popup-closed-by-user')) {
+      return 'The Google sign-in window was closed before sign-in finished.';
+    }
+    if (normalized.contains('popup-blocked')) {
+      return 'Your browser blocked the Google sign-in window. Allow pop-ups and try again.';
+    }
+    if (normalized.contains('cancelled-popup-request')) {
+      return 'A new sign-in window replaced the previous one. Try again.';
+    }
+    if (normalized.contains('network-request-failed')) {
+      return 'Could not reach Google. Check your internet connection and try again.';
+    }
+    if (normalized.contains('unauthorized-domain')) {
+      return 'This website is not allowed for Google sign-in yet. Please try again later.';
+    }
+    if (normalized.contains('operation-not-allowed')) {
+      return 'Google sign-in is not available right now. Please try again later.';
+    }
+    if (normalized.contains('account-exists-with-different-credential')) {
+      return 'This email is already linked to a different sign-in method.';
+    }
+    if (normalized.contains('did not return an email address')) {
+      return 'Google did not provide an email address for this account.';
+    }
+    if (normalized.contains('qr expired')) {
+      return 'This QR code has expired. Sign in again to get a new one.';
+    }
+    if (normalized.contains('session expired') || normalized.contains('expired')) {
+      return 'This login session expired. Please generate a new QR code and try again.';
+    }
+    if (normalized.contains('network') || normalized.contains('socket')) {
+      return 'Something went wrong while contacting the server. Please try again.';
+    }
+
+    return 'Something went wrong. Please try again.';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -114,7 +155,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
       });
     } catch (e) {
       if (!mounted) return;
-      _cachedError = e.toString().replaceFirst('Exception: ', '');
+      _cachedError = _toUserMessage(e);
       setState(() {
         _error = _cachedError;
       });
@@ -152,7 +193,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
           _countdownTimer?.cancel();
           _cachedRequest = null;
           _cachedRequestQrData = null;
-          _cachedError = 'QR expired. Sign in with Google again to refresh it.';
+          _cachedError = 'This QR code has expired. Sign in with Google again to get a new one.';
           if (!mounted) return;
           setState(() {
             _error = _cachedError;
@@ -180,7 +221,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
           MaterialPageRoute(builder: (_) => const HomePage()),
         );
       } catch (e) {
-        final message = e.toString().replaceFirst('Exception: ', '');
+        final message = _toUserMessage(e);
         if (!mounted) return;
         setState(() {
           _error = message;
@@ -201,11 +242,11 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
         children: [
           BracuCard(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '1. Login with Google using your student email.\n2. Open PreConnect on your phone.\n3. Go to Settings > Login to Web and scan the QR.',
-                  textAlign: TextAlign.center,
+                  '1. Sign in with your student Google account.\n2. Open PreConnect on your phone.\n3. Go to Settings > Login to Web and scan this QR code.',
+                  textAlign: TextAlign.start,
                   style: TextStyle(color: BracuPalette.textSecondary(context)),
                 ),
                 const SizedBox(height: 14),
@@ -228,7 +269,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
                   const SizedBox(height: 10),
                   Text(
                     'Account: $_googleEmail',
-                    textAlign: TextAlign.center,
+                    textAlign: TextAlign.start,
                     style: TextStyle(color: BracuPalette.textPrimary(context)),
                   ),
                 ],
@@ -242,7 +283,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
                     _initializing
                         ? 'Preparing Google login...'
                         : 'Sign in with Google to generate the browser QR.',
-                    textAlign: TextAlign.center,
+                    textAlign: TextAlign.start,
                     style: TextStyle(color: BracuPalette.textSecondary(context)),
                   )
                 : Column(
