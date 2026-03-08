@@ -65,32 +65,23 @@ async function handleCreateSession(request, env) {
   return passthroughNoStore(upstream);
 }
 
-async function handleSessionProxy(request, url, env) {
-  const match = url.pathname.match(/^\/api\/web-login\/session\/([^/]+)(?:\/(consume))?$/);
-  if (!match) return null;
-  const sessionId = match[1];
-  const action = match[2] || "";
+async function handleWebLoginProxy(request, url, env) {
+  const path = `${url.pathname || ""}`;
+  if (!path.startsWith("/api/web-login/")) return null;
+  if (path === "/api/web-login/session") return null;
 
-  if (request.method === "GET" && !action) {
-    const qs = url.search || "";
-    const upstream = await proxyToBroker(`/web-login/session/${sessionId}${qs}`, {}, env);
-    return passthroughNoStore(upstream);
+  const brokerPath = path.replace(/^\/api/, "") + (url.search || "");
+  const headers = new Headers(request.headers);
+  headers.delete("host");
+  const init = {
+    method: request.method,
+    headers,
+  };
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    init.body = await request.text();
   }
-
-  if (request.method === "POST" && action === "consume") {
-    const upstream = await proxyToBroker(
-      `/web-login/session/${sessionId}/consume`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: await request.text(),
-      },
-      env,
-    );
-    return passthroughNoStore(upstream);
-  }
-
-  return json({ error: "Method not allowed" }, { status: 405 });
+  const upstream = await proxyToBroker(brokerPath, init, env);
+  return passthroughNoStore(upstream);
 }
 
 function isDisallowedImageHost(hostname) {
@@ -161,8 +152,8 @@ export default {
       return handleCreateSession(request, env);
     }
 
-    if (url.pathname.startsWith("/api/web-login/session/")) {
-      const res = await handleSessionProxy(request, url, env);
+    if (url.pathname.startsWith("/api/web-login/")) {
+      const res = await handleWebLoginProxy(request, url, env);
       if (res) return res;
     }
 

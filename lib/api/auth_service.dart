@@ -57,9 +57,6 @@ class AuthService {
   }
 
   Future<TokenRefreshStatus> refreshTokenStatus() async {
-    if (kIsWeb && !await WebLoginSessionStore.hasValidSession()) {
-      return TokenRefreshStatus.invalidSession;
-    }
     try {
       final refreshToken = await _storage.read(key: 'refresh_token');
       if (refreshToken == null || refreshToken.isEmpty) {
@@ -108,18 +105,11 @@ class AuthService {
   }
 
   Future<bool> isLoggedIn() async {
-    if (kIsWeb && !await WebLoginSessionStore.hasValidSession()) {
-      return false;
-    }
     final token = await _storage.read(key: 'access_token');
     return token != null && token.isNotEmpty;
   }
 
   Future<bool> ensureSignedIn() async {
-    if (kIsWeb && !await WebLoginSessionStore.hasValidSession()) {
-      await logout();
-      return false;
-    }
     final accessToken = await _storage.read(key: 'access_token');
     if (accessToken == null || accessToken.isEmpty) return false;
 

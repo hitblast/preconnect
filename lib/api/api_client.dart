@@ -1,4 +1,5 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_exceptions.dart';
@@ -6,6 +7,8 @@ import 'package:preconnect/api/auth_service.dart';
 import 'package:preconnect/tools/play_install_referrer.dart';
 import 'package:preconnect/tools/play_integrity.dart';
 import 'package:preconnect/tools/token_storage.dart';
+import 'package:preconnect/tools/web_login_broker_service.dart';
+import 'package:preconnect/tools/web_login_session_store.dart';
 
 class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
@@ -13,10 +16,14 @@ class ApiClient {
   ApiClient._internal();
 
   final TokenStorage _storage = TokenStorage.instance;
+  final WebLoginBrokerService _webLoginBroker = WebLoginBrokerService();
   static const Duration _requestTimeout = Duration(seconds: 12);
   static const Duration _connectivityCacheTtl = Duration(seconds: 10);
+  static const Duration _webSessionCheckTtl = Duration(seconds: 12);
   DateTime? _lastConnectivityCheckedAt;
   bool? _lastConnectivityResult;
+  DateTime? _lastWebSessionCheckedAt;
+  bool _lastWebSessionIsActive = true;
 
   Future<bool> hasConnection({bool forceRefresh = false}) async {
     final now = DateTime.now();
@@ -48,6 +55,11 @@ class ApiClient {
     Map<String, String> additionalHeaders = const <String, String>{},
     Set<int> acceptedStatusCodes = const <int>{200},
   }) async {
+    if (!await _ensureWebSessionActive()) {
+      await AuthService().logout();
+      throw const SessionExpiredException();
+    }
+
     final token = await getAccessToken();
     if (token == null || token.isEmpty) {
       throw const UnauthenticatedException();
@@ -107,6 +119,32 @@ class ApiClient {
     }
 
     throw ApiException(response.statusCode, response.body);
+  }
+
+  Future<bool> _ensureWebSessionActive() async {
+    if (!kIsWeb) return true;
+    final now = DateTime.now();
+    if (_lastWebSessionCheckedAt != null &&
+        now.difference(_lastWebSessionCheckedAt!) <= _webSessionCheckTtl) {
+      return _lastWebSessionIsActive;
+    }
+    final sessionId = await WebLoginSessionStore.getWebSessionId();
+    final sessionToken = await WebLoginSessionStore.getWebSessionToken();
+    if ((sessionId ?? '').isEmpty || (sessionToken ?? '').isEmpty) {
+      return false;
+    }
+    try {
+      final isActive = await _webLoginBroker.isActiveWebSession(
+        webSessionId: sessionId!,
+        webSessionToken: sessionToken!,
+      );
+      _lastWebSessionCheckedAt = now;
+      _lastWebSessionIsActive = isActive;
+      return isActive;
+    } catch (_) {
+      _lastWebSessionCheckedAt = now;
+      return _lastWebSessionIsActive;
+    }
   }
 
   Future<http.Response> publicGet(

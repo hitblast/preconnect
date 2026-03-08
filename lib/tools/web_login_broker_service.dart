@@ -85,6 +85,26 @@ class WebLoginBrokerService {
     );
   }
 
+  Future<bool> isActiveWebSession({
+    required String webSessionId,
+    required String webSessionToken,
+  }) async {
+    final id = webSessionId.trim();
+    final token = webSessionToken.trim();
+    if (id.isEmpty || token.isEmpty) return false;
+    final uri = Uri.parse(
+      '$_base/web-login/active/$id'
+      '?sessionToken=${Uri.encodeQueryComponent(token)}'
+      '&_ts=${DateTime.now().millisecondsSinceEpoch}',
+    );
+    final response = await _client
+        .get(uri, headers: {'Cache-Control': 'no-store'})
+        .timeout(_timeout);
+    if (response.statusCode != 200) return false;
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return json['active'] == true;
+  }
+
   Future<WebLoginApprovePayload> consume(WebLoginRequestPayload request) async {
     final response = await _client
         .post(
@@ -126,6 +146,69 @@ class WebLoginBrokerService {
     if (response.statusCode != 200) {
       final body = response.body.trim();
       throw Exception(body.isEmpty ? 'Unable to approve web login' : body);
+    }
+  }
+
+  Future<List<WebActiveSession>> listActiveSessions({
+    required String accessToken,
+  }) async {
+    final response = await _client
+        .post(
+          Uri.parse('$_base/web-login/sessions/list'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+          },
+          body: jsonEncode({'accessToken': accessToken}),
+        )
+        .timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw Exception('Unable to load active web sessions');
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final raw = json['sessions'];
+    if (raw is! List) return const <WebActiveSession>[];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(WebActiveSession.fromJson)
+        .toList();
+  }
+
+  Future<void> revokeSession({
+    required String accessToken,
+    required String webSessionId,
+  }) async {
+    final response = await _client
+        .post(
+          Uri.parse('$_base/web-login/sessions/revoke'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+          },
+          body: jsonEncode({
+            'accessToken': accessToken,
+            'webSessionId': webSessionId,
+          }),
+        )
+        .timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw Exception('Unable to revoke web session');
+    }
+  }
+
+  Future<void> revokeAllSessions({required String accessToken}) async {
+    final response = await _client
+        .post(
+          Uri.parse('$_base/web-login/sessions/revoke-all'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+          },
+          body: jsonEncode({'accessToken': accessToken}),
+        )
+        .timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw Exception('Unable to revoke all web sessions');
     }
   }
 }

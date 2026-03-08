@@ -66,6 +66,8 @@ class WebLoginApprovePayload {
     required this.accessToken,
     required this.refreshToken,
     required this.sessionExpiresAtMillis,
+    this.webSessionId,
+    this.webSessionToken,
   });
 
   final String studentEmail;
@@ -73,6 +75,8 @@ class WebLoginApprovePayload {
   final String accessToken;
   final String refreshToken;
   final int sessionExpiresAtMillis;
+  final String? webSessionId;
+  final String? webSessionToken;
 
   Map<String, dynamic> toJson() => {
     'studentEmail': studentEmail,
@@ -80,6 +84,9 @@ class WebLoginApprovePayload {
     'accessToken': accessToken,
     'refreshToken': refreshToken,
     'sessionExpiresAt': sessionExpiresAtMillis,
+    if ((webSessionId ?? '').trim().isNotEmpty) 'webSessionId': webSessionId,
+    if ((webSessionToken ?? '').trim().isNotEmpty)
+      'webSessionToken': webSessionToken,
   };
 
   static WebLoginApprovePayload fromJson(Map<String, dynamic> json) {
@@ -89,6 +96,54 @@ class WebLoginApprovePayload {
       accessToken: '${json['accessToken'] ?? ''}',
       refreshToken: '${json['refreshToken'] ?? ''}',
       sessionExpiresAtMillis: (json['sessionExpiresAt'] as num?)?.toInt() ?? 0,
+      webSessionId: '${json['webSessionId'] ?? ''}'.trim().isEmpty
+          ? null
+          : '${json['webSessionId']}',
+      webSessionToken: '${json['webSessionToken'] ?? ''}'.trim().isEmpty
+          ? null
+          : '${json['webSessionToken']}',
+    );
+  }
+}
+
+class WebActiveSession {
+  const WebActiveSession({
+    required this.webSessionId,
+    required this.studentId,
+    required this.studentEmail,
+    required this.createdAtMillis,
+    required this.lastSeenAtMillis,
+    required this.sessionExpiresAtMillis,
+    required this.revokedAtMillis,
+    required this.revoked,
+    required this.userAgent,
+  });
+
+  final String webSessionId;
+  final String studentId;
+  final String studentEmail;
+  final int createdAtMillis;
+  final int lastSeenAtMillis;
+  final int sessionExpiresAtMillis;
+  final int revokedAtMillis;
+  final bool revoked;
+  final String userAgent;
+
+  bool get isExpired =>
+      sessionExpiresAtMillis > 0 &&
+      sessionExpiresAtMillis <= DateTime.now().millisecondsSinceEpoch;
+
+  static WebActiveSession fromJson(Map<String, dynamic> json) {
+    return WebActiveSession(
+      webSessionId: '${json['webSessionId'] ?? ''}',
+      studentId: '${json['studentId'] ?? ''}',
+      studentEmail: '${json['studentEmail'] ?? ''}',
+      createdAtMillis: (json['createdAt'] as num?)?.toInt() ?? 0,
+      lastSeenAtMillis: (json['lastSeenAt'] as num?)?.toInt() ?? 0,
+      sessionExpiresAtMillis: (json['sessionExpiresAt'] as num?)?.toInt() ?? 0,
+      revokedAtMillis: (json['revokedAt'] as num?)?.toInt() ?? 0,
+      revoked: json['revoked'] == true,
+      userAgent: '${json['userAgent'] ?? ''}',
     );
   }
 }

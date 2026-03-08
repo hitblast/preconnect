@@ -23,12 +23,16 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
   bool? _cameraGranted;
   bool _busy = false;
   String? _status;
+  bool _loadingSessions = false;
+  String? _sessionsError;
+  List<WebActiveSession> _activeSessions = const <WebActiveSession>[];
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _ensurePermission();
+    _loadActiveSessions();
   }
 
   @override
@@ -60,6 +64,107 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
     if (granted) {
       await _controller.start().catchError((_) {});
     }
+  }
+
+  Future<void> _refreshAll() async {
+    await _ensurePermission();
+    await _loadActiveSessions();
+  }
+
+  Future<void> _loadActiveSessions() async {
+    if (!mounted) return;
+    setState(() {
+      _loadingSessions = true;
+      _sessionsError = null;
+    });
+    try {
+      final accessToken =
+          (await TokenStorage.instance.read(key: 'access_token'))?.trim() ?? '';
+      if (accessToken.isEmpty) {
+        throw Exception('Please sign in on this phone first.');
+      }
+      final sessions = await _broker.listActiveSessions(accessToken: accessToken);
+      if (!mounted) return;
+      setState(() {
+        _activeSessions = sessions;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _sessionsError = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingSessions = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _revokeSession(WebActiveSession session) async {
+    if (_loadingSessions) return;
+    try {
+      final accessToken =
+          (await TokenStorage.instance.read(key: 'access_token'))?.trim() ?? '';
+      if (accessToken.isEmpty) {
+        throw Exception('Please sign in on this phone first.');
+      }
+      await _broker.revokeSession(
+        accessToken: accessToken,
+        webSessionId: session.webSessionId,
+      );
+      if (!mounted) return;
+      showAppSnackBar(context, 'Web session logged out');
+      await _loadActiveSessions();
+    } catch (e) {
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        e.toString().replaceFirst('Exception: ', ''),
+      );
+    }
+  }
+
+  Future<void> _revokeAllSessions() async {
+    if (_loadingSessions) return;
+    try {
+      final accessToken =
+          (await TokenStorage.instance.read(key: 'access_token'))?.trim() ?? '';
+      if (accessToken.isEmpty) {
+        throw Exception('Please sign in on this phone first.');
+      }
+      await _broker.revokeAllSessions(accessToken: accessToken);
+      if (!mounted) return;
+      showAppSnackBar(context, 'Logged out all web sessions');
+      await _loadActiveSessions();
+    } catch (e) {
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        e.toString().replaceFirst('Exception: ', ''),
+      );
+    }
+  }
+
+  String _formatTime(int millis) {
+    if (millis <= 0) return '—';
+    final dt = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+    final d = dt.day.toString().padLeft(2, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final y = dt.year.toString();
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return '$d/$m/$y $hh:$mm';
+  }
+
+  String _sessionLabel(WebActiveSession session) {
+    final ua = session.userAgent.toLowerCase();
+    if (ua.contains('safari') && !ua.contains('chrome')) return 'Safari';
+    if (ua.contains('chrome')) return 'Chrome';
+    if (ua.contains('firefox')) return 'Firefox';
+    if (ua.contains('edg')) return 'Edge';
+    return 'Browser session';
   }
 
   Future<void> _approve(String raw) async {
@@ -97,9 +202,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
           studentId: (profile?['studentId'] ?? '').trim(),
           accessToken: accessToken,
           refreshToken: refreshToken,
-          sessionExpiresAtMillis: DateTime.now()
-              .add(const Duration(days: 30))
-              .millisecondsSinceEpoch,
+          sessionExpiresAtMillis: DateTime.utc(2100, 1, 1).millisecondsSinceEpoch,
         ),
       );
       if (!mounted) return;
@@ -107,6 +210,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
         _status = 'Web login approved for $approvalEmail';
       });
       showAppSnackBar(context, 'Web login approved');
+      await _loadActiveSessions();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -130,7 +234,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       subtitle: 'Scan browser QR',
       icon: Icons.qr_code_scanner_rounded,
       body: BracuRefreshList(
-        onRefresh: _ensurePermission,
+        onRefresh: _refreshAll,
         children: [
           BracuCard(
             child: Column(
@@ -167,6 +271,118 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                           ),
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          BracuCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Active Web Sessions',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: BracuPalette.textPrimary(context),
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Refresh',
+                      onPressed: _loadingSessions ? null : _loadActiveSessions,
+                      icon: const Icon(Icons.refresh_rounded),
+                    ),
+                  ],
+                ),
+                if (_loadingSessions) const LinearProgressIndicator(minHeight: 2),
+                if (_sessionsError != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _sessionsError!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                ] else if (!_loadingSessions && _activeSessions.isEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'No active browser sessions.',
+                    style: TextStyle(color: BracuPalette.textSecondary(context)),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  for (final session in _activeSessions) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: BracuPalette.primary.withValues(alpha: 0.18),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _sessionLabel(session),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: BracuPalette.textPrimary(context),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Last seen: ${_formatTime(session.lastSeenAtMillis)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: BracuPalette.textSecondary(context),
+                                  ),
+                                ),
+                                Text(
+                                  session.revoked
+                                      ? 'Logged out'
+                                      : 'Active',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: session.revoked
+                                        ? Colors.redAccent
+                                        : BracuPalette.textSecondary(context),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton(
+                            onPressed: session.revoked
+                                ? null
+                                : () => _revokeSession(session),
+                            child: const Text('Logout'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _activeSessions.isEmpty || _loadingSessions
+                          ? null
+                          : _revokeAllSessions,
+                      icon: const Icon(Icons.logout_rounded),
+                      label: const Text('Logout All Web Sessions'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

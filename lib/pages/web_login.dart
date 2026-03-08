@@ -143,8 +143,9 @@ class _WebLoginPageState extends State<WebLoginPage> {
         await WebLoginSessionStore.save(
           accessToken: payload.accessToken,
           refreshToken: payload.refreshToken,
-          sessionExpiresAtMillis: payload.sessionExpiresAtMillis,
           studentEmail: payload.studentEmail,
+          webSessionId: payload.webSessionId,
+          webSessionToken: payload.webSessionToken,
         );
         RefreshBus.instance.notify(reason: 'auth');
         if (!mounted) return;
