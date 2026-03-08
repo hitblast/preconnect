@@ -8,7 +8,7 @@ class WebLoginRequestPayload {
     required this.type,
     required this.sessionId,
     required this.sessionToken,
-    required this.accountEmail,
+    required this.studentEmail,
     required this.nonce,
     required this.expiresAtMillis,
   });
@@ -17,7 +17,7 @@ class WebLoginRequestPayload {
   final String type;
   final String sessionId;
   final String sessionToken;
-  final String accountEmail;
+  final String studentEmail;
   final String nonce;
   final int expiresAtMillis;
 
@@ -28,8 +28,7 @@ class WebLoginRequestPayload {
     'type': type,
     'sessionId': sessionId,
     'sessionToken': sessionToken,
-    // Keep broker payload compatibility.
-    'googleEmail': accountEmail,
+    'studentEmail': studentEmail,
     'nonce': nonce,
     'expiresAt': expiresAtMillis,
   };
@@ -50,8 +49,7 @@ class WebLoginRequestPayload {
       type: '${json['type'] ?? ''}',
       sessionId: '${json['sessionId'] ?? ''}',
       sessionToken: '${json['sessionToken'] ?? ''}',
-      // Accept both legacy and neutral keys.
-      accountEmail: '${json['googleEmail'] ?? json['accountEmail'] ?? ''}',
+      studentEmail: '${json['studentEmail'] ?? ''}',
       nonce: '${json['nonce'] ?? ''}',
       expiresAtMillis: (json['expiresAt'] as num?)?.toInt() ?? 0,
     );

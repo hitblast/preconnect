@@ -1,5 +1,5 @@
 const DEFAULT_BROKER_BASE = "https://api.preconnect.app";
-const DEFAULT_SESSION_EMAIL = "web-login@preconnect.app";
+const DEFAULT_SESSION_EMAIL = "web@preconnect.app";
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -15,7 +15,7 @@ function normalizeEmail(input) {
   return `${input || ""}`.trim().toLowerCase();
 }
 
-function pickSessionEmail(rawEmail) {
+function pickStudentEmail(rawEmail) {
   const email = normalizeEmail(rawEmail);
   if (email.includes("@")) return email;
   return DEFAULT_SESSION_EMAIL;
@@ -41,13 +41,13 @@ async function handleCreateSession(request, env) {
     body = {};
   }
 
-  const sessionEmail = pickSessionEmail(body?.email || body?.accountEmail || body?.googleEmail);
+  const studentEmail = pickStudentEmail(body?.email || body?.studentEmail);
   const upstream = await proxyToBroker(
     "/web-login/session",
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ googleEmail: sessionEmail }),
+      body: JSON.stringify({ studentEmail }),
     },
     env,
   );
@@ -92,9 +92,69 @@ async function handleSessionProxy(request, url, env) {
   return json({ error: "Method not allowed" }, { status: 405 });
 }
 
+function isDisallowedImageHost(hostname) {
+  const host = `${hostname || ""}`.trim().toLowerCase();
+  if (!host) return true;
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+    return true;
+  }
+  if (/^10\.\d+\.\d+\.\d+$/.test(host)) return true;
+  if (/^192\.168\.\d+\.\d+$/.test(host)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(host)) return true;
+  if (host.endsWith(".local")) return true;
+  return false;
+}
+
+async function handleImageProxy(url) {
+  const raw = `${url.searchParams.get("u") || ""}`.trim();
+  if (!raw) {
+    return new Response("Missing image url", { status: 400 });
+  }
+
+  let target;
+  try {
+    target = new URL(raw);
+  } catch (_) {
+    return new Response("Invalid image url", { status: 400 });
+  }
+
+  if (target.protocol !== "https:" && target.protocol !== "http:") {
+    return new Response("Unsupported image protocol", { status: 400 });
+  }
+  if (isDisallowedImageHost(target.hostname)) {
+    return new Response("Image host blocked", { status: 403 });
+  }
+
+  const upstream = await fetch(target.toString(), {
+    cf: { cacheTtl: 60 * 60 * 12, cacheEverything: true },
+    headers: { "user-agent": "preconnect-web-image-proxy/1.0" },
+  });
+
+  if (!upstream.ok) {
+    return new Response("Image fetch failed", { status: upstream.status });
+  }
+
+  const contentType = upstream.headers.get("content-type") || "";
+  if (!contentType.toLowerCase().startsWith("image/")) {
+    return new Response("Unsupported image response", { status: 415 });
+  }
+
+  return new Response(upstream.body, {
+    status: 200,
+    headers: {
+      "content-type": contentType,
+      "cache-control": "public, max-age=3600, s-maxage=43200",
+    },
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (url.pathname === "/img") {
+      return handleImageProxy(url);
+    }
 
     if (url.pathname === "/api/web-login/session") {
       return handleCreateSession(request, env);

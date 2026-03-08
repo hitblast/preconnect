@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,6 +49,8 @@ class _CachedImageState extends State<CachedImage> {
   Uint8List? _bytes;
   Object? _error;
   bool _loading = false;
+  bool _useDirectNetwork = false;
+  String? _networkUrl;
 
   @override
   void initState() {
@@ -62,6 +65,7 @@ class _CachedImageState extends State<CachedImage> {
       _bytes = null;
       _error = null;
       _loading = false;
+      _networkUrl = null;
       _load();
     }
   }
@@ -92,6 +96,19 @@ class _CachedImageState extends State<CachedImage> {
     if (_loading) return;
     final url = widget.url.trim();
     if (url.isEmpty) return;
+    final isRemoteHttp =
+        url.startsWith('http://') || url.startsWith('https://');
+
+    if (kIsWeb && isRemoteHttp) {
+      final proxiedUrl = _buildWebProxyUrl(url);
+      if (!mounted) return;
+      setState(() {
+        _useDirectNetwork = true;
+        _networkUrl = proxiedUrl;
+        _loading = false;
+      });
+      return;
+    }
 
     final inlineBytes = _tryDecodeInline(url);
     if (inlineBytes != null && inlineBytes.isNotEmpty) {
@@ -159,6 +176,21 @@ class _CachedImageState extends State<CachedImage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_useDirectNetwork) {
+      return Image.network(
+        _networkUrl ?? widget.url,
+        fit: widget.fit,
+        alignment: widget.alignment,
+        width: widget.width,
+        height: widget.height,
+        filterQuality: widget.filterQuality,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return widget.placeholder ?? const SizedBox.shrink();
+        },
+        errorBuilder: (_, _, _) => widget.error ?? const SizedBox.shrink(),
+      );
+    }
     if (_bytes != null) {
       return Image.memory(
         _bytes!,
@@ -173,5 +205,10 @@ class _CachedImageState extends State<CachedImage> {
       return widget.error ?? const SizedBox.shrink();
     }
     return widget.placeholder ?? const SizedBox.shrink();
+  }
+
+  String _buildWebProxyUrl(String url) {
+    final encoded = Uri.encodeComponent(url);
+    return '${Uri.base.origin}/img?u=$encoded';
   }
 }

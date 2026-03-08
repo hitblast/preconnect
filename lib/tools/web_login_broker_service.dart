@@ -53,7 +53,7 @@ class WebLoginBrokerService {
         type: 'web_login_request',
         sessionId: '${json['sessionId'] ?? ''}',
         sessionToken: '${json['sessionToken'] ?? ''}',
-        accountEmail: '${json['googleEmail'] ?? json['accountEmail'] ?? ''}',
+        studentEmail: '${json['studentEmail'] ?? ''}',
         nonce: '${json['nonce'] ?? ''}',
         expiresAtMillis: (json['expiresAt'] as num?)?.toInt() ?? 0,
       ),
@@ -99,14 +99,14 @@ class WebLoginBrokerService {
     required WebLoginRequestPayload request,
     required WebLoginApprovePayload payload,
   }) async {
+    final normalizedStudentEmail = payload.studentEmail.trim().toLowerCase();
     final response = await _client
         .post(
           Uri.parse('$_base/web-login/session/${request.sessionId}/approve'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'sessionToken': request.sessionToken,
-            // Keep broker payload compatibility.
-            'googleEmail': request.accountEmail,
+            'studentEmail': normalizedStudentEmail,
             ...payload.toJson(),
           }),
         )

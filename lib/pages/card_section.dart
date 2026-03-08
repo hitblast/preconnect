@@ -8,11 +8,7 @@ const String _bracuLogoUrl =
     'https://www.bracu.ac.bd/sites/default/files/resources/media/bracu_logo_12-0-2022.png';
 
 class CardSection extends StatelessWidget {
-  const CardSection({
-    super.key,
-    required this.profile,
-    required this.photoUrl,
-  });
+  const CardSection({super.key, required this.profile, required this.photoUrl});
 
   final Map<String, String?>? profile;
   final String? photoUrl;
@@ -251,9 +247,7 @@ class _CardFront extends StatelessWidget {
 }
 
 class _CardBack extends StatelessWidget {
-  const _CardBack({
-    required this.displayStudentId,
-  });
+  const _CardBack({required this.displayStudentId});
 
   final String displayStudentId;
 
@@ -353,11 +347,7 @@ class _CardBack extends StatelessWidget {
                     ),
                   ],
                 ),
-                Container(
-                  width: 80,
-                  height: 1,
-                  color: const Color(0xFF1E1E1E),
-                ),
+                Container(width: 80, height: 1, color: const Color(0xFF1E1E1E)),
                 const Text(
                   'Authorized Signature',
                   style: TextStyle(
@@ -414,26 +404,20 @@ class _InfoRow extends StatelessWidget {
 }
 
 class _BracuLogo extends StatelessWidget {
-  const _BracuLogo({
-    required this.width,
-    required this.height,
-  });
+  const _BracuLogo({required this.width, required this.height});
 
   final double width;
   final double height;
 
   @override
   Widget build(BuildContext context) {
-    return Image.network(
-      _bracuLogoUrl,
+    return CachedImage(
+      url: _bracuLogoUrl,
       width: width,
       height: height,
       fit: BoxFit.contain,
-      errorBuilder: (_, _, _) => SizedBox(width: width, height: height),
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) return child;
-        return SizedBox(width: width, height: height);
-      },
+      error: Icon(Icons.school_rounded, size: width, color: Colors.black),
+      placeholder: SizedBox(width: width, height: height),
     );
   }
 }

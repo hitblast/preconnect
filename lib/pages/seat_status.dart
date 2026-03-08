@@ -966,15 +966,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   }
 
   String _facultyMetaForInitial(String facultyInitial) {
-    final key = facultyInitial.trim().toUpperCase();
-    final info = _staffInfoByInitial[key];
-    if (info == null) return '';
-    final chunks = <String>[];
-    if (info.departmentId != null) chunks.add('Dept #${info.departmentId}');
-    if (info.designationId != null) {
-      chunks.add('Designation #${info.designationId}');
-    }
-    return chunks.join(' • ');
+    return '';
   }
 
 }
@@ -1037,8 +1029,7 @@ class _SeatStatusCard extends StatelessWidget {
                       ),
                     ),
                     if (item.facultyName.isNotEmpty ||
-                        item.facultyEmail.isNotEmpty ||
-                        item.facultyMeta.isNotEmpty)
+                        item.facultyEmail.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Column(
@@ -1049,7 +1040,7 @@ class _SeatStatusCard extends StatelessWidget {
                                 item.facultyName,
                                 style: TextStyle(
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w700,
                                   color: textSecondary,
                                 ),
                               ),
@@ -1065,18 +1056,6 @@ class _SeatStatusCard extends StatelessWidget {
                                       fontWeight: FontWeight.w500,
                                       color: textSecondary,
                                     ),
-                                  ),
-                                ),
-                              ),
-                            if (item.facultyMeta.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 1),
-                                child: Text(
-                                  item.facultyMeta,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: textSecondary,
                                   ),
                                 ),
                               ),

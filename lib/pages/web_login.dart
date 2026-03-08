@@ -145,7 +145,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
           accessToken: payload.accessToken,
           refreshToken: payload.refreshToken,
           sessionExpiresAtMillis: payload.sessionExpiresAtMillis,
-          accountEmail: payload.studentEmail,
+          studentEmail: payload.studentEmail,
         );
         _cachedRequest = null;
         _cachedRequestQrData = null;
