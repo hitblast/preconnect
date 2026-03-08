@@ -47,7 +47,11 @@ async function handleCreateSession(request, env) {
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ studentEmail }),
+      body: JSON.stringify({
+        studentEmail,
+        // Backward compatibility for older broker deployments.
+        googleEmail: studentEmail,
+      }),
     },
     env,
   );

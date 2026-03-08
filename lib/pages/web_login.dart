@@ -24,6 +24,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
   bool _signingIn = false;
   WebLoginRequestPayload? _request;
   String? _requestQrData;
+  String? _statusMessage;
   Timer? _pollTimer;
   Timer? _countdownTimer;
   int _secondsLeft = 0;
@@ -80,6 +81,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
     if (_signingIn) return;
     setState(() {
       _signingIn = true;
+      _statusMessage = null;
     });
     try {
       final cachedRequest = _cachedRequest;
@@ -97,9 +99,13 @@ class _WebLoginPageState extends State<WebLoginPage> {
       setState(() {
         _request = request;
         _requestQrData = qrData;
+        _statusMessage = null;
       });
     } catch (e) {
       if (!mounted) return;
+      setState(() {
+        _statusMessage = 'Unable to generate QR code. Please try again.';
+      });
     } finally {
       if (mounted) {
         setState(() {
@@ -154,7 +160,12 @@ class _WebLoginPageState extends State<WebLoginPage> {
         Navigator.of(
           context,
         ).pushReplacement(MaterialPageRoute(builder: (_) => const HomePage()));
-      } catch (_) {}
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _statusMessage = 'Unable to complete browser login. Try again.';
+        });
+      }
     });
   }
 
@@ -225,6 +236,15 @@ class _WebLoginPageState extends State<WebLoginPage> {
                     style: TextStyle(color: BracuPalette.textSecondary(context)),
                   ),
                 ],
+              ),
+            ),
+          ],
+          if (_statusMessage != null) ...[
+            const SizedBox(height: 12),
+            BracuCard(
+              child: Text(
+                _statusMessage!,
+                style: const TextStyle(color: Colors.redAccent),
               ),
             ),
           ],
