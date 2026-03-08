@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/pages/ui_kit.dart';
-import 'package:preconnect/tools/app_lock_service.dart';
 import 'package:preconnect/tools/platform_permissions.dart';
 import 'package:preconnect/tools/token_storage.dart';
 import 'package:preconnect/tools/web_login_broker_service.dart';
@@ -83,12 +82,6 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       final approvalEmail = profileEmail.contains('@')
           ? profileEmail
           : (qrSessionEmail.contains('@') ? qrSessionEmail : 'web@preconnect.app');
-      final approved = await AppLockService().authenticate(
-        reason: 'Approve login to web',
-      );
-      if (!approved) {
-        throw Exception('Approval cancelled.');
-      }
       final accessToken =
           (await TokenStorage.instance.read(key: 'access_token'))?.trim() ?? '';
       final refreshToken =
