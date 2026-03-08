@@ -53,8 +53,7 @@ class WebLoginBrokerService {
         type: 'web_login_request',
         sessionId: '${json['sessionId'] ?? ''}',
         sessionToken: '${json['sessionToken'] ?? ''}',
-        studentEmail:
-            '${json['studentEmail'] ?? json['googleEmail'] ?? json['accountEmail'] ?? ''}',
+        studentEmail: '${json['studentEmail'] ?? ''}',
         nonce: '${json['nonce'] ?? ''}',
         expiresAtMillis: (json['expiresAt'] as num?)?.toInt() ?? 0,
       ),
@@ -108,8 +107,6 @@ class WebLoginBrokerService {
           body: jsonEncode({
             'sessionToken': request.sessionToken,
             'studentEmail': normalizedStudentEmail,
-            // Backward compatibility for older broker deployments.
-            'googleEmail': normalizedStudentEmail,
             ...payload.toJson(),
           }),
         )

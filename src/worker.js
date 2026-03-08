@@ -15,12 +15,6 @@ function normalizeEmail(input) {
   return `${input || ""}`.trim().toLowerCase();
 }
 
-function pickStudentEmail(rawEmail) {
-  const email = normalizeEmail(rawEmail);
-  if (email.includes("@")) return email;
-  return DEFAULT_SESSION_EMAIL;
-}
-
 async function proxyToBroker(path, init = {}, env) {
   const base = `${env.BROKER_BASE || DEFAULT_BROKER_BASE}`.replace(/\/+$/, "");
   return fetch(`${base}${path}`, init);
@@ -41,17 +35,18 @@ async function handleCreateSession(request, env) {
     body = {};
   }
 
-  const studentEmail = pickStudentEmail(body?.email || body?.studentEmail);
+  const studentEmail = normalizeEmail(body?.studentEmail || body?.email);
+  const payload = {
+    studentEmail: studentEmail.includes("@")
+      ? studentEmail
+      : DEFAULT_SESSION_EMAIL,
+  };
   const upstream = await proxyToBroker(
     "/web-login/session",
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        studentEmail,
-        // Backward compatibility for older broker deployments.
-        googleEmail: studentEmail,
-      }),
+      body: JSON.stringify(payload),
     },
     env,
   );
