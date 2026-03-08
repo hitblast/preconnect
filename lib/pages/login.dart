@@ -208,7 +208,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     if (kIsWeb) {
-      return const WebGoogleLoginPage();
+      return const WebLoginPage();
     }
 
     return Scaffold(

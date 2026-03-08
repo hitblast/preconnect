@@ -129,16 +129,11 @@ jobs:
     env:
       SEAT_STATUS_PROXY_BASE: ${{ secrets.SEAT_STATUS_PROXY_BASE }}
       PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER: ${{ secrets.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
-      FIREBASE_WEB_API_KEY: ${{ secrets.FIREBASE_WEB_API_KEY }}
-      FIREBASE_WEB_APP_ID: ${{ secrets.FIREBASE_WEB_APP_ID }}
-      FIREBASE_ANDROID_API_KEY: ${{ secrets.FIREBASE_ANDROID_API_KEY }}
-      FIREBASE_ANDROID_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
-      FIREBASE_IOS_API_KEY: ${{ secrets.FIREBASE_IOS_API_KEY }}
-      FIREBASE_IOS_APP_ID: ${{ secrets.FIREBASE_IOS_APP_ID }}
-      FIREBASE_MACOS_API_KEY: ${{ secrets.FIREBASE_MACOS_API_KEY }}
-      FIREBASE_MACOS_APP_ID: ${{ secrets.FIREBASE_MACOS_APP_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+      PUBLIC_WEB_ORIGIN: ${{ secrets.PUBLIC_WEB_ORIGIN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -155,16 +150,9 @@ jobs:
       - name: Build Web
         run: >
           flutter build web
+          --pwa-strategy=none
           --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }}
           --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
-          --dart-define=FIREBASE_WEB_API_KEY=${{ env.FIREBASE_WEB_API_KEY }}
-          --dart-define=FIREBASE_WEB_APP_ID=${{ env.FIREBASE_WEB_APP_ID }}
-          --dart-define=FIREBASE_ANDROID_API_KEY=${{ env.FIREBASE_ANDROID_API_KEY }}
-          --dart-define=FIREBASE_ANDROID_APP_ID=${{ env.FIREBASE_ANDROID_APP_ID }}
-          --dart-define=FIREBASE_IOS_API_KEY=${{ env.FIREBASE_IOS_API_KEY }}
-          --dart-define=FIREBASE_IOS_APP_ID=${{ env.FIREBASE_IOS_APP_ID }}
-          --dart-define=FIREBASE_MACOS_API_KEY=${{ env.FIREBASE_MACOS_API_KEY }}
-          --dart-define=FIREBASE_MACOS_APP_ID=${{ env.FIREBASE_MACOS_APP_ID }}
 
       - name: Remove Embedded Server Files From Web Build
         run: rm -rf build/web/server
@@ -195,6 +183,21 @@ jobs:
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
 
+      - name: Sync OAuth Client ID
+        if: ${{ env.GOOGLE_OAUTH_CLIENT_ID != '' }}
+        run: |
+          printf "%s" "${GOOGLE_OAUTH_CLIENT_ID}" | npx wrangler secret put GOOGLE_OAUTH_CLIENT_ID --name preconnect-web
+
+      - name: Sync OAuth Client Secret
+        if: ${{ env.GOOGLE_OAUTH_CLIENT_SECRET != '' }}
+        run: |
+          printf "%s" "${GOOGLE_OAUTH_CLIENT_SECRET}" | npx wrangler secret put GOOGLE_OAUTH_CLIENT_SECRET --name preconnect-web
+
+      - name: Sync Public Web Origin
+        if: ${{ env.PUBLIC_WEB_ORIGIN != '' }}
+        run: |
+          printf "%s" "${PUBLIC_WEB_ORIGIN}" | npx wrangler secret put PUBLIC_WEB_ORIGIN --name preconnect-web
+
   build-platforms:
     name: Build (${{ matrix.platform }})
     needs: [prepare-version, create-release]
@@ -207,14 +210,6 @@ jobs:
       SEAT_STATUS_PROXY_BASE: ${{ secrets.SEAT_STATUS_PROXY_BASE }}
       PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER: ${{ secrets.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
       DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
-      FIREBASE_WEB_API_KEY: ${{ secrets.FIREBASE_WEB_API_KEY }}
-      FIREBASE_WEB_APP_ID: ${{ secrets.FIREBASE_WEB_APP_ID }}
-      FIREBASE_ANDROID_API_KEY: ${{ secrets.FIREBASE_ANDROID_API_KEY }}
-      FIREBASE_ANDROID_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
-      FIREBASE_IOS_API_KEY: ${{ secrets.FIREBASE_IOS_API_KEY }}
-      FIREBASE_IOS_APP_ID: ${{ secrets.FIREBASE_IOS_APP_ID }}
-      FIREBASE_MACOS_API_KEY: ${{ secrets.FIREBASE_MACOS_API_KEY }}
-      FIREBASE_MACOS_APP_ID: ${{ secrets.FIREBASE_MACOS_APP_ID }}
     strategy:
       fail-fast: false
       matrix:
@@ -361,16 +356,16 @@ jobs:
 
       - name: Build Android APK (Release)
         if: matrix.platform == 'android' && steps.android_signing.outputs.enabled == 'true'
-        run: flutter build apk --release --target-platform android-arm64 --build-name ${{ needs.prepare-version.outputs.version_name }} --build-number ${{ needs.prepare-version.outputs.version_code }} --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }} --dart-define=FIREBASE_WEB_API_KEY=${{ env.FIREBASE_WEB_API_KEY }} --dart-define=FIREBASE_WEB_APP_ID=${{ env.FIREBASE_WEB_APP_ID }} --dart-define=FIREBASE_ANDROID_API_KEY=${{ env.FIREBASE_ANDROID_API_KEY }} --dart-define=FIREBASE_ANDROID_APP_ID=${{ env.FIREBASE_ANDROID_APP_ID }} --dart-define=FIREBASE_IOS_API_KEY=${{ env.FIREBASE_IOS_API_KEY }} --dart-define=FIREBASE_IOS_APP_ID=${{ env.FIREBASE_IOS_APP_ID }} --dart-define=FIREBASE_MACOS_API_KEY=${{ env.FIREBASE_MACOS_API_KEY }} --dart-define=FIREBASE_MACOS_APP_ID=${{ env.FIREBASE_MACOS_APP_ID }}
+        run: flutter build apk --release --target-platform android-arm64 --build-name ${{ needs.prepare-version.outputs.version_name }} --build-number ${{ needs.prepare-version.outputs.version_code }} --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
 
       - name: Build Android AAB (Release)
         if: matrix.platform == 'android' && steps.android_signing.outputs.enabled == 'true'
-        run: flutter build appbundle --release --target-platform android-arm64 --build-name ${{ needs.prepare-version.outputs.version_name }} --build-number ${{ needs.prepare-version.outputs.version_code }} --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }} --dart-define=FIREBASE_WEB_API_KEY=${{ env.FIREBASE_WEB_API_KEY }} --dart-define=FIREBASE_WEB_APP_ID=${{ env.FIREBASE_WEB_APP_ID }} --dart-define=FIREBASE_ANDROID_API_KEY=${{ env.FIREBASE_ANDROID_API_KEY }} --dart-define=FIREBASE_ANDROID_APP_ID=${{ env.FIREBASE_ANDROID_APP_ID }} --dart-define=FIREBASE_IOS_API_KEY=${{ env.FIREBASE_IOS_API_KEY }} --dart-define=FIREBASE_IOS_APP_ID=${{ env.FIREBASE_IOS_APP_ID }} --dart-define=FIREBASE_MACOS_API_KEY=${{ env.FIREBASE_MACOS_API_KEY }} --dart-define=FIREBASE_MACOS_APP_ID=${{ env.FIREBASE_MACOS_APP_ID }}
+        run: flutter build appbundle --release --target-platform android-arm64 --build-name ${{ needs.prepare-version.outputs.version_name }} --build-number ${{ needs.prepare-version.outputs.version_code }} --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
 
       - name: Build iOS App (Release, No Codesign)
         if: matrix.platform == 'ios'
         run: |
-          flutter build ios --release --no-codesign --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }} --dart-define=FIREBASE_WEB_API_KEY=${{ env.FIREBASE_WEB_API_KEY }} --dart-define=FIREBASE_WEB_APP_ID=${{ env.FIREBASE_WEB_APP_ID }} --dart-define=FIREBASE_ANDROID_API_KEY=${{ env.FIREBASE_ANDROID_API_KEY }} --dart-define=FIREBASE_ANDROID_APP_ID=${{ env.FIREBASE_ANDROID_APP_ID }} --dart-define=FIREBASE_IOS_API_KEY=${{ env.FIREBASE_IOS_API_KEY }} --dart-define=FIREBASE_IOS_APP_ID=${{ env.FIREBASE_IOS_APP_ID }} --dart-define=FIREBASE_MACOS_API_KEY=${{ env.FIREBASE_MACOS_API_KEY }} --dart-define=FIREBASE_MACOS_APP_ID=${{ env.FIREBASE_MACOS_APP_ID }}
+          flutter build ios --release --no-codesign --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
 
       - name: Build iOS IPA (Release, Signed)
         if: matrix.platform == 'ios'
@@ -398,12 +393,12 @@ jobs:
           security list-keychains -s "$KEYCHAIN_PATH"
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           echo "${{ secrets.IOS_PROFILE_BASE64 }}" | base64 -d > "$HOME/Library/MobileDevice/Provisioning Profiles/profile.mobileprovision"
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }} --dart-define=FIREBASE_WEB_API_KEY=${{ env.FIREBASE_WEB_API_KEY }} --dart-define=FIREBASE_WEB_APP_ID=${{ env.FIREBASE_WEB_APP_ID }} --dart-define=FIREBASE_ANDROID_API_KEY=${{ env.FIREBASE_ANDROID_API_KEY }} --dart-define=FIREBASE_ANDROID_APP_ID=${{ env.FIREBASE_ANDROID_APP_ID }} --dart-define=FIREBASE_IOS_API_KEY=${{ env.FIREBASE_IOS_API_KEY }} --dart-define=FIREBASE_IOS_APP_ID=${{ env.FIREBASE_IOS_APP_ID }} --dart-define=FIREBASE_MACOS_API_KEY=${{ env.FIREBASE_MACOS_API_KEY }} --dart-define=FIREBASE_MACOS_APP_ID=${{ env.FIREBASE_MACOS_APP_ID }}
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
 
       - name: Build macOS App
         if: matrix.platform == 'macos'
         run: |
-          flutter build macos --release --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }} --dart-define=FIREBASE_WEB_API_KEY=${{ env.FIREBASE_WEB_API_KEY }} --dart-define=FIREBASE_WEB_APP_ID=${{ env.FIREBASE_WEB_APP_ID }} --dart-define=FIREBASE_ANDROID_API_KEY=${{ env.FIREBASE_ANDROID_API_KEY }} --dart-define=FIREBASE_ANDROID_APP_ID=${{ env.FIREBASE_ANDROID_APP_ID }} --dart-define=FIREBASE_IOS_API_KEY=${{ env.FIREBASE_IOS_API_KEY }} --dart-define=FIREBASE_IOS_APP_ID=${{ env.FIREBASE_IOS_APP_ID }} --dart-define=FIREBASE_MACOS_API_KEY=${{ env.FIREBASE_MACOS_API_KEY }} --dart-define=FIREBASE_MACOS_APP_ID=${{ env.FIREBASE_MACOS_APP_ID }}
+          flutter build macos --release --dart-define=SEAT_STATUS_PROXY_BASE=${{ env.SEAT_STATUS_PROXY_BASE }} --dart-define=PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=${{ env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
 
 
       - name: Package Android Release

@@ -5,19 +5,19 @@ class WebLoginSessionStore {
   WebLoginSessionStore._();
 
   static const String _expiresAtKey = 'web_login_session_expires_at';
-  static const String _googleEmailKey = 'web_login_google_email';
+  static const String _accountEmailKey = 'web_login_account_email';
 
   static Future<void> save({
     required String accessToken,
     required String refreshToken,
     required int sessionExpiresAtMillis,
-    required String googleEmail,
+    required String accountEmail,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await TokenStorage.instance.write(key: 'access_token', value: accessToken);
     await TokenStorage.instance.write(key: 'refresh_token', value: refreshToken);
     await prefs.setInt(_expiresAtKey, sessionExpiresAtMillis);
-    await prefs.setString(_googleEmailKey, googleEmail.trim());
+    await prefs.setString(_accountEmailKey, accountEmail.trim());
   }
 
   static Future<int?> getExpiryMillis() async {
@@ -33,6 +33,6 @@ class WebLoginSessionStore {
   static Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_expiresAtKey);
-    await prefs.remove(_googleEmailKey);
+    await prefs.remove(_accountEmailKey);
   }
 }

@@ -82,10 +82,10 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       if (studentEmail.isEmpty) {
         throw Exception('Student email is not available on this device.');
       }
-      final googleEmail = request.googleEmail.trim().toLowerCase();
-      if (studentEmail != googleEmail) {
+      final accountEmail = request.accountEmail.trim().toLowerCase();
+      if (studentEmail != accountEmail) {
         throw Exception(
-          'email does not match your student email.\n\nBrowser: ${request.googleEmail}\nApp: $studentEmail',
+          'email does not match your student email.\n\nBrowser: ${request.accountEmail}\nApp: $studentEmail',
         );
       }
       final approved = await AppLockService().authenticate(
@@ -115,7 +115,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       );
       if (!mounted) return;
       setState(() {
-        _status = 'Web login approved for ${request.googleEmail}';
+        _status = 'Web login approved for ${request.accountEmail}';
       });
       showAppSnackBar(context, 'Web login approved');
     } catch (e) {
@@ -148,7 +148,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Open PreConnect in Chrome, sign in with Google there, then scan the browser QR here.',
+                  'Open PreConnect in Chrome, enter your student email there, then scan the browser QR here.',
                   style: TextStyle(color: BracuPalette.textSecondary(context)),
                 ),
                 const SizedBox(height: 12),

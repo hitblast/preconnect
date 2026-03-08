@@ -1,33 +1,33 @@
 import 'dart:async';
 
 import 'package:barcode_widget/barcode_widget.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:preconnect/pages/home.dart';
 import 'package:preconnect/pages/ui_kit.dart';
-import 'package:preconnect/tools/firebase_bootstrap.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/web_login_broker_service.dart';
 import 'package:preconnect/tools/web_login_models.dart';
+import 'package:preconnect/tools/web_oauth_bridge.dart';
 import 'package:preconnect/tools/web_login_session_store.dart';
 
-class WebGoogleLoginPage extends StatefulWidget {
-  const WebGoogleLoginPage({super.key});
+class WebLoginPage extends StatefulWidget {
+  const WebLoginPage({super.key});
 
   @override
-  State<WebGoogleLoginPage> createState() => _WebGoogleLoginPageState();
+  State<WebLoginPage> createState() => _WebLoginPageState();
 }
 
-class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
+class _WebLoginPageState extends State<WebLoginPage> {
   final WebLoginBrokerService _broker = WebLoginBrokerService();
-  static String? _cachedGoogleEmail;
+  final WebOAuthBridge _oauthBridge = createOAuthBridge();
+  static String? _cachedAccountEmail;
   static WebLoginRequestPayload? _cachedRequest;
   static String? _cachedRequestQrData;
   static String? _cachedError;
   bool _initializing = true;
   bool _signingIn = false;
   String? _error;
-  String? _googleEmail;
+  String? _accountEmail;
   WebLoginRequestPayload? _request;
   String? _requestQrData;
   Timer? _pollTimer;
@@ -38,35 +38,21 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
     final raw = error.toString().replaceFirst('Exception: ', '');
     final normalized = raw.toLowerCase();
 
-    if (normalized.contains('popup-closed-by-user')) {
-      return 'The Google sign-in window was closed before sign-in finished.';
-    }
-    if (normalized.contains('popup-blocked')) {
-      return 'Your browser blocked the Google sign-in window. Allow pop-ups and try again.';
-    }
-    if (normalized.contains('cancelled-popup-request')) {
-      return 'A new sign-in window replaced the previous one. Try again.';
-    }
-    if (normalized.contains('network-request-failed')) {
-      return 'Could not reach Google. Check your internet connection and try again.';
-    }
-    if (normalized.contains('unauthorized-domain')) {
-      return 'This website is not allowed for Google sign-in yet. Please try again later.';
-    }
-    if (normalized.contains('operation-not-allowed')) {
-      return 'Google sign-in is not available right now. Please try again later.';
-    }
-    if (normalized.contains('account-exists-with-different-credential')) {
-      return 'This email is already linked to a different sign-in method.';
-    }
-    if (normalized.contains('did not return an email address')) {
-      return 'Google did not provide an email address for this account.';
-    }
     if (normalized.contains('qr expired')) {
       return 'This QR code has expired. Sign in again to get a new one.';
     }
-    if (normalized.contains('session expired') || normalized.contains('expired')) {
+    if (normalized.contains('session expired') ||
+        normalized.contains('expired')) {
       return 'This login session expired. Please generate a new QR code and try again.';
+    }
+    if (normalized.contains('oauth is not configured')) {
+      return 'Sign-in is not ready yet. Please contact the app admin.';
+    }
+    if (normalized.contains('popup')) {
+      return 'Sign-in window was closed or blocked. Allow popups and try again.';
+    }
+    if (normalized.contains('timed out')) {
+      return 'Sign-in took too long. Please try again.';
     }
     if (normalized.contains('network') || normalized.contains('socket')) {
       return 'Something went wrong while contacting the server. Please try again.';
@@ -89,23 +75,17 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
   }
 
   Future<void> _initialize() async {
-    await FirebaseBootstrap.initializeIfNeeded();
     if (!mounted) return;
     final cachedRequest = _cachedRequest;
-    final cachedEmail = _cachedGoogleEmail;
+    final cachedEmail = _cachedAccountEmail;
     final cachedQrData = _cachedRequestQrData;
     setState(() {
       _initializing = false;
-      if (!FirebaseBootstrap.isAvailable) {
-        _error =
-            'Firebase web auth is not configured. Run flutterfire configure and update firebase_options.dart.';
-      } else {
-        _error = _cachedError;
-        _googleEmail = cachedEmail;
-        if (cachedRequest != null && !cachedRequest.isExpired) {
-          _request = cachedRequest;
-          _requestQrData = cachedQrData ?? cachedRequest.toQrData();
-        }
+      _error = _cachedError;
+      _accountEmail = cachedEmail;
+      if (cachedRequest != null && !cachedRequest.isExpired) {
+        _request = cachedRequest;
+        _requestQrData = cachedQrData ?? cachedRequest.toQrData();
       }
     });
     final request = _request;
@@ -114,42 +94,39 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
     }
   }
 
-  Future<void> _signInWithGoogle() async {
+  Future<void> _startWithStudentEmail() async {
     if (_signingIn) return;
     setState(() {
       _signingIn = true;
       _error = null;
     });
     try {
-      final provider = GoogleAuthProvider()
-        ..setCustomParameters({'prompt': 'select_account'});
-      final credential = await FirebaseAuth.instance.signInWithPopup(provider);
-      final email = (credential.user?.email ?? '').trim();
-      if (email.isEmpty) {
-        throw Exception('Google did not return an email address.');
-      }
+      final email = (await _oauthBridge.signInAndGetEmail())
+          .trim()
+          .toLowerCase();
       final cachedRequest = _cachedRequest;
-      final normalizedEmail = email.toLowerCase();
       final shouldReuse =
           cachedRequest != null &&
           !cachedRequest.isExpired &&
-          (_cachedGoogleEmail ?? '').toLowerCase() == normalizedEmail;
-      final request =
-          shouldReuse
-              ? cachedRequest
-              : (await _broker.createSession(googleEmail: email)).request;
-      final qrData =
-          shouldReuse && (_cachedRequestQrData ?? '').isNotEmpty
-              ? _cachedRequestQrData!
-              : request.toQrData();
-      _cachedGoogleEmail = email;
+          (_cachedAccountEmail ?? '').toLowerCase() == email;
+      final request = shouldReuse
+          ? cachedRequest
+          : (await _broker.createSession(
+              authToken: await _broker.requestCustomAuthToken(
+                studentEmail: email,
+              ),
+            )).request;
+      final qrData = shouldReuse && (_cachedRequestQrData ?? '').isNotEmpty
+          ? _cachedRequestQrData!
+          : request.toQrData();
+      _cachedAccountEmail = email;
       _cachedRequest = request;
       _cachedRequestQrData = qrData;
       _cachedError = null;
       _startPolling(request);
       if (!mounted) return;
       setState(() {
-        _googleEmail = email;
+        _accountEmail = email;
         _request = request;
         _requestQrData = qrData;
       });
@@ -193,7 +170,8 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
           _countdownTimer?.cancel();
           _cachedRequest = null;
           _cachedRequestQrData = null;
-          _cachedError = 'This QR code has expired. Sign in with Google again to get a new one.';
+          _cachedError =
+              'This QR code has expired. Start again to generate a new one.';
           if (!mounted) return;
           setState(() {
             _error = _cachedError;
@@ -210,16 +188,16 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
           accessToken: payload.accessToken,
           refreshToken: payload.refreshToken,
           sessionExpiresAtMillis: payload.sessionExpiresAtMillis,
-          googleEmail: _googleEmail ?? payload.studentEmail,
+          accountEmail: _accountEmail ?? payload.studentEmail,
         );
         _cachedRequest = null;
         _cachedRequestQrData = null;
         _cachedError = null;
         RefreshBus.instance.notify(reason: 'auth');
         if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomePage()),
-        );
+        Navigator.of(
+          context,
+        ).pushReplacement(MaterialPageRoute(builder: (_) => const HomePage()));
       } catch (e) {
         final message = _toUserMessage(e);
         if (!mounted) return;
@@ -233,7 +211,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
   @override
   Widget build(BuildContext context) {
     return BracuPageScaffold(
-      title: 'Login with Google',
+      title: 'Login to Web',
       subtitle: 'Scan with your phone',
       icon: Icons.language_rounded,
       showBack: false,
@@ -245,7 +223,7 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '1. Sign in with your student Google account.\n2. Open PreConnect on your phone.\n3. Go to Settings > Login to Web and scan this QR code.',
+                  '1. Continue with your student Google account.\n2. Open PreConnect on your phone.\n3. Go to Settings > Login to Web and scan this QR code.',
                   textAlign: TextAlign.start,
                   style: TextStyle(color: BracuPalette.textSecondary(context)),
                 ),
@@ -253,22 +231,21 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed:
-                        _initializing || !FirebaseBootstrap.isAvailable || _signingIn
-                            ? null
-                            : _signInWithGoogle,
+                    onPressed: _initializing || _signingIn
+                        ? null
+                        : _startWithStudentEmail,
                     icon: const Icon(Icons.login_rounded),
                     label: Text(
                       _signingIn
-                          ? 'Connecting Google...'
-                          : 'Login with Google',
+                          ? 'Checking account...'
+                          : 'Continue with Google',
                     ),
                   ),
                 ),
-                if ((_googleEmail ?? '').isNotEmpty) ...[
+                if ((_accountEmail ?? '').isNotEmpty) ...[
                   const SizedBox(height: 10),
                   Text(
-                    'Account: $_googleEmail',
+                    'Email: $_accountEmail',
                     textAlign: TextAlign.start,
                     style: TextStyle(color: BracuPalette.textPrimary(context)),
                   ),
@@ -281,10 +258,12 @@ class _WebGoogleLoginPageState extends State<WebGoogleLoginPage> {
             child: _request == null
                 ? Text(
                     _initializing
-                        ? 'Preparing Google login...'
-                        : 'Sign in with Google to generate the browser QR.',
+                        ? 'Preparing login...'
+                        : 'Continue with Google to generate the browser QR.',
                     textAlign: TextAlign.start,
-                    style: TextStyle(color: BracuPalette.textSecondary(context)),
+                    style: TextStyle(
+                      color: BracuPalette.textSecondary(context),
+                    ),
                   )
                 : Column(
                     children: [
