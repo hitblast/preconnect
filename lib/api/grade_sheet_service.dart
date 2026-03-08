@@ -33,6 +33,30 @@ class GradeSheetService {
     yield* _streamController.stream;
   }
 
+  Future<Uint8List?> fetchGradeSheetBytes({bool fromGet = false}) async {
+    final prefs = SharedPreferencesAsync();
+    final profileId = await resolvePortfolioId(
+      prefs: prefs,
+      refreshProfile: () => ProfileService().fetchProfile(fromGet: true),
+    );
+
+    if (profileId == null || profileId.isEmpty) return null;
+
+    try {
+      final response = await _client.authenticatedGet(
+        '${ApiConfig.connectApiBase}${ApiConfig.gradeSheetPath(profileId)}',
+        additionalHeaders: const <String, String>{
+          'Accept': 'application/pdf, text/plain, */*',
+        },
+      );
+      final bytes = _extractPdfBytes(response.bodyBytes, response.body);
+      if (bytes != null && bytes.isNotEmpty) return bytes;
+    } catch (_) {}
+
+    if (fromGet) return null;
+    return fetchGradeSheetBytes(fromGet: true);
+  }
+
   Future<GradeSheetFile?> fetchGradeSheet({bool fromGet = false}) async {
     final key = 'gradesheet|$fromGet';
     final inFlight = _inFlight[key];

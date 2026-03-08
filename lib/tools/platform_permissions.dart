@@ -6,7 +6,7 @@ class PlatformPermissions {
   const PlatformPermissions._();
 
   static Future<bool> requestScannerCameraPermission() async {
-    if (kIsWeb) return false;
+    if (kIsWeb) return true;
     if (defaultTargetPlatform == TargetPlatform.macOS) return true;
 
     final status = await Permission.camera.status;
@@ -17,7 +17,7 @@ class PlatformPermissions {
   }
 
   static Future<bool> requestGalleryImagePermission() async {
-    if (kIsWeb) return false;
+    if (kIsWeb) return true;
     if (defaultTargetPlatform == TargetPlatform.macOS) return true;
 
     if (defaultTargetPlatform == TargetPlatform.iOS) {

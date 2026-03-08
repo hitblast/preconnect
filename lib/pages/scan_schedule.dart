@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:preconnect/api/friend_schedule_store.dart';
@@ -145,16 +146,22 @@ class _ScanSchedulePageState extends State<ScanSchedulePage>
                                         ),
                                         const SizedBox(height: 12),
                                         if (isPermissionError)
-                                          InkWell(
-                                            onTap: openAppSettings,
-                                            child: const Text(
-                                              'Camera permission denied. Tap to open system settings.',
+                                          TextButton(
+                                            onPressed: () {
+                                              if (kIsWeb) {
+                                                _startScanner();
+                                                return;
+                                              }
+                                              openAppSettings();
+                                            },
+                                            child: Text(
+                                              kIsWeb
+                                                  ? 'Camera permission denied. Tap to retry camera.'
+                                                  : 'Camera permission denied. Tap to open system settings.',
                                               textAlign: TextAlign.center,
-                                              style: TextStyle(
+                                              style: const TextStyle(
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.w600,
-                                                decoration:
-                                                    TextDecoration.underline,
                                               ),
                                             ),
                                           )
@@ -199,10 +206,18 @@ class _ScanSchedulePageState extends State<ScanSchedulePage>
                                     )
                                   : Center(
                                       child: TextButton(
-                                        onPressed: () =>
-                                            _ensureCameraPermission(
-                                              openSettingsOnDeny: true,
-                                            ),
+                                        onPressed: () {
+                                          if (kIsWeb) {
+                                            setState(
+                                              () => _cameraGranted = true,
+                                            );
+                                            _startScanner();
+                                            return;
+                                          }
+                                          _ensureCameraPermission(
+                                            openSettingsOnDeny: true,
+                                          );
+                                        },
                                         child: Text(
                                           'Tap to enable camera',
                                           style: TextStyle(

@@ -106,16 +106,24 @@ class _StudentProfileState extends State<StudentProfile>
   }
 
   Future<void> _loadProfile() async {
+    Map<String, String?>? profile = _profile;
+    String? photoUrl = _photoUrl;
+    File? cachedImage = _cachedImageFile;
+    List<PaymentInfo> payments = _payments;
+    List<AttendanceInfo> attendances = _attendances;
+    Map<String, String?> advising = _advising;
+
     try {
-      final profile = await ProfileService().getProfile();
-      final photoUrl = ApiConfig.photoUrl(profile?['photoFilePath']);
-      final cachedImage = await ProfileImageCache.instance.getProfileImage(
-        photoUrl,
-      );
+      profile = await ProfileService().getProfile();
+      photoUrl = ApiConfig.photoUrl(profile?['photoFilePath']);
+      cachedImage = await ProfileImageCache.instance.getProfileImage(photoUrl);
+    } catch (_) {}
+
+    try {
       final List<dynamic> paymentsJson = _decodeList(
         await PaymentService().getPaymentInfo(),
       );
-      final List<PaymentInfo> payments =
+      payments =
           paymentsJson
               .map<PaymentInfo?>((item) {
                 try {
@@ -127,11 +135,13 @@ class _StudentProfileState extends State<StudentProfile>
               .whereType<PaymentInfo>()
               .toList()
             ..sort(_comparePayments);
+    } catch (_) {}
 
+    try {
       final List<dynamic> attendanceJson = _decodeList(
         await AttendanceService().getAttendanceInfo(),
       );
-      final attendances = attendanceJson
+      attendances = attendanceJson
           .map<AttendanceInfo?>((e) {
             try {
               return AttendanceInfo.fromJson(e as Map<String, dynamic>);
@@ -141,18 +151,21 @@ class _StudentProfileState extends State<StudentProfile>
           })
           .whereType<AttendanceInfo>()
           .toList();
-      final advising = await AdvisingService().getAdvisingInfo();
-
-      if (!mounted) return;
-      setState(() {
-        _profile = profile;
-        _photoUrl = photoUrl;
-        _cachedImageFile = cachedImage;
-        _payments = payments;
-        _attendances = attendances;
-        _advising = advising ?? _advising;
-      });
     } catch (_) {}
+
+    try {
+      advising = await AdvisingService().getAdvisingInfo() ?? advising;
+    } catch (_) {}
+
+    if (!mounted) return;
+    setState(() {
+      _profile = profile;
+      _photoUrl = photoUrl;
+      _cachedImageFile = cachedImage;
+      _payments = payments;
+      _attendances = attendances;
+      _advising = advising;
+    });
   }
 
   Future<void> _refreshProfile({bool notify = true}) async {
@@ -164,18 +177,26 @@ class _StudentProfileState extends State<StudentProfile>
       _isRefreshing = true;
     });
     _refreshController.repeat();
+    unawaited(_preloadDegreeProgress(forceRefresh: true));
+    Map<String, String?>? profile = _profile;
+    String? photoUrl = _photoUrl;
+    File? cachedImage = _cachedImageFile;
+    List<PaymentInfo> payments = _payments;
+    List<AttendanceInfo> attendances = _attendances;
+    Map<String, String?> advising = _advising;
+
     try {
-      unawaited(_preloadDegreeProgress(forceRefresh: true));
-      final profile = await ProfileService().fetchProfile();
-      final photoUrl = ApiConfig.photoUrl(profile?['photoFilePath']);
+      profile = await ProfileService().fetchProfile();
+      photoUrl = ApiConfig.photoUrl(profile?['photoFilePath']);
       ProfileImageCache.instance.invalidate();
-      final cachedImage = await ProfileImageCache.instance.getProfileImage(
-        photoUrl,
-      );
+      cachedImage = await ProfileImageCache.instance.getProfileImage(photoUrl);
+    } catch (_) {}
+
+    try {
       final List<dynamic> paymentsJson = _decodeList(
         await PaymentService().fetchPaymentInfo(),
       );
-      final List<PaymentInfo> payments =
+      payments =
           paymentsJson
               .map<PaymentInfo?>((item) {
                 try {
@@ -187,11 +208,13 @@ class _StudentProfileState extends State<StudentProfile>
               .whereType<PaymentInfo>()
               .toList()
             ..sort(_comparePayments);
+    } catch (_) {}
 
+    try {
       final List<dynamic> attendanceJson = _decodeList(
         await AttendanceService().fetchAttendanceInfo(),
       );
-      final attendances = attendanceJson
+      attendances = attendanceJson
           .map<AttendanceInfo?>((e) {
             try {
               return AttendanceInfo.fromJson(e as Map<String, dynamic>);
@@ -201,18 +224,21 @@ class _StudentProfileState extends State<StudentProfile>
           })
           .whereType<AttendanceInfo>()
           .toList();
-      final advising = await AdvisingService().fetchAdvisingInfo();
-
-      if (!mounted) return;
-      setState(() {
-        _profile = profile ?? _profile;
-        _photoUrl = photoUrl ?? _photoUrl;
-        _cachedImageFile = cachedImage ?? _cachedImageFile;
-        _payments = payments.isNotEmpty ? payments : _payments;
-        _attendances = attendances.isNotEmpty ? attendances : _attendances;
-        _advising = advising ?? _advising;
-      });
     } catch (_) {}
+
+    try {
+      advising = await AdvisingService().fetchAdvisingInfo() ?? advising;
+    } catch (_) {}
+
+    if (!mounted) return;
+    setState(() {
+      _profile = profile;
+      _photoUrl = photoUrl;
+      _cachedImageFile = cachedImage;
+      _payments = payments;
+      _attendances = attendances;
+      _advising = advising;
+    });
     if (mounted) {
       setState(() {
         _isRefreshing = false;
@@ -244,10 +270,7 @@ class _StudentProfileState extends State<StudentProfile>
         onRefresh: _refreshProfile,
         children: [
           const SizedBox(height: 6),
-          CardSection(
-            profile: _profile,
-            photoUrl: _photoUrl,
-          ),
+          CardSection(profile: _profile, photoUrl: _photoUrl),
           const SizedBox(height: 18),
           AcademicSummaryCard(
             profile: _profile ?? const {},

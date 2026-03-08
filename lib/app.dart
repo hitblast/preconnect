@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -324,7 +323,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<bool> _maybeCheckForUpdates() async {
-    if (!Platform.isAndroid) return false;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      return false;
+    }
     try {
       final info = await InAppUpdate.checkForUpdate();
       final availability = info.updateAvailability;

@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
@@ -77,6 +78,11 @@ class _AlarmPageState extends State<AlarmPage> {
     String courseCode,
     int minutesBefore,
   ) async {
+    if (kIsWeb) {
+      if (!context.mounted) return;
+      showAppSnackBar(context, 'Alarm setup is not available on web.');
+      return;
+    }
     final parsed = BracuTime.parseHourMinute(startTime);
     if (parsed == null) {
       if (!context.mounted) return;
@@ -91,7 +97,7 @@ class _AlarmPageState extends State<AlarmPage> {
     minute = adjusted.minute;
     final dayShift = adjusted.day.compareTo(classTime.day);
 
-    if (Platform.isIOS) {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
       final weekdays = _mapWeekdays(days, shift: dayShift);
       if (weekdays.isEmpty) return;
       try {
