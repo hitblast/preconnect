@@ -66,11 +66,13 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
     final navigator = Navigator.of(context);
     try {
       final myCourses = await _loadMyCourses();
+      if (!mounted) return;
       if (myCourses == null || myCourses.isEmpty) {
         showAppSnackBar(context, 'Please log in to compare schedules');
         return;
       }
       final myProfile = await ProfileService().getProfile();
+      if (!mounted) return;
       final myPhotoUrl = ApiConfig.photoUrl(myProfile?['photoFilePath']);
       navigator.push(
         MaterialPageRoute(
@@ -83,6 +85,7 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
         ),
       );
     } catch (_) {
+      if (!mounted) return;
       showAppSnackBar(context, 'Could not parse schedule data.');
     }
   }

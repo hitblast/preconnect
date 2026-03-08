@@ -16,7 +16,7 @@ import 'package:preconnect/tools/token_storage.dart';
 import 'package:preconnect/tools/user_agent.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/pages/ui_kit.dart';
-import 'package:preconnect/pages/web_google_login.dart';
+import 'package:preconnect/pages/web_login.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -128,10 +128,10 @@ class _LoginPageState extends State<LoginPage> {
     var needsRetry = false;
     try {
       final didLogin = await _exchangeCodeForToken(authCode);
-        if (!didLogin) {
-          needsRetry = true;
-          if (mounted) {
-            showAppSnackBar(context, 'Login failed. Please try again.');
+      if (!didLogin) {
+        needsRetry = true;
+        if (mounted) {
+          showAppSnackBar(context, 'Login failed. Please try again.');
         }
       }
     } finally {
