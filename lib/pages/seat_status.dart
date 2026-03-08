@@ -8,7 +8,6 @@ import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/model/seat_status_info.dart';
 import 'package:preconnect/pages/ui_kit.dart';
-import 'package:preconnect/tools/cached_image.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
 import 'package:preconnect/tools/time_utils.dart';
@@ -215,7 +214,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       facultyName: '',
       facultyEmail: '',
       facultyMeta: '',
-      facultyPhotoUrl: '',
       credits: 0,
       room: '',
       classSchedule: const <SeatStatusClassSchedule>[],
@@ -263,7 +261,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       facultyName: _facultyNameForInitial(main.faculties),
       facultyEmail: _facultyEmailForInitial(main.faculties),
       facultyMeta: _facultyMetaForInitial(main.faculties),
-      facultyPhotoUrl: _facultyPhotoUrlForInitial(main.faculties),
       credits: main.courseCredit,
       room: _pickNonEmpty(main.roomNumber, ''),
       classSchedule: main.sectionSchedule.classSchedules,
@@ -289,7 +286,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         facultyName: _facultyNameForInitial(main.faculties),
         facultyEmail: _facultyEmailForInitial(main.faculties),
         facultyMeta: _facultyMetaForInitial(main.faculties),
-        facultyPhotoUrl: _facultyPhotoUrlForInitial(main.faculties),
         room: _pickNonEmpty(main.roomNumber, ''),
         labRoom: _pickNonEmpty(lab?.roomNumber, ''),
         classSchedule: main.sectionSchedule.classSchedules,
@@ -318,7 +314,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     required String facultyName,
     required String facultyEmail,
     required String facultyMeta,
-    required String facultyPhotoUrl,
     required String room,
     required String labRoom,
     required List<SeatStatusClassSchedule> classSchedule,
@@ -338,7 +333,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         '${midExamDate ?? ''} ${midExamStartTime ?? ''} ${midExamEndTime ?? ''} '
         '${finalExamDate ?? ''} ${finalExamStartTime ?? ''} ${finalExamEndTime ?? ''}';
     return '$courseCode $sectionName $courseName '
-            '$facultyInitial $facultyName $facultyEmail $facultyMeta $facultyPhotoUrl '
+            '$facultyInitial $facultyName $facultyEmail $facultyMeta '
             '$room $labRoom $sectionId $total $consumed $remaining '
             '$scheduleToken $examToken'
         .toLowerCase();
@@ -682,7 +677,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     if (x.facultyName != y.facultyName) return false;
     if (x.facultyEmail != y.facultyEmail) return false;
     if (x.facultyMeta != y.facultyMeta) return false;
-    if (x.facultyPhotoUrl != y.facultyPhotoUrl) return false;
     if (x.credits != y.credits) return false;
     if (x.room != y.room) return false;
     if (x.labRoom != y.labRoom) return false;
@@ -983,10 +977,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     return chunks.join(' • ');
   }
 
-  String _facultyPhotoUrlForInitial(String facultyInitial) {
-    final key = facultyInitial.trim().toUpperCase();
-    return (_staffInfoByInitial[key]?.photoUrl ?? '').trim();
-  }
 }
 
 class _SeatStatusCard extends StatelessWidget {
@@ -998,7 +988,7 @@ class _SeatStatusCard extends StatelessWidget {
     final label = item.facultyInitial.trim().isEmpty
         ? '?'
         : item.facultyInitial.trim().toUpperCase();
-    return _FacultyAvatar(photoUrl: item.facultyPhotoUrl, fallbackLabel: label);
+    return _FacultyAvatar(fallbackLabel: label);
   }
 
   Future<void> _openFacultyEmail(BuildContext context) async {
@@ -1255,12 +1245,8 @@ class _SeatStatusCard extends StatelessWidget {
 }
 
 class _FacultyAvatar extends StatefulWidget {
-  const _FacultyAvatar({
-    required this.photoUrl,
-    required this.fallbackLabel,
-  });
+  const _FacultyAvatar({required this.fallbackLabel});
 
-  final String photoUrl;
   final String fallbackLabel;
 
   @override
@@ -1292,26 +1278,7 @@ class _FacultyAvatarState extends State<_FacultyAvatar> {
 
   @override
   Widget build(BuildContext context) {
-    final fallback = _fallbackAvatar();
-    final resolvedUrl = widget.photoUrl.trim();
-    if (resolvedUrl.isEmpty) {
-      return fallback;
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: SizedBox(
-        width: _avatarSize,
-        height: _avatarSize,
-        child: CachedImage(
-          url: resolvedUrl,
-          fit: BoxFit.cover,
-          width: _avatarSize,
-          height: _avatarSize,
-          placeholder: fallback,
-          error: fallback,
-        ),
-      ),
-    );
+    return _fallbackAvatar();
   }
 }
 
@@ -1529,7 +1496,6 @@ class _SeatStatusCardData {
     required this.facultyName,
     required this.facultyEmail,
     required this.facultyMeta,
-    required this.facultyPhotoUrl,
     required this.credits,
     required this.room,
     required this.classSchedule,
@@ -1555,7 +1521,6 @@ class _SeatStatusCardData {
   final String facultyName;
   final String facultyEmail;
   final String facultyMeta;
-  final String facultyPhotoUrl;
   final int credits;
   final String room;
   final List<SeatStatusClassSchedule> classSchedule;
@@ -1582,7 +1547,6 @@ class _SeatStatusCardData {
       facultyName: facultyName,
       facultyEmail: facultyEmail,
       facultyMeta: facultyMeta,
-      facultyPhotoUrl: facultyPhotoUrl,
       credits: credits,
       room: room,
       classSchedule: classSchedule,
