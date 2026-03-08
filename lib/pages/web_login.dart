@@ -18,8 +18,6 @@ class WebLoginPage extends StatefulWidget {
 
 class _WebLoginPageState extends State<WebLoginPage> {
   final WebLoginBrokerService _broker = WebLoginBrokerService();
-  static WebLoginRequestPayload? _cachedRequest;
-  static String? _cachedRequestQrData;
   bool _initializing = true;
   bool _signingIn = false;
   WebLoginRequestPayload? _request;
@@ -50,8 +48,6 @@ class _WebLoginPageState extends State<WebLoginPage> {
   void _resetToInitial() {
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
-    _cachedRequest = null;
-    _cachedRequestQrData = null;
     if (!mounted) return;
     setState(() {
       _request = null;
@@ -62,19 +58,9 @@ class _WebLoginPageState extends State<WebLoginPage> {
 
   Future<void> _initialize() async {
     if (!mounted) return;
-    final cachedRequest = _cachedRequest;
-    final cachedQrData = _cachedRequestQrData;
     setState(() {
       _initializing = false;
-      if (cachedRequest != null && !cachedRequest.isExpired) {
-        _request = cachedRequest;
-        _requestQrData = cachedQrData ?? cachedRequest.toQrData();
-      }
     });
-    final request = _request;
-    if (request != null && !request.isExpired) {
-      _startPolling(request);
-    }
   }
 
   Future<void> _startLogin() async {
@@ -84,16 +70,8 @@ class _WebLoginPageState extends State<WebLoginPage> {
       _statusMessage = null;
     });
     try {
-      final cachedRequest = _cachedRequest;
-      final shouldReuse = cachedRequest != null && !cachedRequest.isExpired;
-      final request = shouldReuse
-          ? cachedRequest
-          : (await _broker.createSession()).request;
-      final qrData = shouldReuse && (_cachedRequestQrData ?? '').isNotEmpty
-          ? _cachedRequestQrData!
-          : request.toQrData();
-      _cachedRequest = request;
-      _cachedRequestQrData = qrData;
+      final request = (await _broker.createSession()).request;
+      final qrData = request.toQrData();
       _startPolling(request);
       if (!mounted) return;
       setState(() {
@@ -153,8 +131,6 @@ class _WebLoginPageState extends State<WebLoginPage> {
           sessionExpiresAtMillis: payload.sessionExpiresAtMillis,
           studentEmail: payload.studentEmail,
         );
-        _cachedRequest = null;
-        _cachedRequestQrData = null;
         RefreshBus.instance.notify(reason: 'auth');
         if (!mounted) return;
         Navigator.of(

@@ -79,13 +79,10 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       final profileEmail = (profile?['studentEmail'] ?? profile?['email'] ?? '')
           .trim()
           .toLowerCase();
-      if (profileEmail.isEmpty || !profileEmail.contains('@')) {
-        throw Exception('Student email was not found on this phone.');
-      }
       final qrSessionEmail = request.studentEmail.trim().toLowerCase();
-      final approvalEmail = qrSessionEmail.contains('@')
-          ? qrSessionEmail
-          : profileEmail;
+      final approvalEmail = profileEmail.contains('@')
+          ? profileEmail
+          : (qrSessionEmail.contains('@') ? qrSessionEmail : 'web@preconnect.app');
       final approved = await AppLockService().authenticate(
         reason: 'Approve login to web',
       );
