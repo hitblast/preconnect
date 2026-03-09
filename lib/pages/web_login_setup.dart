@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/pages/ui_kit.dart';
@@ -29,6 +30,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
   List<WebActiveSession> _dedupeSessions(List<WebActiveSession> sessions) {
     final byKey = <String, WebActiveSession>{};
     for (final session in sessions) {
+      if (session.revoked) continue;
       final key = session.webSessionId.trim().isNotEmpty
           ? session.webSessionId.trim()
           : '${_sessionLabel(session)}|${session.userAgent}|${session.studentEmail}';
@@ -45,12 +47,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       }
     }
     final deduped = byKey.values.toList();
-    deduped.sort((a, b) {
-      if (a.revoked != b.revoked) {
-        return a.revoked ? 1 : -1;
-      }
-      return b.lastSeenAtMillis.compareTo(a.lastSeenAtMillis);
-    });
+    deduped.sort((a, b) => b.lastSeenAtMillis.compareTo(a.lastSeenAtMillis));
     return deduped;
   }
 
@@ -151,12 +148,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
   String _formatTime(int millis) {
     if (millis <= 0) return '—';
     final dt = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
-    final d = dt.day.toString().padLeft(2, '0');
-    final m = dt.month.toString().padLeft(2, '0');
-    final y = dt.year.toString();
-    final hh = dt.hour.toString().padLeft(2, '0');
-    final mm = dt.minute.toString().padLeft(2, '0');
-    return '$d/$m/$y $hh:$mm';
+    return DateFormat('d MMMM, y • h:mm a').format(dt);
   }
 
   String _sessionLabel(WebActiveSession session) {
@@ -326,7 +318,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
-                        vertical: 10,
+                        vertical: 8,
                       ),
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
