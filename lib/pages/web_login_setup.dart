@@ -26,6 +26,34 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
   bool _loadingSessions = false;
   List<WebActiveSession> _activeSessions = const <WebActiveSession>[];
 
+  List<WebActiveSession> _dedupeSessions(List<WebActiveSession> sessions) {
+    final byKey = <String, WebActiveSession>{};
+    for (final session in sessions) {
+      final key = session.webSessionId.trim().isNotEmpty
+          ? session.webSessionId.trim()
+          : '${_sessionLabel(session)}|${session.userAgent}|${session.studentEmail}';
+      final existing = byKey[key];
+      if (existing == null) {
+        byKey[key] = session;
+        continue;
+      }
+      final existingRank = existing.revoked ? 0 : 1;
+      final incomingRank = session.revoked ? 0 : 1;
+      if (incomingRank > existingRank ||
+          session.lastSeenAtMillis > existing.lastSeenAtMillis) {
+        byKey[key] = session;
+      }
+    }
+    final deduped = byKey.values.toList();
+    deduped.sort((a, b) {
+      if (a.revoked != b.revoked) {
+        return a.revoked ? 1 : -1;
+      }
+      return b.lastSeenAtMillis.compareTo(a.lastSeenAtMillis);
+    });
+    return deduped;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -81,10 +109,12 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       if (accessToken.isEmpty) {
         throw Exception('Please sign in on this phone first.');
       }
-      final sessions = await _broker.listActiveSessions(accessToken: accessToken);
+      final sessions = await _broker.listActiveSessions(
+        accessToken: accessToken,
+      );
       if (!mounted) return;
       setState(() {
-        _activeSessions = sessions;
+        _activeSessions = _dedupeSessions(sessions);
       });
     } catch (e) {
       // quiet when session endpoints are unavailable.
@@ -114,31 +144,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       await _loadActiveSessions();
     } catch (e) {
       if (!mounted) return;
-      showAppSnackBar(
-        context,
-        e.toString().replaceFirst('Exception: ', ''),
-      );
-    }
-  }
-
-  Future<void> _revokeAllSessions() async {
-    if (_loadingSessions) return;
-    try {
-      final accessToken =
-          (await TokenStorage.instance.read(key: 'access_token'))?.trim() ?? '';
-      if (accessToken.isEmpty) {
-        throw Exception('Please sign in on this phone first.');
-      }
-      await _broker.revokeAllSessions(accessToken: accessToken);
-      if (!mounted) return;
-      showAppSnackBar(context, 'Logged out all web sessions');
-      await _loadActiveSessions();
-    } catch (e) {
-      if (!mounted) return;
-      showAppSnackBar(
-        context,
-        e.toString().replaceFirst('Exception: ', ''),
-      );
+      showAppSnackBar(context, e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -181,7 +187,9 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       final qrSessionEmail = request.studentEmail.trim().toLowerCase();
       final approvalEmail = profileEmail.contains('@')
           ? profileEmail
-          : (qrSessionEmail.contains('@') ? qrSessionEmail : 'web@preconnect.app');
+          : (qrSessionEmail.contains('@')
+                ? qrSessionEmail
+                : 'web@preconnect.app');
       final accessToken =
           (await TokenStorage.instance.read(key: 'access_token'))?.trim() ?? '';
       final refreshToken =
@@ -197,9 +205,19 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
           studentId: (profile?['studentId'] ?? '').trim(),
           accessToken: accessToken,
           refreshToken: refreshToken,
-          sessionExpiresAtMillis: DateTime.utc(2100, 1, 1).millisecondsSinceEpoch,
+          sessionExpiresAtMillis: DateTime.utc(
+            2100,
+            1,
+            1,
+          ).millisecondsSinceEpoch,
         ),
       );
+      await _loadActiveSessions();
+      Future<void>.delayed(const Duration(seconds: 1), () {
+        if (mounted) {
+          _loadActiveSessions();
+        }
+      });
       if (!mounted) return;
       setState(() {
         _status = 'Web login approved for $approvalEmail';
@@ -292,12 +310,15 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                     ),
                   ],
                 ),
-                if (_loadingSessions) const LinearProgressIndicator(minHeight: 2),
+                if (_loadingSessions)
+                  const LinearProgressIndicator(minHeight: 2),
                 if (!_loadingSessions && _activeSessions.isEmpty) ...[
                   const SizedBox(height: 8),
                   Text(
                     'No active browser sessions.',
-                    style: TextStyle(color: BracuPalette.textSecondary(context)),
+                    style: TextStyle(
+                      color: BracuPalette.textSecondary(context),
+                    ),
                   ),
                 ] else ...[
                   const SizedBox(height: 8),
@@ -314,63 +335,71 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                           color: BracuPalette.primary.withValues(alpha: 0.18),
                         ),
                       ),
-                      child: Row(
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _sessionLabel(session),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    color: BracuPalette.textPrimary(context),
-                                  ),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  children: [
+                                    Text(
+                                      _sessionLabel(session),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: BracuPalette.textPrimary(
+                                          context,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: session.revoked
+                                            ? Colors.redAccent
+                                            : Colors.greenAccent,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    Text(
+                                      session.revoked ? 'Logged Out' : 'Active',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: session.revoked
+                                            ? Colors.redAccent
+                                            : Colors.greenAccent,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Last seen: ${_formatTime(session.lastSeenAtMillis)}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: BracuPalette.textSecondary(context),
-                                  ),
-                                ),
-                                Text(
-                                  session.revoked
-                                      ? 'Logged out'
-                                      : 'Active',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: session.revoked
-                                        ? Colors.redAccent
-                                        : BracuPalette.textSecondary(context),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 8),
+                              OutlinedButton(
+                                onPressed: session.revoked
+                                    ? null
+                                    : () => _revokeSession(session),
+                                child: const Text('Logout'),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          OutlinedButton(
-                            onPressed: session.revoked
-                                ? null
-                                : () => _revokeSession(session),
-                            child: const Text('Logout'),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Last seen: ${_formatTime(session.lastSeenAtMillis)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: BracuPalette.textSecondary(context),
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ],
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: _activeSessions.isEmpty || _loadingSessions
-                          ? null
-                          : _revokeAllSessions,
-                      icon: const Icon(Icons.logout_rounded),
-                      label: const Text('Logout All Web Sessions'),
-                    ),
-                  ),
                 ],
               ],
             ),
@@ -415,7 +444,10 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.transparent,
                   borderRadius: BorderRadius.circular(16),
