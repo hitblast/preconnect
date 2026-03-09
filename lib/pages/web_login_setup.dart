@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/pages/ui_kit.dart';
@@ -143,12 +142,6 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
       if (!mounted) return;
       showAppSnackBar(context, e.toString().replaceFirst('Exception: ', ''));
     }
-  }
-
-  String _formatTime(int millis) {
-    if (millis <= 0) return '—';
-    final dt = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
-    return DateFormat('d MMMM, y • h:mm a').format(dt);
   }
 
   String _sessionLabel(WebActiveSession session) {
@@ -327,67 +320,51 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                           color: BracuPalette.primary.withValues(alpha: 0.18),
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Wrap(
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 8,
-                                  runSpacing: 4,
-                                  children: [
-                                    Text(
-                                      _sessionLabel(session),
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        color: BracuPalette.textPrimary(
-                                          context,
-                                        ),
-                                      ),
-                                    ),
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: session.revoked
-                                            ? Colors.redAccent
-                                            : Colors.greenAccent,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    Text(
-                                      session.revoked ? 'Logged Out' : 'Active',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: session.revoked
-                                            ? Colors.redAccent
-                                            : Colors.greenAccent,
-                                      ),
-                                    ),
-                                  ],
+                          Expanded(
+                            child: Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: [
+                                Text(
+                                  _sessionLabel(session),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: BracuPalette.textPrimary(context),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              OutlinedButton(
-                                onPressed: session.revoked
-                                    ? null
-                                    : () => _revokeSession(session),
-                                child: const Text('Logout'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _formatTime(session.lastSeenAtMillis),
-                            style: TextStyle(
-                              fontSize: 11,
-                              height: 1,
-                              color: BracuPalette.textSecondary(context),
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: session.revoked
+                                        ? Colors.redAccent
+                                        : Colors.greenAccent,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                Text(
+                                  session.revoked ? 'Logged Out' : 'Active',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: session.revoked
+                                        ? Colors.redAccent
+                                        : Colors.greenAccent,
+                                  ),
+                                ),
+                              ],
                             ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton(
+                            onPressed: session.revoked
+                                ? null
+                                : () => _revokeSession(session),
+                            child: const Text('Logout'),
                           ),
                         ],
                       ),
