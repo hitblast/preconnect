@@ -360,7 +360,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                             ),
                           ),
                           const SizedBox(width: 8),
-                          OutlinedButton(
+                          TextButton(
                             onPressed: session.revoked
                                 ? null
                                 : () => _revokeSession(session),
