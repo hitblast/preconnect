@@ -17,6 +17,8 @@ import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/platform_permissions.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/ramadan_timing.dart';
+import 'package:preconnect/tools/web_qr_image_picker_stub.dart'
+    if (dart.library.html) 'package:preconnect/tools/web_qr_image_picker_web.dart';
 
 class FriendSchedulePage extends StatefulWidget {
   const FriendSchedulePage({super.key, required this.onNavigate});
@@ -156,8 +158,30 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
   Future<void> _scanFromGallery() async {
     if (_isPicking) return;
     if (kIsWeb) {
-      if (!mounted) return;
-      showAppSnackBar(context, 'Gallery scan is not supported on web');
+      setState(() => _isPicking = true);
+      try {
+        final value = await pickQrFromSystemImage();
+        if (value == null || value.trim().isEmpty) {
+          if (!mounted) return;
+          showAppSnackBar(context, 'No QR code found in selected image');
+          return;
+        }
+        await _saveScannedValue(value);
+        await _loadSchedules();
+      } catch (e) {
+        if (!mounted) return;
+        showAppSnackBar(
+          context,
+          e
+              .toString()
+              .replaceFirst('UnsupportedError: ', '')
+              .replaceFirst('Exception: ', ''),
+        );
+      } finally {
+        if (mounted) {
+          setState(() => _isPicking = false);
+        }
+      }
       return;
     }
     setState(() => _isPicking = true);

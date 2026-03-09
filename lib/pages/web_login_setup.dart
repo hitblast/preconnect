@@ -318,7 +318,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
-                        vertical: 8,
+                        vertical: 3,
                       ),
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
@@ -380,11 +380,12 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Text(
-                            'Last seen: ${_formatTime(session.lastSeenAtMillis)}',
+                            _formatTime(session.lastSeenAtMillis),
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
+                              height: 1,
                               color: BracuPalette.textSecondary(context),
                             ),
                           ),
