@@ -18,6 +18,8 @@ class ScheduleService {
 
   static const String _cacheKey = 'StudentSchedule';
   static const String _validSemestersCacheKey = 'StudentScheduleValidSemesters';
+  static const String _archiveSourceFingerprintKey =
+      'StudentScheduleArchiveSourceFingerprint';
   String _cacheKeyForSemester(int? semesterSessionId) =>
       semesterSessionId == null ? _cacheKey : '${_cacheKey}_$semesterSessionId';
 
@@ -74,6 +76,17 @@ class ScheduleService {
     } catch (_) {
       return const <section.Section>[];
     }
+  }
+
+  String _scheduleFingerprint(String? scheduleJson) {
+    final value = (scheduleJson ?? '').trim();
+    if (value.isEmpty) return '';
+    var hash = 2166136261;
+    for (final codeUnit in value.codeUnits) {
+      hash ^= codeUnit;
+      hash = (hash * 16777619) & 0xFFFFFFFF;
+    }
+    return hash.toUnsigned(32).toRadixString(16);
   }
 
   Future<List<section.Section>> getStudentSections({
@@ -158,6 +171,34 @@ class ScheduleService {
     available.sort((a, b) => b.compareTo(a));
     await writeJsonToPrefs(asyncPrefs, _validSemestersCacheKey, available);
     return available;
+  }
+
+  Future<List<int>> refreshArchiveSemesterCacheIfNeeded({
+    required String? currentScheduleJson,
+    int? baseSessionId,
+    int count = 12,
+  }) async {
+    final asyncPrefs = SharedPreferencesAsync();
+    final currentFingerprint = _scheduleFingerprint(currentScheduleJson);
+    final cachedFingerprint =
+        await asyncPrefs.getString(_archiveSourceFingerprintKey) ?? '';
+    final cached = await getCachedValidSemesterSessionIds();
+
+    if (cached.isNotEmpty && currentFingerprint == cachedFingerprint) {
+      return cached;
+    }
+
+    final refreshed = await preloadValidSemesterSessionIds(
+      baseSessionId: baseSessionId,
+      count: count,
+      forceRefresh: true,
+    );
+    await asyncPrefs.setString(_archiveSourceFingerprintKey, currentFingerprint);
+    await preloadSemesterScheduleCache(
+      semesterSessionIds: refreshed,
+      forceRefresh: true,
+    );
+    return refreshed;
   }
 
   Future<void> preloadSemesterScheduleCache({

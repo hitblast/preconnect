@@ -266,6 +266,206 @@ PopupMenuItem<T> compactPopupMenuItem<T>({
   );
 }
 
+class BracuSelectOption<T> {
+  const BracuSelectOption({
+    required this.value,
+    required this.label,
+    this.icon,
+    this.subtitle,
+  });
+
+  final T value;
+  final String label;
+  final IconData? icon;
+  final String? subtitle;
+}
+
+Future<T?> showBracuSelectSheet<T>(
+  BuildContext context, {
+  required String title,
+  String? subtitle,
+  required List<BracuSelectOption<T>> options,
+  T? selectedValue,
+}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    backgroundColor: BracuPalette.card(context),
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder: (sheetContext) {
+      final textPrimary = BracuPalette.textPrimary(sheetContext);
+      final textSecondary = BracuPalette.textSecondary(sheetContext);
+      return SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.72,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: textSecondary.withValues(alpha: 0.28),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                              color: textPrimary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          if (subtitle != null && subtitle.trim().isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              subtitle.trim(),
+                              style: TextStyle(
+                                color: textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      icon: Icon(Icons.close_rounded, color: textSecondary),
+                      tooltip: 'Close',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final option = options[index];
+                      final selected = option.value == selectedValue;
+                      return Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () =>
+                              Navigator.of(sheetContext).pop(option.value),
+                          child: Ink(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 13,
+                            ),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? BracuPalette.primary.withValues(alpha: 0.12)
+                                  : BracuPalette.card(sheetContext)
+                                        .withValues(alpha: 0.72),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: selected
+                                    ? BracuPalette.primary.withValues(alpha: 0.70)
+                                    : textSecondary.withValues(alpha: 0.18),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: selected
+                                        ? BracuPalette.primary.withValues(
+                                            alpha: 0.14,
+                                          )
+                                        : textSecondary.withValues(alpha: 0.10),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    option.icon ??
+                                        (selected
+                                            ? Icons.check_rounded
+                                            : Icons.tune_rounded),
+                                    size: 18,
+                                    color: selected
+                                        ? BracuPalette.primary
+                                        : textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        option.label,
+                                        style: TextStyle(
+                                          color: textPrimary,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      if (option.subtitle != null &&
+                                          option.subtitle!.trim().isNotEmpty) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          option.subtitle!.trim(),
+                                          style: TextStyle(
+                                            color: textSecondary,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Icon(
+                                  selected
+                                      ? Icons.check_circle_rounded
+                                      : Icons.chevron_right_rounded,
+                                  size: selected ? 20 : 18,
+                                  color: selected
+                                      ? BracuPalette.primary
+                                      : textSecondary.withValues(alpha: 0.7),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
 String formatSectionBadge(String? sectionName) {
   if (sectionName == null) return '?';
   final trimmed = sectionName.trim();

@@ -498,24 +498,34 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     final label = _selectedDayFilter.isEmpty
         ? 'Any Day'
         : formatWeekdayTitle(_selectedDayFilter);
-    final labels = <String>[
-      'Any Day',
-      ..._weekdayOrder.map(formatWeekdayTitle),
-    ];
-    final menuWidth = compactPopupMenuWidth(context, labels, maxWidth: 320);
-    return PopupMenuButton<String>(
-      tooltip: 'Filter by day',
-      constraints: BoxConstraints(minWidth: menuWidth, maxWidth: menuWidth),
-      onSelected: _setDayFilter,
-      itemBuilder: (context) => <PopupMenuEntry<String>>[
-        compactPopupMenuItem<String>(value: '', label: 'Any Day'),
-        ..._weekdayOrder.map(
-          (day) => compactPopupMenuItem<String>(
-            value: day,
-            label: formatWeekdayTitle(day),
-          ),
-        ),
-      ],
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: () async {
+        final selected = await showBracuSelectSheet<String>(
+          context,
+          title: 'Filter by Day',
+          subtitle: 'Show seat status for a specific weekday',
+          selectedValue: _selectedDayFilter,
+          options: <BracuSelectOption<String>>[
+            const BracuSelectOption<String>(
+              value: '',
+              label: 'Any Day',
+              icon: Icons.all_inclusive_rounded,
+              subtitle: 'Show every class day',
+            ),
+            ..._weekdayOrder.map(
+              (day) => BracuSelectOption<String>(
+                value: day,
+                label: formatWeekdayTitle(day),
+                icon: Icons.calendar_today_outlined,
+                subtitle: 'Only ${formatWeekdayTitle(day)}',
+              ),
+            ),
+          ],
+        );
+        if (selected == null) return;
+        _setDayFilter(selected);
+      },
       child: _FilterChip(
         icon: Icons.calendar_today_outlined,
         label: label,
@@ -1228,16 +1238,16 @@ class _FilterChip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: selected
               ? BracuPalette.primary.withValues(alpha: 0.14)
               : BracuPalette.card(context).withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected
                 ? BracuPalette.primary.withValues(alpha: 0.45)
-                : BracuPalette.textSecondary(context).withValues(alpha: 0.32),
+                : BracuPalette.textSecondary(context).withValues(alpha: 0.26),
           ),
         ),
         child: Row(
@@ -1245,26 +1255,28 @@ class _FilterChip extends StatelessWidget {
           children: [
             Icon(
               icon,
-              size: 14,
+              size: 17,
               color: selected
                   ? BracuPalette.primary
                   : BracuPalette.textSecondary(context),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             Text(
               label,
               style: TextStyle(
                 color: BracuPalette.textPrimary(context),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
               ),
             ),
             if (showArrow) ...[
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Icon(
                 Icons.expand_more_rounded,
-                size: 16,
-                color: BracuPalette.textSecondary(context),
+                size: 18,
+                color: selected
+                    ? BracuPalette.primary
+                    : BracuPalette.textSecondary(context),
               ),
             ],
           ],

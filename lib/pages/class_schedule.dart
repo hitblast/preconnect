@@ -103,10 +103,18 @@ class _ClassScheduleState extends State<ClassSchedule> {
   Future<_ScheduleData> _loadSchedule({bool forceRefresh = false}) async {
     final shouldHighlightCurrentSemester = _selectedSemesterSessionId == null;
     final ramadanFuture = RamadanTiming.isRamadan(forceRefresh: forceRefresh);
-    final sections = await ScheduleService().getStudentSections(
-      semesterSessionId: _selectedSemesterSessionId,
-      forceRefresh: forceRefresh,
-    );
+    final service = ScheduleService();
+    final sections = shouldHighlightCurrentSemester
+        ? await service.getStudentSections(
+            semesterSessionId: null,
+            forceRefresh: forceRefresh,
+          )
+        : service.parseStudentSections(
+            await service.getStudentScheduleForSemester(
+              semesterSessionId: _selectedSemesterSessionId,
+              fromFetch: true,
+            ),
+          );
     if (sections.isEmpty) {
       final isRamadan = await ramadanFuture;
       return _ScheduleData(
@@ -230,12 +238,14 @@ class _ClassScheduleState extends State<ClassSchedule> {
       baseSessionId: baseSessionId,
       forceRefresh: forceRefresh,
     );
-    unawaited(
-      service.preloadSemesterScheduleCache(
-        semesterSessionIds: refreshed,
-        forceRefresh: forceRefresh,
-      ),
-    );
+    if (cached.isEmpty) {
+      unawaited(
+        service.preloadSemesterScheduleCache(
+          semesterSessionIds: refreshed,
+          forceRefresh: forceRefresh,
+        ),
+      );
+    }
     if (!mounted) return;
     if (_sameIntList(_semesterSessionOptions, refreshed)) return;
     setState(() {
@@ -262,40 +272,43 @@ class _ClassScheduleState extends State<ClassSchedule> {
 
   Widget _buildSemesterDropdownAction() {
     const currentMenuValue = -1;
-    final labels = <String>[
-      'Current',
-      ..._semesterSessionOptions.map(_semesterLabel),
-    ];
-    final menuWidth = compactPopupMenuWidth(
-      context,
-      labels,
-      minWidth: 120,
-      maxWidth: 260,
-    );
-    return PopupMenuButton<int>(
-      tooltip: 'Select semester',
-      constraints: BoxConstraints(minWidth: menuWidth, maxWidth: menuWidth),
-      onSelected: (value) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () async {
+        final value = await showBracuSelectSheet<int>(
+          context,
+          title: 'Select Semester',
+          subtitle: 'Switch between current and archived class schedules',
+          selectedValue: _selectedSemesterSessionId ?? currentMenuValue,
+          options: [
+            const BracuSelectOption<int>(
+              value: currentMenuValue,
+              label: 'Current',
+              icon: Icons.bolt_rounded,
+              subtitle: 'Latest class schedule',
+            ),
+            ..._semesterSessionOptions.map(
+              (sessionId) => BracuSelectOption<int>(
+                value: sessionId,
+                label: _semesterLabel(sessionId),
+                icon: Icons.history_rounded,
+                subtitle: 'Archived semester',
+              ),
+            ),
+          ],
+        );
+        if (!mounted || value == null) return;
         final sessionId = value == currentMenuValue ? null : value;
         unawaited(_selectSemester(sessionId));
       },
-      itemBuilder: (context) => [
-        compactPopupMenuItem<int>(value: currentMenuValue, label: 'Current'),
-        ..._semesterSessionOptions.map(
-          (sessionId) => compactPopupMenuItem<int>(
-            value: sessionId,
-            label: _semesterLabel(sessionId),
-          ),
-        ),
-      ],
       child: Container(
         margin: const EdgeInsets.only(left: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         decoration: BoxDecoration(
           color: BracuPalette.card(context).withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: BracuPalette.textSecondary(context).withValues(alpha: 0.32),
+            color: BracuPalette.textSecondary(context).withValues(alpha: 0.26),
           ),
         ),
         child: Row(
@@ -305,15 +318,15 @@ class _ClassScheduleState extends State<ClassSchedule> {
               _semesterLabel(_selectedSemesterSessionId),
               style: TextStyle(
                 color: BracuPalette.textPrimary(context),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 8),
             Icon(
               Icons.expand_more_rounded,
-              size: 16,
-              color: BracuPalette.textSecondary(context),
+              size: 20,
+              color: BracuPalette.primary,
             ),
           ],
         ),
@@ -325,22 +338,131 @@ class _ClassScheduleState extends State<ClassSchedule> {
     if (!await ensureOnline(context, notify: notify)) {
       return;
     }
-    unawaited(
-      _loadSemesterOptions(
-        baseSessionId: _selectedSemesterSessionId,
-        forceRefresh: true,
-      ),
-    );
+    final service = ScheduleService();
+    String? currentScheduleJson;
+    if (_selectedSemesterSessionId == null) {
+      currentScheduleJson = await service.fetchStudentSchedule();
+      final refreshed = await service.refreshArchiveSemesterCacheIfNeeded(
+        currentScheduleJson: currentScheduleJson,
+      );
+      if (mounted && !_sameIntList(_semesterSessionOptions, refreshed)) {
+        setState(() {
+          _semesterSessionOptions = refreshed;
+        });
+      }
+    }
     setState(() {
       _didScroll = false;
       _scrollRetry = false;
       _visibleWeekCount = _initialVisibleWeekCount;
-      _future = _loadSchedule(forceRefresh: true);
+      _future = _selectedSemesterSessionId == null
+          ? _loadScheduleFromJson(currentScheduleJson)
+          : _loadSchedule(forceRefresh: true);
     });
     await _future;
     if (notify) {
       RefreshBus.instance.notify(reason: 'class_schedule');
     }
+  }
+
+  Future<_ScheduleData> _loadScheduleFromJson(String? scheduleJson) async {
+    final shouldHighlightCurrentSemester = _selectedSemesterSessionId == null;
+    final ramadanFuture = RamadanTiming.isRamadan(forceRefresh: true);
+    final sections = ScheduleService().parseStudentSections(scheduleJson);
+    if (sections.isEmpty) {
+      final isRamadan = await ramadanFuture;
+      return _ScheduleData(
+        grouped: {},
+        scrollSchedule: null,
+        scrollDateTime: null,
+        isRamadan: isRamadan,
+      );
+    }
+
+    final isRamadan = await ramadanFuture;
+    if (sections.isNotEmpty) {
+      final sessionIds = sections.map((s) => s.semesterSessionId).toList()
+        ..sort((a, b) => b.compareTo(a));
+      final baseSessionId = sessionIds.first;
+      if (!_semesterSessionOptions.contains(baseSessionId) && mounted) {
+        setState(() {
+          _semesterSessionOptions = [baseSessionId, ..._semesterSessionOptions];
+        });
+      }
+    }
+
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+    section.ClassSchedule? scrollSchedule;
+    DateTime? scrollDateTime;
+    final now = DateTime.now();
+    final nowMinutes = now.hour * 60 + now.minute;
+
+    for (final item in sections) {
+      for (final classSchedule in item.sectionSchedule.classSchedules) {
+        grouped.putIfAbsent(classSchedule.day, () => []);
+        grouped[classSchedule.day]!.add({
+          "schedule": classSchedule,
+          "courseCode": item.courseCode,
+          "sectionName": item.sectionName,
+          "roomNumber": item.roomNumber,
+          "faculties": item.faculties,
+          "consumedSeat": item.consumedSeat,
+          "capacity": item.capacity,
+          "courseType": item.courseType,
+        });
+
+        if (shouldHighlightCurrentSemester) {
+          final candidate = _nextOccurrence(
+            day: classSchedule.day,
+            startTime: classSchedule.startTime,
+            endTime: classSchedule.endTime,
+            isRamadan: isRamadan,
+            now: now,
+            nowMinutes: nowMinutes,
+          );
+          if (candidate != null &&
+              (scrollDateTime == null || candidate.isBefore(scrollDateTime))) {
+            scrollDateTime = candidate;
+            scrollSchedule = classSchedule;
+          }
+        }
+      }
+    }
+
+    for (final entries in grouped.values) {
+      entries.sort((a, b) {
+        final aSchedule = a["schedule"] as section.ClassSchedule;
+        final bSchedule = b["schedule"] as section.ClassSchedule;
+        final aStart = RamadanTiming.effectiveStartMinutes(
+          aSchedule.startTime,
+          aSchedule.endTime,
+          isRamadan: isRamadan,
+        );
+        final bStart = RamadanTiming.effectiveStartMinutes(
+          bSchedule.startTime,
+          bSchedule.endTime,
+          isRamadan: isRamadan,
+        );
+        if (aStart != bStart) return aStart.compareTo(bStart);
+        final aEnd = RamadanTiming.effectiveEndMinutes(
+          aSchedule.startTime,
+          aSchedule.endTime,
+          isRamadan: isRamadan,
+        );
+        final bEnd = RamadanTiming.effectiveEndMinutes(
+          bSchedule.startTime,
+          bSchedule.endTime,
+          isRamadan: isRamadan,
+        );
+        return aEnd.compareTo(bEnd);
+      });
+    }
+    return _ScheduleData(
+      grouped: grouped,
+      scrollSchedule: scrollSchedule,
+      scrollDateTime: scrollDateTime,
+      isRamadan: isRamadan,
+    );
   }
 
   DateTime? _nextOccurrence({
@@ -444,7 +566,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return BracuRefreshPlaceholder(
               onRefresh: _handleRefresh,
-              child: const BracuLoading(label: 'Loading schedule...'),
+              child: const BracuLoading(label: 'Loading...'),
             );
           }
           if (snapshot.hasError) {
@@ -550,6 +672,8 @@ class _ClassScheduleState extends State<ClassSchedule> {
                       padding: const EdgeInsets.only(bottom: 10),
                       child: BracuCard(
                         key: isScrollTarget ? _highlightKey : null,
+                        isHighlighted: isScrollTarget,
+                        highlightColor: BracuPalette.primary,
                         child: LayoutBuilder(
                           builder: (context, constraints) {
                             return Row(
