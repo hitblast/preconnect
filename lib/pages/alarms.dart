@@ -234,24 +234,24 @@ class _AlarmPageState extends State<AlarmPage> {
         future: _futureData,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshLoadingState(
               onRefresh: _handleRefresh,
-              child: const BracuLoading(label: 'Loading classes...'),
+              label: 'Loading classes...',
             );
           }
           if (snapshot.hasError) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshErrorState(
               onRefresh: _handleRefresh,
-              child: BracuEmptyState(message: 'Error: ${snapshot.error}'),
+              error: snapshot.error,
             );
           }
 
           final sections = snapshot.data?.sections ?? const <Section>[];
           final isRamadan = snapshot.data?.isRamadan ?? false;
           if (sections.isEmpty) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshEmptyState(
               onRefresh: _handleRefresh,
-              child: const BracuEmptyState(message: 'No class found'),
+              message: 'No class found',
             );
           }
 

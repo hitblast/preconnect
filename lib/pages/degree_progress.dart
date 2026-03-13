@@ -184,28 +184,25 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
           final info = _latestInfo ?? snapshot.data;
           if (snapshot.connectionState == ConnectionState.waiting &&
               info == null) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshLoadingState(
               onRefresh: _refresh,
               topSpacing: 180,
-              child: const BracuLoading(),
             );
           }
 
           if (snapshot.hasError && info == null) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshErrorState(
               onRefresh: _refresh,
               topSpacing: 180,
-              child: BracuEmptyState(message: 'Error: ${snapshot.error}'),
+              error: snapshot.error,
             );
           }
 
           if (info == null) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshEmptyState(
               onRefresh: _refresh,
               topSpacing: 180,
-              child: const BracuEmptyState(
-                message: 'No progress data available.',
-              ),
+              message: 'No progress data available.',
             );
           }
 

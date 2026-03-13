@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/shared_widgets/section_badge.dart';
@@ -81,23 +80,17 @@ class _ClassScheduleState extends State<ClassSchedule> {
   }
 
   void _attemptScrollToHighlight() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final context = _highlightKey?.currentContext;
-      if (context == null) {
-        if (!_scrollRetry) {
-          _scrollRetry = true;
-          _attemptScrollToHighlight();
-        }
-        return;
-      }
-      Scrollable.ensureVisible(
-        context,
-        alignment: 0.5,
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeOutCubic,
-      );
-      _didScroll = true;
-    });
+    attemptScrollToHighlightedKey(
+      highlightKey: _highlightKey,
+      hasRetried: _scrollRetry,
+      retry: () {
+        _scrollRetry = true;
+        _attemptScrollToHighlight();
+      },
+      onScrolled: () {
+        _didScroll = true;
+      },
+    );
   }
 
   Future<_ScheduleData> _loadSchedule({bool forceRefresh = false}) async {
@@ -115,8 +108,20 @@ class _ClassScheduleState extends State<ClassSchedule> {
               fromFetch: true,
             ),
           );
+    final isRamadan = await ramadanFuture;
+    return _buildScheduleDataFromSections(
+      sections,
+      shouldHighlightCurrentSemester: shouldHighlightCurrentSemester,
+      isRamadan: isRamadan,
+    );
+  }
+
+  _ScheduleData _buildScheduleDataFromSections(
+    List<section.Section> sections, {
+    required bool shouldHighlightCurrentSemester,
+    required bool isRamadan,
+  }) {
     if (sections.isEmpty) {
-      final isRamadan = await ramadanFuture;
       return _ScheduleData(
         grouped: {},
         scrollSchedule: null,
@@ -125,7 +130,6 @@ class _ClassScheduleState extends State<ClassSchedule> {
       );
     }
 
-    final isRamadan = await ramadanFuture;
     if (sections.isNotEmpty) {
       final sessionIds = sections.map((s) => s.semesterSessionId).toList()
         ..sort((a, b) => b.compareTo(a));
@@ -272,8 +276,8 @@ class _ClassScheduleState extends State<ClassSchedule> {
 
   Widget _buildSemesterDropdownAction() {
     const currentMenuValue = -1;
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
+    return BracuSelectChip(
+      label: _semesterLabel(_selectedSemesterSessionId),
       onTap: () async {
         final value = await showBracuSelectSheet<int>(
           context,
@@ -301,36 +305,6 @@ class _ClassScheduleState extends State<ClassSchedule> {
         final sessionId = value == currentMenuValue ? null : value;
         unawaited(_selectSemester(sessionId));
       },
-      child: Container(
-        margin: const EdgeInsets.only(left: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-        decoration: BoxDecoration(
-          color: BracuPalette.card(context).withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: BracuPalette.textSecondary(context).withValues(alpha: 0.26),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _semesterLabel(_selectedSemesterSessionId),
-              style: TextStyle(
-                color: BracuPalette.textPrimary(context),
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.expand_more_rounded,
-              size: 20,
-              color: BracuPalette.primary,
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -369,98 +343,10 @@ class _ClassScheduleState extends State<ClassSchedule> {
     final shouldHighlightCurrentSemester = _selectedSemesterSessionId == null;
     final ramadanFuture = RamadanTiming.isRamadan(forceRefresh: true);
     final sections = ScheduleService().parseStudentSections(scheduleJson);
-    if (sections.isEmpty) {
-      final isRamadan = await ramadanFuture;
-      return _ScheduleData(
-        grouped: {},
-        scrollSchedule: null,
-        scrollDateTime: null,
-        isRamadan: isRamadan,
-      );
-    }
-
     final isRamadan = await ramadanFuture;
-    if (sections.isNotEmpty) {
-      final sessionIds = sections.map((s) => s.semesterSessionId).toList()
-        ..sort((a, b) => b.compareTo(a));
-      final baseSessionId = sessionIds.first;
-      if (!_semesterSessionOptions.contains(baseSessionId) && mounted) {
-        setState(() {
-          _semesterSessionOptions = [baseSessionId, ..._semesterSessionOptions];
-        });
-      }
-    }
-
-    final Map<String, List<Map<String, dynamic>>> grouped = {};
-    section.ClassSchedule? scrollSchedule;
-    DateTime? scrollDateTime;
-    final now = DateTime.now();
-    final nowMinutes = now.hour * 60 + now.minute;
-
-    for (final item in sections) {
-      for (final classSchedule in item.sectionSchedule.classSchedules) {
-        grouped.putIfAbsent(classSchedule.day, () => []);
-        grouped[classSchedule.day]!.add({
-          "schedule": classSchedule,
-          "courseCode": item.courseCode,
-          "sectionName": item.sectionName,
-          "roomNumber": item.roomNumber,
-          "faculties": item.faculties,
-          "consumedSeat": item.consumedSeat,
-          "capacity": item.capacity,
-          "courseType": item.courseType,
-        });
-
-        if (shouldHighlightCurrentSemester) {
-          final candidate = _nextOccurrence(
-            day: classSchedule.day,
-            startTime: classSchedule.startTime,
-            endTime: classSchedule.endTime,
-            isRamadan: isRamadan,
-            now: now,
-            nowMinutes: nowMinutes,
-          );
-          if (candidate != null &&
-              (scrollDateTime == null || candidate.isBefore(scrollDateTime))) {
-            scrollDateTime = candidate;
-            scrollSchedule = classSchedule;
-          }
-        }
-      }
-    }
-
-    for (final entries in grouped.values) {
-      entries.sort((a, b) {
-        final aSchedule = a["schedule"] as section.ClassSchedule;
-        final bSchedule = b["schedule"] as section.ClassSchedule;
-        final aStart = RamadanTiming.effectiveStartMinutes(
-          aSchedule.startTime,
-          aSchedule.endTime,
-          isRamadan: isRamadan,
-        );
-        final bStart = RamadanTiming.effectiveStartMinutes(
-          bSchedule.startTime,
-          bSchedule.endTime,
-          isRamadan: isRamadan,
-        );
-        if (aStart != bStart) return aStart.compareTo(bStart);
-        final aEnd = RamadanTiming.effectiveEndMinutes(
-          aSchedule.startTime,
-          aSchedule.endTime,
-          isRamadan: isRamadan,
-        );
-        final bEnd = RamadanTiming.effectiveEndMinutes(
-          bSchedule.startTime,
-          bSchedule.endTime,
-          isRamadan: isRamadan,
-        );
-        return aEnd.compareTo(bEnd);
-      });
-    }
-    return _ScheduleData(
-      grouped: grouped,
-      scrollSchedule: scrollSchedule,
-      scrollDateTime: scrollDateTime,
+    return _buildScheduleDataFromSections(
+      sections,
+      shouldHighlightCurrentSemester: shouldHighlightCurrentSemester,
       isRamadan: isRamadan,
     );
   }
@@ -473,16 +359,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
     required DateTime now,
     required int nowMinutes,
   }) {
-    final dayMap = {
-      "MONDAY": DateTime.monday,
-      "TUESDAY": DateTime.tuesday,
-      "WEDNESDAY": DateTime.wednesday,
-      "THURSDAY": DateTime.thursday,
-      "FRIDAY": DateTime.friday,
-      "SATURDAY": DateTime.saturday,
-      "SUNDAY": DateTime.sunday,
-    };
-    final targetWeekday = dayMap[day.toUpperCase()];
+    final targetWeekday = BracuTime.weekdayFromName(day);
     if (targetWeekday == null) return null;
 
     final adjusted = RamadanTiming.adjustRange(
@@ -564,15 +441,12 @@ class _ClassScheduleState extends State<ClassSchedule> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return BracuRefreshPlaceholder(
-              onRefresh: _handleRefresh,
-              child: const BracuLoading(label: 'Loading...'),
-            );
+            return buildRefreshLoadingState(onRefresh: _handleRefresh);
           }
           if (snapshot.hasError) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshErrorState(
               onRefresh: _handleRefresh,
-              child: BracuEmptyState(message: 'Error: ${snapshot.error}'),
+              error: snapshot.error,
             );
           }
 
@@ -583,11 +457,9 @@ class _ClassScheduleState extends State<ClassSchedule> {
               _selectedSemesterSessionId == null;
           final isRamadan = snapshot.data?.isRamadan ?? false;
           if (grouped.isEmpty) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshEmptyState(
               onRefresh: _handleRefresh,
-              child: const BracuEmptyState(
-                message: 'No schedule data available',
-              ),
+              message: 'No schedule data available',
             );
           }
 
@@ -606,7 +478,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
             final dayDate = sectionInfo.date;
             final dayDateLabel = dayDate == null
                 ? ''
-                : DateFormat('d MMMM, yyyy').format(dayDate);
+                : formatLongDate(dayDate);
 
             children.add(
               Column(

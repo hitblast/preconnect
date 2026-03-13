@@ -65,6 +65,14 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
                   ),
                   QuickAccessCard(
                     width: width,
+                    icon: Icons.calendar_today_outlined,
+                    title: 'Calender',
+                    subtitle: 'Events',
+                    color: const Color(0xFF00A86B),
+                    onTap: () => widget.onNavigate(HomeTab.calendar),
+                  ),
+                  QuickAccessCard(
+                    width: width,
                     icon: Icons.developer_mode_outlined,
                     title: 'Devs',
                     subtitle: 'About Us',
@@ -83,7 +91,7 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
                     width: width,
                     icon: Icons.picture_as_pdf_outlined,
                     title: 'Grade',
-                    subtitle: 'Open PDF',
+                    subtitle: 'Sheet PDF',
                     color: const Color(0xFFE53935),
                     isLoading: _isOpeningGradeSheet,
                     onTap: _isOpeningGradeSheet

@@ -281,47 +281,6 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
     unawaited(_savePins());
   }
 
-  void _attemptScrollToHighlight() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final context = _highlightKey?.currentContext;
-      if (context == null) {
-        if (!_scrollRetry) {
-          _scrollRetry = true;
-          _attemptScrollToHighlight();
-        }
-        return;
-      }
-      Scrollable.ensureVisible(
-        context,
-        alignment: 0.5,
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeOutCubic,
-      );
-      _didScroll = true;
-    });
-  }
-
-  int? _weekdayFromDay(String day) {
-    switch (day.trim().toLowerCase()) {
-      case 'monday':
-        return DateTime.monday;
-      case 'tuesday':
-        return DateTime.tuesday;
-      case 'wednesday':
-        return DateTime.wednesday;
-      case 'thursday':
-        return DateTime.thursday;
-      case 'friday':
-        return DateTime.friday;
-      case 'saturday':
-        return DateTime.saturday;
-      case 'sunday':
-        return DateTime.sunday;
-      default:
-        return null;
-    }
-  }
-
   String? _pickHighlightedEntryKey(List<_DayCompareEntry> entries) {
     final now = DateTime.now();
     DateTime? currentEnd;
@@ -330,7 +289,7 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
     for (final entry in entries) {
       final startMinutes = entry.startMinutes;
       final endMinutes = entry.endMinutes;
-      final weekday = _weekdayFromDay(entry.day);
+      final weekday = BracuTime.weekdayFromName(entry.day);
       if (startMinutes == null || endMinutes == null || weekday == null) {
         continue;
       }
@@ -596,7 +555,19 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
       _scrollRetry = false;
     }
     if (!_didScroll && highlightedEntryKey != null) {
-      _attemptScrollToHighlight();
+      attemptScrollToHighlightedKey(
+        highlightKey: _highlightKey,
+        hasRetried: _scrollRetry,
+        retry: () {
+          _scrollRetry = true;
+          if (mounted) {
+            setState(() {});
+          }
+        },
+        onScrolled: () {
+          _didScroll = true;
+        },
+      );
     }
 
     return Scaffold(

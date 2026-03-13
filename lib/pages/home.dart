@@ -18,6 +18,7 @@ import 'package:preconnect/pages/share_schedule.dart';
 import 'package:preconnect/pages/scan_schedule.dart';
 import 'package:preconnect/pages/friend_schedule.dart';
 import 'package:preconnect/pages/devs.dart';
+import 'package:preconnect/pages/calender.dart';
 import 'package:preconnect/pages/more_quick_access.dart';
 import 'package:preconnect/pages/notifications.dart';
 import 'package:preconnect/pages/settings.dart';
@@ -84,6 +85,7 @@ class _HomePageState extends State<HomePage> {
       onLogout: () => _confirmLogout(context),
     ),
     HomeTab.moreQuickAccess: (_) => MoreQuickAccessPage(onNavigate: _setTab),
+    HomeTab.calendar: (_) => const CalenderPage(),
     HomeTab.profile: (_) => const StudentProfile(),
     HomeTab.studentSchedule: (_) => const ClassSchedule(),
     HomeTab.examSchedule: (_) => const ExamSchedule(),

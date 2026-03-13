@@ -43,6 +43,35 @@ String formatTimeRange(String? start, String? end) {
   return BracuTime.range(start, end);
 }
 
+String formatLongDate(DateTime date) {
+  return DateFormat('d MMMM, yyyy').format(date);
+}
+
+String formatRelativeDayLabel(
+  DateTime date, {
+  bool includeYesterday = false,
+  bool includeTomorrow = false,
+  String? unknownLabel,
+}) {
+  if (unknownLabel != null && date.year == 1970) return unknownLabel;
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final target = DateTime(date.year, date.month, date.day);
+  if (target == today) return 'Today';
+  if (includeYesterday &&
+      target == today.subtract(const Duration(days: 1))) {
+    return 'Yesterday';
+  }
+  if (includeTomorrow && target == today.add(const Duration(days: 1))) {
+    return 'Tomorrow';
+  }
+  return DateFormat('EEEE').format(date);
+}
+
+String formatDateTimeLabel(DateTime dateTime, {String separator = ' • '}) {
+  return '${formatLongDate(dateTime)}$separator${BracuTime.formatDateTime(dateTime)}';
+}
+
 void copyToClipboard(BuildContext context, String text) {
   final value = text.trim();
   if (value.isEmpty) return;
@@ -466,6 +495,110 @@ Future<T?> showBracuSelectSheet<T>(
   );
 }
 
+void attemptScrollToHighlightedKey({
+  required GlobalKey? highlightKey,
+  required bool hasRetried,
+  required VoidCallback retry,
+  required VoidCallback onScrolled,
+  double alignment = 0.5,
+  Duration duration = const Duration(milliseconds: 450),
+}) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final context = highlightKey?.currentContext;
+    if (context == null) {
+      if (!hasRetried) {
+        retry();
+      }
+      return;
+    }
+    Scrollable.ensureVisible(
+      context,
+      alignment: alignment,
+      duration: duration,
+      curve: Curves.easeOutCubic,
+    );
+    onScrolled();
+  });
+}
+
+class BracuSelectChip extends StatelessWidget {
+  const BracuSelectChip({
+    super.key,
+    required this.label,
+    this.icon,
+    this.selected = false,
+    this.onTap,
+    this.showArrow = true,
+    this.compact = false,
+    this.borderRadius = 18,
+  });
+
+  final String label;
+  final IconData? icon;
+  final bool selected;
+  final VoidCallback? onTap;
+  final bool showArrow;
+  final bool compact;
+  final double borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    final textSecondary = BracuPalette.textSecondary(context);
+    final primaryColor = selected ? BracuPalette.primary : textSecondary;
+    final backgroundColor = compact
+        ? (selected
+              ? BracuPalette.primary.withValues(alpha: 0.14)
+              : BracuPalette.card(context).withValues(alpha: 0.94))
+        : BracuPalette.card(context).withValues(alpha: 0.94);
+    final borderColor = selected
+        ? BracuPalette.primary.withValues(alpha: compact ? 0.45 : 0.70)
+        : textSecondary.withValues(alpha: 0.26);
+    final horizontalPadding = compact ? 14.0 : 16.0;
+    final verticalPadding = compact ? 10.0 : 11.0;
+    final resolvedRadius = compact ? 16.0 : borderRadius;
+    final labelStyle = TextStyle(
+      color: BracuPalette.textPrimary(context),
+      fontSize: compact ? 13 : 14,
+      fontWeight: FontWeight.w700,
+    );
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(resolvedRadius),
+      child: Container(
+        margin: compact ? null : const EdgeInsets.only(left: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: verticalPadding,
+        ),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(resolvedRadius),
+          border: Border.all(color: borderColor),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: compact ? 17 : 18, color: primaryColor),
+              const SizedBox(width: 8),
+            ],
+            Text(label, style: labelStyle),
+            if (showArrow) ...[
+              SizedBox(width: compact ? 6 : 8),
+              Icon(
+                Icons.expand_more_rounded,
+                size: compact ? 18 : 20,
+                color: primaryColor,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 String formatSectionBadge(String? sectionName) {
   if (sectionName == null) return '?';
   final trimmed = sectionName.trim();
@@ -685,6 +818,42 @@ class BracuRefreshPlaceholder extends StatelessWidget {
       ],
     );
   }
+}
+
+Widget buildRefreshLoadingState({
+  required RefreshCallback onRefresh,
+  String label = 'Loading...',
+  double topSpacing = 0,
+}) {
+  return BracuRefreshPlaceholder(
+    onRefresh: onRefresh,
+    topSpacing: topSpacing,
+    child: BracuLoading(label: label),
+  );
+}
+
+Widget buildRefreshErrorState({
+  required RefreshCallback onRefresh,
+  required Object? error,
+  double topSpacing = 0,
+}) {
+  return BracuRefreshPlaceholder(
+    onRefresh: onRefresh,
+    topSpacing: topSpacing,
+    child: BracuEmptyState(message: 'Error: $error'),
+  );
+}
+
+Widget buildRefreshEmptyState({
+  required RefreshCallback onRefresh,
+  required String message,
+  double topSpacing = 0,
+}) {
+  return BracuRefreshPlaceholder(
+    onRefresh: onRefresh,
+    topSpacing: topSpacing,
+    child: BracuEmptyState(message: message),
+  );
 }
 
 class BracuRefreshScroll extends StatefulWidget {

@@ -62,26 +62,6 @@ class _ExamScheduleState extends State<ExamSchedule> {
     }
   }
 
-  void _attemptScrollToHighlight() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final context = _highlightKey?.currentContext;
-      if (context == null) {
-        if (!_scrollRetry) {
-          _scrollRetry = true;
-          _attemptScrollToHighlight();
-        }
-        return;
-      }
-      Scrollable.ensureVisible(
-        context,
-        alignment: 0.5,
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeOutCubic,
-      );
-      _didScroll = true;
-    });
-  }
-
   Future<List<Section>> _fetchExamSections({bool forceRefresh = false}) async {
     return ScheduleService().getStudentSections(forceRefresh: forceRefresh);
   }
@@ -111,19 +91,19 @@ class _ExamScheduleState extends State<ExamSchedule> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshLoadingState(
               onRefresh: _handleRefresh,
-              child: const BracuLoading(label: 'Loading exams...'),
+              label: 'Loading exams...',
             );
           } else if (snapshot.hasError) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshErrorState(
               onRefresh: _handleRefresh,
-              child: BracuEmptyState(message: 'Error: ${snapshot.error}'),
+              error: snapshot.error,
             );
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshEmptyState(
               onRefresh: _handleRefresh,
-              child: const BracuEmptyState(message: 'No exam data available'),
+              message: 'No exam data available',
             );
           }
 
@@ -174,9 +154,9 @@ class _ExamScheduleState extends State<ExamSchedule> {
           });
 
           if (midExams.isEmpty && finalExams.isEmpty) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshEmptyState(
               onRefresh: _handleRefresh,
-              child: const BracuEmptyState(message: 'No exams scheduled'),
+              message: 'No exams scheduled',
             );
           }
 
@@ -466,7 +446,19 @@ class _ExamScheduleState extends State<ExamSchedule> {
             _scrollRetry = false;
           }
           if (!_didScroll && _highlightKey != null) {
-            _attemptScrollToHighlight();
+            attemptScrollToHighlightedKey(
+              highlightKey: _highlightKey,
+              hasRetried: _scrollRetry,
+              retry: () {
+                _scrollRetry = true;
+                if (mounted) {
+                  setState(() {});
+                }
+              },
+              onScrolled: () {
+                _didScroll = true;
+              },
+            );
           }
 
           return BracuRefreshList(

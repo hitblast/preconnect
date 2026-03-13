@@ -77,22 +77,19 @@ class _NotificationsPageState extends State<NotificationsPage> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshLoadingState(
               onRefresh: _refresh,
               topSpacing: 180,
-              child: const BracuLoading(),
             );
           }
 
           final feed = _lastFeed ?? snapshot.data;
           final items = feed?.items ?? const <RecentConnectNotification>[];
           if (items.isEmpty) {
-            return BracuRefreshPlaceholder(
+            return buildRefreshEmptyState(
               onRefresh: _refresh,
               topSpacing: 180,
-              child: const BracuEmptyState(
-                message: 'No recent notifications found.',
-              ),
+              message: 'No recent notifications found.',
             );
           }
 
@@ -141,18 +138,16 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   String _dayLabel(DateTime date) {
-    if (date.year == 1970) return 'Unknown';
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    if (date == today) return 'Today';
-    if (date == yesterday) return 'Yesterday';
-    return DateFormat('EEEE').format(date);
+    return formatRelativeDayLabel(
+      date,
+      includeYesterday: true,
+      unknownLabel: 'Unknown',
+    );
   }
 
   String _dateLabel(DateTime date) {
     if (date.year == 1970) return '';
-    return DateFormat('d MMMM, yyyy').format(date);
+    return formatLongDate(date);
   }
 }
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 
 class ExamCountdownCard extends StatelessWidget {
@@ -56,9 +55,7 @@ class ExamCountdownCard extends StatelessWidget {
   }
 
   String _formatSubtitle(DateTime target, DateTime now) {
-    final date = DateFormat('d MMMM, y').format(target);
-    final time = DateFormat('h:mm a').format(target);
-    return '$date • $time';
+    return formatDateTimeLabel(target);
   }
 }
 

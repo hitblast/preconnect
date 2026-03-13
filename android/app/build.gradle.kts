@@ -86,6 +86,7 @@ android {
     packaging {
         jniLibs {
             excludes += setOf("**/x86_64/*.so")
+            keepDebugSymbols += setOf("**/*.so")
         }
     }
 }

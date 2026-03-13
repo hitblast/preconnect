@@ -55,6 +55,13 @@ class ApiConfig {
 
   static const String recentNotificationsPath = '/ns/notifications/recent';
 
+  static String calendarPath(
+    int calendarId, {
+    required String startDate,
+    required String endDate,
+  }) =>
+      '/reg/v1/calendar/$calendarId?startDate=$startDate&endDate=$endDate';
+
   static String notificationViewPath(int id) => '/ns/notifications/view/$id';
 
   static const Map<String, String> apiHeaders = {

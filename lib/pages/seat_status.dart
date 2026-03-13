@@ -498,8 +498,12 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     final label = _selectedDayFilter.isEmpty
         ? 'Any Day'
         : formatWeekdayTitle(_selectedDayFilter);
-    return InkWell(
-      borderRadius: BorderRadius.circular(999),
+    return BracuSelectChip(
+      icon: Icons.calendar_today_outlined,
+      label: label,
+      selected: _selectedDayFilter.isNotEmpty,
+      compact: true,
+      borderRadius: 999,
       onTap: () async {
         final selected = await showBracuSelectSheet<String>(
           context,
@@ -526,11 +530,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         if (selected == null) return;
         _setDayFilter(selected);
       },
-      child: _FilterChip(
-        icon: Icons.calendar_today_outlined,
-        label: label,
-        selected: _selectedDayFilter.isNotEmpty,
-      ),
     );
   }
 
@@ -1234,54 +1233,14 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return BracuSelectChip(
+      icon: icon,
+      label: label,
+      selected: selected,
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected
-              ? BracuPalette.primary.withValues(alpha: 0.14)
-              : BracuPalette.card(context).withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected
-                ? BracuPalette.primary.withValues(alpha: 0.45)
-                : BracuPalette.textSecondary(context).withValues(alpha: 0.26),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 17,
-              color: selected
-                  ? BracuPalette.primary
-                  : BracuPalette.textSecondary(context),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: BracuPalette.textPrimary(context),
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            if (showArrow) ...[
-              const SizedBox(width: 6),
-              Icon(
-                Icons.expand_more_rounded,
-                size: 18,
-                color: selected
-                    ? BracuPalette.primary
-                    : BracuPalette.textSecondary(context),
-              ),
-            ],
-          ],
-        ),
-      ),
+      showArrow: showArrow,
+      compact: true,
+      borderRadius: 16,
     );
   }
 }
