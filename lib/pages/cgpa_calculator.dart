@@ -76,7 +76,7 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
           code: course.code,
           title: course.title,
           credit: _formatCredit(course.credit),
-          grade: _normalizeGrade(course.grade),
+          grade: _normalizeImportedGrade(course.grade),
           semester: course.semesterSession,
           isRequired: _mandatoryByCode[course.code.trim().toUpperCase()] ?? false,
         ),
@@ -105,12 +105,16 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
   Widget build(BuildContext context) {
     final expectedResult = _buildExpectedResult();
     final completedCodes = _completedEffectiveCodes;
-    final autoRetakeCurrentCourses = _currentCourses
+    final autoRetakeCodes = _currentCourses
         .where((draft) => completedCodes.contains(draft.codeValue))
+        .map((draft) => draft.codeValue)
+        .toSet();
+    final autoRetakeCurrentCourses = _currentCourses
+        .where((draft) => autoRetakeCodes.contains(draft.codeValue))
         .toList()
       ..sort((a, b) => compareNaturalText(a.codeValue, b.codeValue));
     final manualRetakeCourses = _selectedRetakeCourses
-        .where((draft) => !completedCodes.contains(draft.codeValue))
+        .where((draft) => !autoRetakeCodes.contains(draft.codeValue))
         .toList();
     return BracuPageScaffold(
       title: 'Expected CGPA',
@@ -407,7 +411,7 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
       child: BracuCard(
         child: _buildCourseCard(
           context,
-          badgeLabel: draft.completedGrade,
+          badgeLabel: draft.selectedRetakeGrade ?? draft.completedGrade,
           codeLine: draft.semesterValue.isEmpty
               ? draft.codeValue
               : '${draft.codeValue} • ${formatSemesterTitle(draft.semesterValue)}',
@@ -417,6 +421,9 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
           statusColor: draft.isRequired
               ? BracuPalette.warning
               : BracuPalette.accent,
+          trailingNote: draft.hasRetakeSelection
+              ? 'Retake: ${draft.selectedRetakeGrade}'
+              : null,
         ),
       ),
     );
@@ -936,6 +943,12 @@ String _normalizeGrade(String raw) {
   final grade = raw.trim().toUpperCase();
   if (_gradeOptions.contains(grade)) return grade;
   return 'A';
+}
+
+String _normalizeImportedGrade(String raw) {
+  final grade = raw.trim().toUpperCase();
+  if (_gradeOptions.contains(grade)) return grade;
+  return grade;
 }
 
 double? _gradePointFor(String grade) {
