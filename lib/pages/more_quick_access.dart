@@ -18,10 +18,17 @@ import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/pages/web_login_setup.dart';
 import 'package:preconnect/tools/web_pdf_opener.dart';
 
-class MoreQuickAccessPage extends StatelessWidget {
+class MoreQuickAccessPage extends StatefulWidget {
   const MoreQuickAccessPage({super.key, required this.onNavigate});
 
   final ValueChanged<HomeTab> onNavigate;
+
+  @override
+  State<MoreQuickAccessPage> createState() => _MoreQuickAccessPageState();
+}
+
+class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
+  bool _isOpeningGradeSheet = false;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +53,7 @@ class MoreQuickAccessPage extends StatelessWidget {
                     title: 'Settings',
                     subtitle: 'Controls',
                     color: const Color(0xFF7C56FF),
-                    onTap: () => onNavigate(HomeTab.settings),
+                    onTap: () => widget.onNavigate(HomeTab.settings),
                   ),
                   QuickAccessCard(
                     width: width,
@@ -54,7 +61,7 @@ class MoreQuickAccessPage extends StatelessWidget {
                     title: 'Updates',
                     subtitle: 'Notifications',
                     color: const Color(0xFF5B8DEF),
-                    onTap: () => onNavigate(HomeTab.notifications),
+                    onTap: () => widget.onNavigate(HomeTab.notifications),
                   ),
                   QuickAccessCard(
                     width: width,
@@ -62,7 +69,7 @@ class MoreQuickAccessPage extends StatelessWidget {
                     title: 'Devs',
                     subtitle: 'About Us',
                     color: const Color(0xFF2C9DFF),
-                    onTap: () => onNavigate(HomeTab.devs),
+                    onTap: () => widget.onNavigate(HomeTab.devs),
                   ),
                   QuickAccessCard(
                     width: width,
@@ -78,7 +85,23 @@ class MoreQuickAccessPage extends StatelessWidget {
                     title: 'Grade',
                     subtitle: 'Open PDF',
                     color: const Color(0xFFE53935),
-                    onTap: () => _openGradeSheet(context),
+                    isLoading: _isOpeningGradeSheet,
+                    onTap: _isOpeningGradeSheet
+                        ? () {}
+                        : () async {
+                            setState(() {
+                              _isOpeningGradeSheet = true;
+                            });
+                            try {
+                              await _openGradeSheet(context);
+                            } finally {
+                              if (mounted) {
+                                setState(() {
+                                  _isOpeningGradeSheet = false;
+                                });
+                              }
+                            }
+                          },
                   ),
                   QuickAccessCard(
                     width: width,
@@ -86,7 +109,7 @@ class MoreQuickAccessPage extends StatelessWidget {
                     title: 'Degree',
                     subtitle: 'Progress',
                     color: const Color(0xFF2C9DFF),
-                    onTap: () => onNavigate(HomeTab.degreeProgress),
+                    onTap: () => widget.onNavigate(HomeTab.degreeProgress),
                   ),
                   QuickAccessCard(
                     width: width,
@@ -94,7 +117,7 @@ class MoreQuickAccessPage extends StatelessWidget {
                     title: 'Seat',
                     subtitle: 'Status',
                     color: const Color(0xFF00A8E8),
-                    onTap: () => onNavigate(HomeTab.seatStatus),
+                    onTap: () => widget.onNavigate(HomeTab.seatStatus),
                   ),
                   QuickAccessCard(
                     width: width,

@@ -10,6 +10,7 @@ class QuickAccessCard extends StatelessWidget {
     required this.subtitle,
     required this.color,
     required this.onTap,
+    this.isLoading = false,
   });
 
   final double width;
@@ -18,6 +19,7 @@ class QuickAccessCard extends StatelessWidget {
   final String subtitle;
   final Color color;
   final VoidCallback onTap;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +54,16 @@ class QuickAccessCard extends StatelessWidget {
                 color: color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: color, size: 22),
+              child: isLoading
+                  ? SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        valueColor: AlwaysStoppedAnimation<Color>(color),
+                      ),
+                    )
+                  : Icon(icon, color: color, size: 22),
             ),
             const SizedBox(height: 12),
             Text(
