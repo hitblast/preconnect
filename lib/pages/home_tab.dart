@@ -4,6 +4,7 @@ enum HomeTab {
   settings,
   notifications,
   dashboard,
+  moreQuickAccess,
   profile,
   studentSchedule,
   examSchedule,

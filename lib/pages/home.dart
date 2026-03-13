@@ -18,11 +18,13 @@ import 'package:preconnect/pages/share_schedule.dart';
 import 'package:preconnect/pages/scan_schedule.dart';
 import 'package:preconnect/pages/friend_schedule.dart';
 import 'package:preconnect/pages/devs.dart';
+import 'package:preconnect/pages/more_quick_access.dart';
 import 'package:preconnect/pages/notifications.dart';
 import 'package:preconnect/pages/settings.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/pages/home_sections/exam_countdown.dart';
 import 'package:preconnect/pages/home_sections/student_overview.dart';
+import 'package:preconnect/pages/shared_widgets/quick_access_card.dart';
 import 'package:preconnect/pages/shared_widgets/section_badge.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/ui_kit.dart';
@@ -81,6 +83,7 @@ class _HomePageState extends State<HomePage> {
       onNavigate: _setTab,
       onLogout: () => _confirmLogout(context),
     ),
+    HomeTab.moreQuickAccess: (_) => MoreQuickAccessPage(onNavigate: _setTab),
     HomeTab.profile: (_) => const StudentProfile(),
     HomeTab.studentSchedule: (_) => const ClassSchedule(),
     HomeTab.examSchedule: (_) => const ExamSchedule(),
@@ -1131,7 +1134,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                     spacing: spacing,
                                     runSpacing: spacing,
                                     children: [
-                                      _QuickActionCard(
+                                      QuickAccessCard(
                                         width: width,
                                         icon: Icons.person_outline,
                                         title: 'Profile',
@@ -1140,7 +1143,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                         onTap: () =>
                                             widget.onNavigate(HomeTab.profile),
                                       ),
-                                      _QuickActionCard(
+                                      QuickAccessCard(
                                         width: width,
                                         icon: Icons.schedule_outlined,
                                         title: 'Classes',
@@ -1150,7 +1153,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                           HomeTab.studentSchedule,
                                         ),
                                       ),
-                                      _QuickActionCard(
+                                      QuickAccessCard(
                                         width: width,
                                         icon: Icons.alarm_outlined,
                                         title: 'Alarms',
@@ -1159,7 +1162,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                         onTap: () =>
                                             widget.onNavigate(HomeTab.alarms),
                                       ),
-                                      _QuickActionCard(
+                                      QuickAccessCard(
                                         width: width,
                                         icon: Icons.event_note_outlined,
                                         title: 'Exams',
@@ -1169,17 +1172,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                           HomeTab.examSchedule,
                                         ),
                                       ),
-                                      _QuickActionCard(
-                                        width: width,
-                                        icon: Icons.school_outlined,
-                                        title: 'Degree',
-                                        subtitle: 'Progress',
-                                        color: const Color(0xFF2C9DFF),
-                                        onTap: () => widget.onNavigate(
-                                          HomeTab.degreeProgress,
-                                        ),
-                                      ),
-                                      _QuickActionCard(
+                                      QuickAccessCard(
                                         width: width,
                                         icon: Icons.people_outline,
                                         title: 'Friends',
@@ -1189,24 +1182,15 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                           HomeTab.friendSchedule,
                                         ),
                                       ),
-                                      _QuickActionCard(
+                                      QuickAccessCard(
                                         width: width,
-                                        icon: Icons.insights_outlined,
-                                        title: 'Seat',
-                                        subtitle: 'Status',
+                                        icon: Icons.more_horiz_rounded,
+                                        title: 'More',
+                                        subtitle: 'Options',
                                         color: const Color(0xFF00A8E8),
                                         onTap: () => widget.onNavigate(
-                                          HomeTab.seatStatus,
+                                          HomeTab.moreQuickAccess,
                                         ),
-                                      ),
-                                      _QuickActionCard(
-                                        width: width,
-                                        icon: Icons.developer_mode_outlined,
-                                        title: 'Devs',
-                                        subtitle: 'About Us',
-                                        color: const Color(0xFF2C9DFF),
-                                        onTap: () =>
-                                            widget.onNavigate(HomeTab.devs),
                                       ),
                                     ],
                                   );
@@ -1517,79 +1501,6 @@ Future<void> _openPreconnectWeb(BuildContext context, String url) async {
     url,
     failureMessage: 'Unable to open browser.',
   );
-}
-
-class _QuickActionCard extends StatelessWidget {
-  const _QuickActionCard({
-    required this.width,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  final double width;
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textSecondary = BracuPalette.textSecondary(context);
-    final textPrimary = BracuPalette.textPrimary(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        width: width,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: BracuPalette.card(context),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: isDark
-              ? const []
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 16,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: textPrimary,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: TextStyle(fontSize: 11, color: textSecondary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _ScheduleTile extends StatelessWidget {
