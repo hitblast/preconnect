@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:preconnect/api/profile_service.dart';
@@ -141,7 +140,9 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
         fromFetch: true,
       );
       final freshScheduleJson = await ScheduleService().fetchStudentSchedule();
-      final freshSections = _parseCurrentSemesterSections(freshScheduleJson);
+      final freshSections = section.parseSectionsFromScheduleJson(
+        freshScheduleJson,
+      );
       unawaited(_loadCgpa());
       if (!mounted) return;
       final shouldUpdateInfo = freshInfo != null;
@@ -932,38 +933,11 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
   Future<void> _loadCurrentSemesterCourses() async {
     final scheduleJson = await ScheduleService().getStudentSchedule();
     if (!mounted) return;
-    final sections = _parseCurrentSemesterSections(scheduleJson);
+    final sections = section.parseSectionsFromScheduleJson(scheduleJson);
     if (_sameSections(_currentSemesterSections, sections)) return;
     setState(() {
       _currentSemesterSections = sections;
     });
-  }
-
-  List<section.Section> _parseCurrentSemesterSections(String? scheduleJson) {
-    if (scheduleJson == null || scheduleJson.trim().isEmpty) {
-      return const <section.Section>[];
-    }
-    try {
-      final decoded = jsonDecode(scheduleJson);
-      if (decoded is! List<dynamic>) return const <section.Section>[];
-      final sections = <section.Section>[];
-      final seen = <String>{};
-      for (final raw in decoded.whereType<Map<String, dynamic>>()) {
-        final item = section.Section.fromJson(raw);
-        final key =
-            '${item.sectionId}|${item.courseCode}|${item.sectionName}|${item.roomNumber}';
-        if (!seen.add(key)) continue;
-        sections.add(item);
-      }
-      sections.sort((a, b) {
-        final codeCmp = compareNaturalText(a.courseCode, b.courseCode);
-        if (codeCmp != 0) return codeCmp;
-        return compareNaturalText(a.sectionName, b.sectionName);
-      });
-      return sections;
-    } catch (_) {
-      return const <section.Section>[];
-    }
   }
 
   bool _sameSections(List<section.Section> a, List<section.Section> b) {

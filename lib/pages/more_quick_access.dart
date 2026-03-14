@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart';
-import 'package:native_file_preview/native_file_preview.dart';
-import 'package:preconnect/api/grade_sheet_service.dart';
 import 'package:preconnect/pages/captive_wifi.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/pages/shared_widgets/quick_access_card.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/pages/web_login_setup.dart';
-import 'package:preconnect/tools/web_pdf_opener.dart';
 
 class MoreQuickAccessPage extends StatefulWidget {
   const MoreQuickAccessPage({super.key, required this.onNavigate});
@@ -80,7 +75,7 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
                                 _isOpeningGradeSheet = true;
                               });
                               try {
-                                await _openGradeSheet(context);
+                                await openGradeSheet(context);
                               } finally {
                                 if (mounted) {
                                   setState(() {
@@ -142,42 +137,5 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
         ],
       ),
     );
-  }
-}
-
-final NativeFilePreview _nativeFilePreview = NativeFilePreview();
-
-Future<void> _openGradeSheet(BuildContext context) async {
-  try {
-    if (kIsWeb) {
-      final bytes = await GradeSheetService().fetchGradeSheetBytes(fromGet: true);
-      if (!context.mounted) return;
-      if (bytes == null || bytes.isEmpty) {
-        showAppSnackBar(context, 'Could not fetch the latest grade sheet');
-        return;
-      }
-      final fileName = await GradeSheetService().gradeSheetFileName();
-      await openPdfInBrowser(bytes: bytes, fileName: '$fileName.pdf');
-      return;
-    }
-
-    final gradeSheet = await GradeSheetService().fetchGradeSheet(fromGet: true);
-    if (!context.mounted) return;
-    if (gradeSheet == null) {
-      showAppSnackBar(context, 'Could not fetch the latest grade sheet');
-      return;
-    }
-    await _nativeFilePreview.previewFile(gradeSheet.file.path);
-  } on PlatformException catch (error) {
-    if (!context.mounted) return;
-    final message = switch (error.code) {
-      'NO_APP_FOUND' => 'No app found to open this PDF.',
-      'FILE_NOT_FOUND' => 'The PDF file was not found.',
-      _ => error.message ?? 'Could not open the PDF.',
-    };
-    showAppSnackBar(context, message);
-  } catch (_) {
-    if (!context.mounted) return;
-    showAppSnackBar(context, 'Could not open the PDF.');
   }
 }

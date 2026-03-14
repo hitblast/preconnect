@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:preconnect/model/progress_info.dart';
 
 class Section {
   final int sectionId;
@@ -139,5 +140,32 @@ class ClassSchedule {
       endTime: json['endTime'],
       day: json['day'],
     );
+  }
+}
+
+List<Section> parseSectionsFromScheduleJson(String? scheduleJson) {
+  if (scheduleJson == null || scheduleJson.trim().isEmpty) {
+    return const <Section>[];
+  }
+  try {
+    final decoded = jsonDecode(scheduleJson);
+    if (decoded is! List<dynamic>) return const <Section>[];
+    final sections = <Section>[];
+    final seen = <String>{};
+    for (final raw in decoded.whereType<Map<String, dynamic>>()) {
+      final item = Section.fromJson(raw);
+      final key =
+          '${item.sectionId}|${item.courseCode}|${item.sectionName}|${item.roomNumber}';
+      if (!seen.add(key)) continue;
+      sections.add(item);
+    }
+    sections.sort((a, b) {
+      final codeCmp = compareNaturalText(a.courseCode, b.courseCode);
+      if (codeCmp != 0) return codeCmp;
+      return compareNaturalText(a.sectionName, b.sectionName);
+    });
+    return sections;
+  } catch (_) {
+    return const <Section>[];
   }
 }

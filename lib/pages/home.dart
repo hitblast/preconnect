@@ -29,7 +29,6 @@ import 'package:preconnect/pages/home_sections/exam_countdown.dart';
 import 'package:preconnect/pages/home_sections/student_overview.dart';
 import 'package:preconnect/pages/shared_widgets/quick_access_card.dart';
 import 'package:preconnect/pages/shared_widgets/section_badge.dart';
-import 'package:preconnect/model/progress_info.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/android_network_assist.dart';
@@ -504,7 +503,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
       }
 
       final currentCgpa = (profile?['cgpa'] ?? '').trim();
-      final sections = _parseCurrentSemesterSections(scheduleJson);
+      final sections = section.parseSectionsFromScheduleJson(scheduleJson);
       messenger.hideCurrentSnackBar();
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -519,33 +518,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
       if (!context.mounted) return;
       messenger.hideCurrentSnackBar();
       showAppSnackBar(context, 'Could not open CGPA calculator');
-    }
-  }
-
-  List<section.Section> _parseCurrentSemesterSections(String? scheduleJson) {
-    if (scheduleJson == null || scheduleJson.trim().isEmpty) {
-      return const <section.Section>[];
-    }
-    try {
-      final decoded = jsonDecode(scheduleJson);
-      if (decoded is! List<dynamic>) return const <section.Section>[];
-      final sections = <section.Section>[];
-      final seen = <String>{};
-      for (final raw in decoded.whereType<Map<String, dynamic>>()) {
-        final item = section.Section.fromJson(raw);
-        final key =
-            '${item.sectionId}|${item.courseCode}|${item.sectionName}|${item.roomNumber}';
-        if (!seen.add(key)) continue;
-        sections.add(item);
-      }
-      sections.sort((a, b) {
-        final codeCmp = compareNaturalText(a.courseCode, b.courseCode);
-        if (codeCmp != 0) return codeCmp;
-        return compareNaturalText(a.sectionName, b.sectionName);
-      });
-      return sections;
-    } catch (_) {
-      return const <section.Section>[];
     }
   }
 

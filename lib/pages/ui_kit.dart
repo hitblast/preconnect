@@ -4,7 +4,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:native_file_preview/native_file_preview.dart';
+import 'package:preconnect/api/grade_sheet_service.dart';
 import 'package:preconnect/tools/time_utils.dart';
+import 'package:preconnect/tools/web_pdf_opener.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 String formatDate(String? input) {
@@ -131,6 +134,7 @@ Future<bool> openMailComposer(
 DateTime? _lastSnackAt;
 String? _lastSnackMessage;
 Timer? _snackAutoTimer;
+final NativeFilePreview _nativeFilePreview = NativeFilePreview();
 
 void showAppSnackBar(BuildContext context, String message) {
   if (kIsWeb) return;
@@ -168,6 +172,41 @@ void showAppSnackBar(BuildContext context, String message) {
   _snackAutoTimer = Timer(const Duration(seconds: 3), () {
     messenger.hideCurrentSnackBar();
   });
+}
+
+Future<void> openGradeSheet(BuildContext context) async {
+  try {
+    if (kIsWeb) {
+      final bytes = await GradeSheetService().fetchGradeSheetBytes(fromGet: true);
+      if (!context.mounted) return;
+      if (bytes == null || bytes.isEmpty) {
+        showAppSnackBar(context, 'Could not fetch the latest grade sheet');
+        return;
+      }
+      final fileName = await GradeSheetService().gradeSheetFileName();
+      await openPdfInBrowser(bytes: bytes, fileName: '$fileName.pdf');
+      return;
+    }
+
+    final gradeSheet = await GradeSheetService().fetchGradeSheet(fromGet: true);
+    if (!context.mounted) return;
+    if (gradeSheet == null) {
+      showAppSnackBar(context, 'Could not fetch the latest grade sheet');
+      return;
+    }
+    await _nativeFilePreview.previewFile(gradeSheet.file.path);
+  } on PlatformException catch (error) {
+    if (!context.mounted) return;
+    final message = switch (error.code) {
+      'NO_APP_FOUND' => 'No app found to open this PDF.',
+      'FILE_NOT_FOUND' => 'The PDF file was not found.',
+      _ => error.message ?? 'Could not open the PDF.',
+    };
+    showAppSnackBar(context, message);
+  } catch (_) {
+    if (!context.mounted) return;
+    showAppSnackBar(context, 'Could not open the PDF.');
+  }
 }
 
 String normalizeWeekday(String? day) {

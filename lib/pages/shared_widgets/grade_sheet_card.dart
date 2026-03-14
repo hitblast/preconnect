@@ -1,10 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart';
-import 'package:native_file_preview/native_file_preview.dart';
-import 'package:preconnect/api/grade_sheet_service.dart';
 import 'package:preconnect/pages/ui_kit.dart';
-import 'package:preconnect/tools/web_pdf_opener.dart';
 
 const kGradeSheetTitle = 'Grade Sheet';
 const kGradeSheetCardSubtitle = 'Open your latest grade sheet PDF';
@@ -24,7 +19,6 @@ class GradeSheetCard extends StatefulWidget {
 }
 
 class _GradeSheetCardState extends State<GradeSheetCard> {
-  final NativeFilePreview _nativeFilePreview = NativeFilePreview();
   bool _isOpening = false;
 
   Future<void> _openGradeSheet() async {
@@ -33,39 +27,7 @@ class _GradeSheetCardState extends State<GradeSheetCard> {
       _isOpening = true;
     });
     try {
-      if (kIsWeb) {
-        final bytes = await GradeSheetService().fetchGradeSheetBytes(
-          fromGet: true,
-        );
-        if (!mounted) return;
-        if (bytes == null || bytes.isEmpty) {
-          showAppSnackBar(context, 'Could not fetch the latest grade sheet');
-          return;
-        }
-        final fileName = await GradeSheetService().gradeSheetFileName();
-        await openPdfInBrowser(bytes: bytes, fileName: '$fileName.pdf');
-        return;
-      }
-      final gradeSheet = await GradeSheetService().fetchGradeSheet(
-        fromGet: true,
-      );
-      if (!mounted) return;
-      if (gradeSheet == null) {
-        showAppSnackBar(context, 'Could not fetch the latest grade sheet');
-        return;
-      }
-      await _nativeFilePreview.previewFile(gradeSheet.file.path);
-    } on PlatformException catch (error) {
-      if (!mounted) return;
-      final message = switch (error.code) {
-        'NO_APP_FOUND' => 'No app found to open this PDF.',
-        'FILE_NOT_FOUND' => 'The PDF file was not found.',
-        _ => error.message ?? 'Could not open the PDF.',
-      };
-      showAppSnackBar(context, message);
-    } catch (_) {
-      if (!mounted) return;
-      showAppSnackBar(context, 'Could not open the PDF.');
+      await openGradeSheet(context);
     } finally {
       if (mounted) {
         setState(() {
