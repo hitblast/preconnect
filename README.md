@@ -131,7 +131,7 @@ flutter run
 Release APK:
 
 ```bash
-flutter build apk --release
+flutter build apk --release --dart-define-from-file=.env
 ```
 
 Output:
@@ -145,7 +145,7 @@ build/app/outputs/flutter-apk/app-release.apk
 Release AAB:
 
 ```bash
-flutter build appbundle --release
+flutter build appbundle --release --dart-define-from-file=.env
 ```
 
 Output:
@@ -153,8 +153,6 @@ Output:
 ```bash
 build/app/outputs/bundle/release/app-release.aab
 ```
-
-Local release builds in this repo are Android ARM64 only. Desktop release builds are not part of the local release flow.
 
 ## Seat Status Proxy
 
