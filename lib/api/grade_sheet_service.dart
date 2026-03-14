@@ -8,6 +8,7 @@ import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/prefs_cache_utils.dart';
 import 'package:preconnect/api/profile_service.dart';
+import 'package:preconnect/api/sembast_cache.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class GradeSheetFile {
@@ -144,9 +145,9 @@ class GradeSheetService {
   }
 
   Future<String> gradeSheetFileName({String? profileId}) async {
-    final prefs = SharedPreferencesAsync();
-    final fullName = (await prefs.getString('fullName') ?? '').trim();
-    final studentId = (await prefs.getString('studentId') ?? '').trim();
+    final cache = SembastCache();
+    final fullName = (await cache.getString('fullName') ?? '').trim();
+    final studentId = (await cache.getString('studentId') ?? '').trim();
     final safeName = fullName
         .replaceAll(RegExp(r'[\\/:*?"<>|]+'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')

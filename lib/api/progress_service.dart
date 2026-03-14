@@ -6,6 +6,7 @@ import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/http_cache_utils.dart';
 import 'package:preconnect/api/prefs_cache_utils.dart';
 import 'package:preconnect/api/profile_service.dart';
+import 'package:preconnect/api/sembast_cache.dart';
 import 'package:preconnect/model/progress_info.dart';
 
 class ProgressService {
@@ -70,12 +71,13 @@ class ProgressService {
           '${ApiConfig.connectApiBase}${ApiConfig.programCurriculumsPath(portfolioId)}';
       final coursePrerequisitesUrl =
           '${ApiConfig.seatStatusProxyBase}/course-prerequisites';
+      final cache = SembastCache();
 
-      final majorEtag = await asyncPrefs.getString(_majorMinorsEtagKey);
-      final completedEtag = await asyncPrefs.getString(
+      final majorEtag = await cache.getString(_majorMinorsEtagKey);
+      final completedEtag = await cache.getString(
         _completedCoursesEtagKey,
       );
-      final curriculumEtag = await asyncPrefs.getString(_curriculumEtagKey);
+      final curriculumEtag = await cache.getString(_curriculumEtagKey);
 
       final responses = await Future.wait([
         _client.authenticatedGet(
@@ -96,25 +98,25 @@ class ProgressService {
       ]);
 
       final majorMinors = await _resolveComponent(
-        prefs: asyncPrefs,
+        cache: cache,
         response: responses[0],
         dataKey: _majorMinorsCacheKey,
         etagKey: _majorMinorsEtagKey,
       );
       final completedCourses = await _resolveComponent(
-        prefs: asyncPrefs,
+        cache: cache,
         response: responses[1],
         dataKey: _completedCoursesCacheKey,
         etagKey: _completedCoursesEtagKey,
       );
       final curriculum = await _resolveComponent(
-        prefs: asyncPrefs,
+        cache: cache,
         response: responses[2],
         dataKey: _curriculumCacheKey,
         etagKey: _curriculumEtagKey,
       );
       final coursePrerequisites = await _resolvePublicComponent(
-        prefs: asyncPrefs,
+        cache: cache,
         url: coursePrerequisitesUrl,
         dataKey: _coursePrerequisitesCacheKey,
       );
@@ -135,8 +137,8 @@ class ProgressService {
       };
       final info = ProgressInfo.fromPayload(payload);
       final summary = ProgressSummary.fromProgressInfo(info);
-      await writeJsonToPrefs(asyncPrefs, _cacheKey, payload);
-      await writeJsonToPrefs(asyncPrefs, _summaryCacheKey, summary.toJson());
+      await cache.setJson(_cacheKey, payload);
+      await cache.setJson(_summaryCacheKey, summary.toJson());
       return info;
     } catch (_) {
       if (fromGet) return null;
@@ -145,92 +147,66 @@ class ProgressService {
   }
 
   Future<dynamic> _resolveComponent({
-    required SharedPreferencesAsync prefs,
+    required SembastCache cache,
     required dynamic response,
     required String dataKey,
     required String etagKey,
   }) async {
     if (response.statusCode == 304) {
-      final cached = await prefs.getString(dataKey);
+      final cached = await cache.getString(dataKey);
       if (cached == null || cached.trim().isEmpty) return null;
       return jsonDecode(cached);
     }
     if (response.statusCode != 200) return null;
     final decoded = jsonDecode(response.body);
-    await writeJsonToPrefs(prefs, dataKey, decoded);
+    await cache.setJson(dataKey, decoded);
     final etag = extractEtagFromHeaders(response.headers);
     if (etag != null && etag.isNotEmpty) {
-      await prefs.setString(etagKey, etag);
+      await cache.setString(etagKey, etag);
     }
     return decoded;
   }
 
   Future<dynamic> _resolvePublicComponent({
-    required SharedPreferencesAsync prefs,
+    required SembastCache cache,
     required String url,
     required String dataKey,
   }) async {
     try {
       final response = await _client.publicGet(url);
       final decoded = jsonDecode(response.body);
-      await writeJsonToPrefs(prefs, dataKey, decoded);
+      await cache.setJson(dataKey, decoded);
       return decoded;
     } catch (_) {
-      final cached = await prefs.getString(dataKey);
+      final cached = await cache.getString(dataKey);
       if (cached == null || cached.trim().isEmpty) return null;
       return jsonDecode(cached);
     }
   }
 
   Future<ProgressInfo?> getProgress({bool fromFetch = false}) async {
-    final cached = await readCachedStringWithFallback(
+    return readCachedSembastJsonMapWithFallback<ProgressInfo>(
       key: _cacheKey,
       fromFetch: fromFetch,
+      decoder: ProgressInfo.fromPayload,
       onCacheMiss: () async {
         final fetched = await fetchProgress(fromGet: true);
-        if (fetched == null) return null;
-        final asyncPrefs = SharedPreferencesAsync();
-        final raw = await asyncPrefs.getString(_cacheKey);
-        return raw;
+        return fetched;
       },
     );
-    if (cached == null || cached.isEmpty) {
-      return null;
-    }
-
-    try {
-      final payload = jsonDecode(cached);
-      if (payload is! Map<String, dynamic>) {
-        if (fromFetch) return null;
-        return fetchProgress(fromGet: true);
-      }
-      return ProgressInfo.fromPayload(payload);
-    } catch (_) {
-      if (fromFetch) return null;
-      return fetchProgress(fromGet: true);
-    }
   }
 
   Future<ProgressSummary?> getProgressSummary({bool fromFetch = false}) async {
-    final cached = await readCachedStringWithFallback(
+    return readCachedSembastJsonMapWithFallback<ProgressSummary>(
       key: _summaryCacheKey,
       fromFetch: fromFetch,
+      decoder: ProgressSummary.fromJson,
       onCacheMiss: () async {
         await fetchProgress(fromGet: true);
-        final asyncPrefs = SharedPreferencesAsync();
-        return await asyncPrefs.getString(_summaryCacheKey);
+        return SembastCache()
+            .getJsonMap(_summaryCacheKey)
+            .then((value) => value == null ? null : ProgressSummary.fromJson(value));
       },
     );
-    if (cached == null || cached.isEmpty) {
-      return null;
-    }
-
-    try {
-      final decoded = jsonDecode(cached);
-      if (decoded is! Map<String, dynamic>) return null;
-      return ProgressSummary.fromJson(decoded);
-    } catch (_) {
-      return null;
-    }
   }
 }

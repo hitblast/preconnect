@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
-import 'package:preconnect/api/fetch_cache_utils.dart';
 import 'package:preconnect/api/prefs_cache_utils.dart';
 import 'package:preconnect/api/profile_service.dart';
+import 'package:preconnect/api/sembast_cache.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 
 class ScheduleService {
@@ -123,12 +123,7 @@ class ScheduleService {
   }
 
   Future<List<int>> getCachedValidSemesterSessionIds() async {
-    final prefsWithCache = await SharedPreferencesWithCache.create(
-      cacheOptions: const SharedPreferencesWithCacheOptions(
-        allowList: <String>{_validSemestersCacheKey},
-      ),
-    );
-    final raw = prefsWithCache.getString(_validSemestersCacheKey) ?? '';
+    final raw = await SembastCache().getString(_validSemestersCacheKey) ?? '';
     if (raw.trim().isEmpty) return const <int>[];
     return _decodeSemesterIds(raw);
   }
@@ -138,8 +133,8 @@ class ScheduleService {
     int count = 12,
     bool forceRefresh = false,
   }) async {
-    final asyncPrefs = SharedPreferencesAsync();
-    final cachedRaw = await asyncPrefs.getString(_validSemestersCacheKey);
+    final cache = SembastCache();
+    final cachedRaw = await cache.getString(_validSemestersCacheKey);
     final cached = (cachedRaw == null || cachedRaw.trim().isEmpty)
         ? const <int>[]
         : _decodeSemesterIds(cachedRaw);
@@ -169,7 +164,7 @@ class ScheduleService {
       }
     }
     available.sort((a, b) => b.compareTo(a));
-    await writeJsonToPrefs(asyncPrefs, _validSemestersCacheKey, available);
+    await cache.setJson(_validSemestersCacheKey, available);
     return available;
   }
 
@@ -178,10 +173,10 @@ class ScheduleService {
     int? baseSessionId,
     int count = 12,
   }) async {
-    final asyncPrefs = SharedPreferencesAsync();
+    final cache = SembastCache();
     final currentFingerprint = _scheduleFingerprint(currentScheduleJson);
     final cachedFingerprint =
-        await asyncPrefs.getString(_archiveSourceFingerprintKey) ?? '';
+        await cache.getString(_archiveSourceFingerprintKey) ?? '';
     final cached = await getCachedValidSemesterSessionIds();
 
     if (cached.isNotEmpty && currentFingerprint == cachedFingerprint) {
@@ -193,7 +188,7 @@ class ScheduleService {
       count: count,
       forceRefresh: true,
     );
-    await asyncPrefs.setString(_archiveSourceFingerprintKey, currentFingerprint);
+    await cache.setString(_archiveSourceFingerprintKey, currentFingerprint);
     await preloadSemesterScheduleCache(
       semesterSessionIds: refreshed,
       forceRefresh: true,
@@ -272,8 +267,9 @@ class ScheduleService {
     required int? semesterSessionId,
     required bool fromGet,
   }) async {
-    final asyncPrefs = SharedPreferencesAsync();
     final cacheKey = _cacheKeyForSemester(semesterSessionId);
+    final cache = SembastCache();
+    final asyncPrefs = SharedPreferencesAsync();
     final id = await resolvePortfolioId(
       prefs: asyncPrefs,
       refreshProfile: () => ProfileService().fetchProfile(fromGet: true),
@@ -290,12 +286,13 @@ class ScheduleService {
         '${ApiConfig.connectApiBase}'
         '${ApiConfig.schedulePath(id, semesterSessionId: semesterSessionId)}';
 
-    return fetchJsonStringWithFallback(
-      client: _client,
+    return _client.fetchWithFallback<String>(
       url: url,
       fromGet: fromGet,
-      prefs: asyncPrefs,
-      cacheKey: cacheKey,
+      cacheResponse: (response) async {
+        final data = jsonDecode(response.body);
+        await cache.setJson(cacheKey, data);
+      },
       readCache: ({required bool fromFetch}) => getStudentScheduleForSemester(
         semesterSessionId: semesterSessionId,
         fromFetch: fromFetch,
@@ -315,7 +312,7 @@ class ScheduleService {
     bool fromFetch = false,
   }) async {
     final cacheKey = _cacheKeyForSemester(semesterSessionId);
-    return readCachedStringWithFallback(
+    return readCachedSembastStringWithFallback(
       key: cacheKey,
       fromFetch: fromFetch,
       onCacheMiss: () => fetchStudentScheduleForSemester(

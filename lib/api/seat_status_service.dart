@@ -76,6 +76,8 @@ class SeatStatusService {
 
   static const String _dbName = 'seat_status_cache.db';
   static const String _detailsTsKey = 'details_ts';
+  static const String _freeLabsSlotsKey = 'free_labs_slots_v1';
+  static const String _freeLabsSlotsDateKey = 'free_labs_slots_date_v1';
   static const String _legacyCleanupDoneKey = 'seat_status_sp_cleanup_done_v1';
   static const List<String> _legacySharedPrefsKeys = <String>[
     'seat_status_details_cache_v1',
@@ -152,6 +154,51 @@ class SeatStatusService {
     } finally {
       isSavingDetailsCache.value = false;
     }
+  }
+
+  Future<List<Map<String, dynamic>>> loadCachedFreeLabsSlots({
+    required String dateKey,
+  }) async {
+    try {
+      final db = await _openDb();
+      final cachedDate =
+          await _metaStore.record(_freeLabsSlotsDateKey).get(db) as String?;
+      if (cachedDate != dateKey) return const <Map<String, dynamic>>[];
+      final raw = await _metaStore.record(_freeLabsSlotsKey).get(db);
+      if (raw is! List) return const <Map<String, dynamic>>[];
+      return raw
+          .whereType<Map>()
+          .map((item) => item.cast<String, dynamic>())
+          .toList();
+    } catch (_) {
+      return const <Map<String, dynamic>>[];
+    }
+  }
+
+  Future<void> saveFreeLabsSlotsCacheIfChanged({
+    required String dateKey,
+    required List<Map<String, dynamic>> slots,
+  }) async {
+    try {
+      final db = await _openDb();
+      final currentDate =
+          await _metaStore.record(_freeLabsSlotsDateKey).get(db) as String?;
+      final currentRaw = await _metaStore.record(_freeLabsSlotsKey).get(db);
+      final currentSlots = currentRaw is List
+          ? currentRaw
+                .whereType<Map>()
+                .map((item) => item.cast<String, dynamic>())
+                .toList()
+          : const <Map<String, dynamic>>[];
+      final hasSameDate = currentDate == dateKey;
+      final hasSameSlots =
+          jsonEncode(currentSlots) == jsonEncode(slots);
+      if (hasSameDate && hasSameSlots) return;
+      await db.transaction((txn) async {
+        await _metaStore.record(_freeLabsSlotsKey).put(txn, slots);
+        await _metaStore.record(_freeLabsSlotsDateKey).put(txn, dateKey);
+      });
+    } catch (_) {}
   }
 
   Future<Map<int, SeatStatusDetailsResponse>>

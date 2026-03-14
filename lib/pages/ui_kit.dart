@@ -1331,11 +1331,13 @@ class BracuCard extends StatelessWidget {
     required this.child,
     this.isHighlighted = false,
     this.highlightColor,
+    this.backgroundColor,
   });
 
   final Widget child;
   final bool isHighlighted;
   final Color? highlightColor;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
@@ -1347,7 +1349,7 @@ class BracuCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: BracuPalette.card(context),
+        color: backgroundColor ?? BracuPalette.card(context),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isHighlighted

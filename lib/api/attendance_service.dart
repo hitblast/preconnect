@@ -1,9 +1,9 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
-import 'package:preconnect/api/fetch_cache_utils.dart';
 import 'package:preconnect/api/prefs_cache_utils.dart';
 import 'package:preconnect/api/profile_service.dart';
+import 'package:preconnect/api/sembast_cache.dart';
 
 class AttendanceService {
   static final AttendanceService _instance = AttendanceService._internal();
@@ -27,19 +27,19 @@ class AttendanceService {
 
     final url = '${ApiConfig.connectApiBase}${ApiConfig.attendancePath(id)}';
 
-    return fetchJsonStringWithFallback(
-      client: _client,
+    return _client.fetchWithFallback<String>(
       url: url,
       fromGet: fromGet,
-      prefs: asyncPrefs,
-      cacheKey: _cacheKey,
+      cacheResponse: (response) async {
+        await SembastCache().setString(_cacheKey, response.body);
+      },
       readCache: ({required bool fromFetch}) =>
           getAttendanceInfo(fromFetch: fromFetch),
     );
   }
 
   Future<String?> getAttendanceInfo({bool fromFetch = false}) async {
-    return readCachedStringWithFallback(
+    return readCachedSembastStringWithFallback(
       key: _cacheKey,
       fromFetch: fromFetch,
       onCacheMiss: () => fetchAttendanceInfo(fromGet: true),

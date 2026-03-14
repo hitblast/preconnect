@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/api_config.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:preconnect/api/sembast_cache.dart';
 
 class RecentConnectNotification {
   const RecentConnectNotification({
@@ -117,8 +117,7 @@ class NotificationService {
       url: '${ApiConfig.connectApiBase}${ApiConfig.recentNotificationsPath}',
       fromGet: fromGet,
       cacheResponse: (response) async {
-        final prefs = SharedPreferencesAsync();
-        await prefs.setString(_cacheKey, response.body);
+        await SembastCache().setString(_cacheKey, response.body);
       },
       readCache: ({required bool fromFetch}) async {
         final cached = await _readCachedFeed();
@@ -168,22 +167,17 @@ class NotificationService {
           )
           .toList(),
     );
-    final prefs = SharedPreferencesAsync();
-    await prefs.setString(_cacheKey, jsonEncode(_feedToJson(updated)));
+    await SembastCache().setJson(_cacheKey, _feedToJson(updated));
     return updated;
   }
 
   Future<NotificationsFeed?> _readCachedFeed() async {
-    final prefs = SharedPreferencesAsync();
-    final raw = await prefs.getString(_cacheKey);
-    if (raw == null || raw.trim().isEmpty) return null;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, dynamic>) return null;
-      return NotificationsFeed.fromJson(decoded);
-    } catch (_) {
-      return null;
-    }
+    return readCachedSembastJsonMapWithFallback<NotificationsFeed>(
+      key: _cacheKey,
+      fromFetch: true,
+      decoder: NotificationsFeed.fromJson,
+      onCacheMiss: () async => null,
+    );
   }
 
   Map<String, dynamic> _feedToJson(NotificationsFeed feed) {

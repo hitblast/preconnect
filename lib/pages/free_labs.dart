@@ -14,6 +14,7 @@ class FreeLabsPage extends StatefulWidget {
 class _FreeLabsPageState extends State<FreeLabsPage> {
   late Future<List<_FreeRoomSlot>> _future;
   List<_FreeRoomSlot> _lastSlots = const <_FreeRoomSlot>[];
+  List<_FreeRoomSlot> _lastAllSlots = const <_FreeRoomSlot>[];
   final ScrollController _scrollController = ScrollController();
   GlobalKey? _highlightKey;
   String? _lastHighlightToken;
@@ -46,6 +47,17 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
   }
 
   Future<List<_FreeRoomSlot>> _loadSlots({bool forceRefresh = false}) async {
+    final allSlots = await _loadAllSlots(forceRefresh: forceRefresh);
+    _lastAllSlots = allSlots;
+    return _applySelectedFilter(allSlots);
+  }
+
+  Future<List<_FreeRoomSlot>> _loadAllSlots({bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      final cachedSlots = await _readCachedSlots();
+      if (cachedSlots.isNotEmpty) return cachedSlots;
+    }
+
     final service = SeatStatusService();
     final details = forceRefresh
         ? await service.fetchAllSectionsDetailsFromApi()
@@ -55,7 +67,9 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
             if (cached.isNotEmpty) return cached;
             return service.fetchAllSectionsDetailsFromApi();
           });
-    return _buildFreeRoomSlots(details.values.toList(), _defaultDay());
+    final allSlots = _buildFreeRoomSlots(details.values.toList(), _defaultDay());
+    await _writeCachedSlots(allSlots);
+    return allSlots;
   }
 
   Future<void> _refresh() async {
@@ -70,6 +84,23 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
     setState(() {
       _lastSlots = slots;
     });
+  }
+
+  void _attemptScrollToHighlight() {
+    attemptScrollToHighlightedKey(
+      highlightKey: _highlightKey,
+      hasRetried: _scrollRetry,
+      alignment: 0.18,
+      retry: () {
+        _scrollRetry = true;
+        if (mounted) {
+          setState(() {});
+        }
+      },
+      onScrolled: () {
+        _didScroll = true;
+      },
+    );
   }
 
   Future<void> _changeFilter() async {
@@ -100,10 +131,14 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
       selectedValue: _selectedFilter,
     );
     if (selected == null || selected == _selectedFilter) return;
-    late final Future<List<_FreeRoomSlot>> next;
+    final next = _lastAllSlots.isNotEmpty
+        ? Future<List<_FreeRoomSlot>>.value(
+            _applyFilter(_lastAllSlots, selected),
+          )
+        : _loadSlots();
     setState(() {
       _selectedFilter = selected;
-      _future = next = _loadSlots();
+      _future = next;
       _didScroll = false;
       _scrollRetry = false;
     });
@@ -143,22 +178,23 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
           }
 
           final slots = snapshot.data ?? _lastSlots;
-          if (slots.isEmpty) {
+          final visibleSlots = _visibleRoomSlots(slots);
+          if (visibleSlots.isEmpty) {
             return buildRefreshEmptyState(
               onRefresh: _refresh,
               message: 'No free labs found for ${formatWeekdayTitle(_defaultDay())}.',
             );
           }
 
-          final highlightIndex = _highlightIndex(slots);
+          final highlightIndex = _highlightIndex(visibleSlots);
           final highlightedSlot = highlightIndex == null
               ? null
-              : slots[highlightIndex];
+              : visibleSlots[highlightIndex];
           final highlightToken = highlightedSlot == null
               ? null
               : '${highlightedSlot.roomNumber}_${highlightedSlot.startTime}_${highlightedSlot.endTime}';
           final groupedSlots = <String, List<_FreeRoomSlot>>{};
-          for (final slot in slots) {
+          for (final slot in visibleSlots) {
             final key = '${slot.startTime}|${slot.endTime}';
             groupedSlots.putIfAbsent(key, () => <_FreeRoomSlot>[]).add(slot);
           }
@@ -202,10 +238,11 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
                     final slotToken =
                         '${slot.roomNumber}_${slot.startTime}_${slot.endTime}';
                     final isHighlighted = slotToken == highlightToken;
+                    final isGreenProgram = _isGreenProgram(slot);
                     if (isHighlighted) {
                       _highlightKey ??= GlobalKey();
                     }
-                    final roomSlots = slots
+                    final roomSlots = visibleSlots
                         .where((item) => item.roomNumber == slot.roomNumber)
                         .toList();
                     return Padding(
@@ -215,8 +252,9 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
                         onTap: () => _showRoomDetails(slot, roomSlots),
                         child: BracuCard(
                           key: isHighlighted ? _highlightKey : null,
-                          isHighlighted: isHighlighted,
-                          highlightColor: BracuPalette.primary,
+                          isHighlighted: isHighlighted || isGreenProgram,
+                          highlightColor: _roomCardHighlightColor(slot),
+                          backgroundColor: _roomCardBackgroundColor(slot),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -268,14 +306,9 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
-                                    Text(
-                                      slot.roomName,
+                                    Text.rich(
+                                      _roomProgramLabelSpan(slot),
                                       textAlign: TextAlign.right,
-                                      style: TextStyle(
-                                        color: BracuPalette.textPrimary(context),
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                      ),
                                     ),
                                     if (slot.statusLabel.isNotEmpty) ...[
                                       const SizedBox(height: 2),
@@ -306,20 +339,7 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
           }
 
           if (!_didScroll && _highlightKey != null) {
-            attemptScrollToHighlightedKey(
-              highlightKey: _highlightKey,
-              hasRetried: _scrollRetry,
-              alignment: 0.18,
-              retry: () {
-                _scrollRetry = true;
-                if (mounted) {
-                  setState(() {});
-                }
-              },
-              onScrolled: () {
-                _didScroll = true;
-              },
-            );
+            _attemptScrollToHighlight();
           }
 
           return BracuRefreshList(
@@ -369,6 +389,12 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
           ),
         );
         final courseCode = section.courseCode.trim().toUpperCase();
+        if (courseCode.isNotEmpty) {
+          final program = _courseProgramCode(courseCode);
+          if (program.isNotEmpty) {
+            room.programCounts[program] = (room.programCounts[program] ?? 0) + 1;
+          }
+        }
         final courseTitle = section.name.trim();
         if (courseTitle.isNotEmpty && courseCode.isNotEmpty) {
           room.courseTitles.add('$courseTitle ($courseCode)');
@@ -399,9 +425,6 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
 
     final slots = <_FreeRoomSlot>[];
     for (final room in grouped.values) {
-      if (!_matchesFilter(room.roomNumber)) {
-        continue;
-      }
       final freeSlots = _freeWithinDay(_mergeSlots(room.busySlots));
       for (final free in freeSlots) {
         slots.add(
@@ -409,6 +432,7 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
             roomNumber: room.roomNumber,
             roomName: room.roomName.isEmpty ? 'Room' : room.roomName,
             courseTitlesLabel: (room.courseTitles.toList()..sort()).join(', '),
+            dominantProgramCode: _dominantProgramCode(room),
             startTime: _formatTimeOfDay(free.start),
             endTime: _formatTimeOfDay(free.end),
             statusLabel: _statusLabel(free.start, free.end, day),
@@ -425,6 +449,17 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
       return a.roomNumber.compareTo(b.roomNumber);
     });
     return slots;
+  }
+
+  List<_FreeRoomSlot> _applySelectedFilter(List<_FreeRoomSlot> slots) {
+    return _applyFilter(slots, _selectedFilter);
+  }
+
+  List<_FreeRoomSlot> _applyFilter(
+    List<_FreeRoomSlot> slots,
+    _RoomFilter filter,
+  ) {
+    return slots.where((slot) => _matchesFilter(slot.roomNumber, filter)).toList();
   }
 
   List<SeatStatusSection> _extractRoomSections(SeatStatusDetailsResponse details) {
@@ -513,6 +548,31 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
 
   int? _minutesFromString(String value) => BracuTime.toMinutes(value);
 
+  String _todayCacheLabel() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<List<_FreeRoomSlot>> _readCachedSlots() async {
+    try {
+      final cached = await SeatStatusService().loadCachedFreeLabsSlots(
+        dateKey: _todayCacheLabel(),
+      );
+      return cached.map(_FreeRoomSlot.fromJson).toList();
+    } catch (_) {
+      return const <_FreeRoomSlot>[];
+    }
+  }
+
+  Future<void> _writeCachedSlots(List<_FreeRoomSlot> slots) async {
+    try {
+      await SeatStatusService().saveFreeLabsSlotsCacheIfChanged(
+        dateKey: _todayCacheLabel(),
+        slots: slots.map((slot) => slot.toJson()).toList(),
+      );
+    } catch (_) {}
+  }
+
   String _headerDayLabel() {
     final now = DateTime.now();
     return '${formatWeekdayTitle(_defaultDay())}, ${now.day} ${_monthLabel(now.month)}';
@@ -541,6 +601,7 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
     _FreeRoomSlot slot,
     List<_FreeRoomSlot> roomSlots,
   ) async {
+    final visibleRoomSlots = _visibleRoomSlots(roomSlots);
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: BracuPalette.card(context),
@@ -610,7 +671,7 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  ...roomSlots.map(
+                  ...visibleRoomSlots.map(
                     (item) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: BracuCard(
@@ -651,9 +712,18 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
     );
   }
 
-  bool _matchesFilter(String roomNumber) {
+  List<_FreeRoomSlot> _visibleRoomSlots(List<_FreeRoomSlot> roomSlots) {
+    final nowMinutes = _minutesOfDay(TimeOfDay.now());
+    final upcoming = roomSlots.where((item) {
+      final end = _minutesFromString(item.endTime);
+      return end != null && end > nowMinutes;
+    }).toList();
+    return upcoming.isNotEmpty ? upcoming : roomSlots;
+  }
+
+  bool _matchesFilter(String roomNumber, [_RoomFilter? filter]) {
     final suffix = roomNumber.trim().toUpperCase();
-    return switch (_selectedFilter) {
+    return switch (filter ?? _selectedFilter) {
       _RoomFilter.classes => suffix.endsWith('C'),
       _RoomFilter.labs => suffix.endsWith('L'),
       _RoomFilter.theater => suffix.endsWith('T'),
@@ -680,12 +750,85 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
     return parts.join(' • ');
   }
 
+  String _roomProgramLabel(_FreeRoomSlot slot) {
+    final program = slot.dominantProgramCode.trim().toUpperCase();
+    if (program.isEmpty) {
+      return slot.roomName;
+    }
+    return program;
+  }
+
+  bool _isGreenProgram(_FreeRoomSlot slot) {
+    final program = slot.dominantProgramCode.trim().toUpperCase();
+    return program == 'CSE' || program == 'EEE';
+  }
+
+  String _dominantProgramCode(_RoomSeed room) {
+    if (room.programCounts.isEmpty) return '';
+    final sorted = room.programCounts.entries.toList()
+      ..sort((a, b) {
+        final countCompare = b.value.compareTo(a.value);
+        if (countCompare != 0) return countCompare;
+        return a.key.compareTo(b.key);
+      });
+    return sorted.first.key;
+  }
+
+  Color _roomCardHighlightColor(_FreeRoomSlot slot) {
+    return _isGreenProgram(slot)
+        ? const Color(0xFF22C55E)
+        : BracuPalette.primary;
+  }
+
+  Color? _roomCardBackgroundColor(_FreeRoomSlot slot) {
+    return _isGreenProgram(slot) ? const Color(0xFF0D2214) : null;
+  }
+
+  TextSpan _roomProgramLabelSpan(_FreeRoomSlot slot) {
+    final program = _roomProgramLabel(slot);
+    final roomType = _roomTypeShortLabel(slot.roomNumber);
+    return TextSpan(
+      children: [
+        TextSpan(
+          text: program,
+          style: TextStyle(
+            color: BracuPalette.textPrimary(context),
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        if (program != slot.roomName && roomType.isNotEmpty)
+          TextSpan(
+            text: ' $roomType',
+            style: TextStyle(
+              color: BracuPalette.textSecondary(context),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _courseProgramCode(String courseCode) {
+    final match = RegExp(r'^[A-Z]+').firstMatch(courseCode.trim().toUpperCase());
+    return match?.group(0) ?? '';
+  }
+
   String _roomTypeLabel(String roomNumber) {
     final suffix = roomNumber.trim().toUpperCase();
     if (suffix.endsWith('L')) return 'Lab Room';
     if (suffix.endsWith('T')) return 'Theater Room';
     if (suffix.endsWith('C')) return 'Class Room';
     return 'Room';
+  }
+
+  String _roomTypeShortLabel(String roomNumber) {
+    final suffix = roomNumber.trim().toUpperCase();
+    if (suffix.endsWith('L')) return 'Lab';
+    if (suffix.endsWith('T')) return 'Theater';
+    if (suffix.endsWith('C')) return 'Class';
+    return '';
   }
 
   TextSpan _roomHeaderSubtitleSpan(_FreeRoomSlot slot, Color secondary) {
@@ -731,17 +874,44 @@ class _FreeRoomSlot {
     required this.roomNumber,
     required this.roomName,
     required this.courseTitlesLabel,
+    required this.dominantProgramCode,
     required this.startTime,
     required this.endTime,
     required this.statusLabel,
   });
 
+  factory _FreeRoomSlot.fromJson(Map<String, dynamic> json) {
+    return _FreeRoomSlot(
+      roomNumber: (json['roomNumber'] as String? ?? '').trim(),
+      roomName: (json['roomName'] as String? ?? '').trim(),
+      courseTitlesLabel: (json['courseTitlesLabel'] as String? ?? '').trim(),
+      dominantProgramCode: (json['dominantProgramCode'] as String? ?? '')
+          .trim(),
+      startTime: (json['startTime'] as String? ?? '').trim(),
+      endTime: (json['endTime'] as String? ?? '').trim(),
+      statusLabel: (json['statusLabel'] as String? ?? '').trim(),
+    );
+  }
+
   final String roomNumber;
   final String roomName;
   final String courseTitlesLabel;
+  final String dominantProgramCode;
   final String startTime;
   final String endTime;
   final String statusLabel;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'roomNumber': roomNumber,
+      'roomName': roomName,
+      'courseTitlesLabel': courseTitlesLabel,
+      'dominantProgramCode': dominantProgramCode,
+      'startTime': startTime,
+      'endTime': endTime,
+      'statusLabel': statusLabel,
+    };
+  }
 }
 
 class _RoomSeed {
@@ -752,6 +922,7 @@ class _RoomSeed {
 
   final String roomNumber;
   final String roomName;
+  final Map<String, int> programCounts = <String, int>{};
   final List<_TimeSlot> busySlots = <_TimeSlot>[];
   final Set<String> courseTitles = <String>{};
 }

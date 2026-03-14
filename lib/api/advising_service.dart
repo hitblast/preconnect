@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
-import 'package:preconnect/api/prefs_cache_utils.dart';
+import 'package:preconnect/api/sembast_cache.dart';
 
 class AdvisingService {
   static final AdvisingService _instance = AdvisingService._internal();
@@ -38,7 +38,7 @@ class AdvisingService {
       fromGet: fromGet,
       cacheResponse: (response) async {
         final data = jsonDecode(response.body)[0];
-        await writeStringMap(asyncPrefs, <String, String>{
+        await SembastCache().setStringMap(<String, String>{
           'advisingStartDate': '${data['startDate'] ?? ''}',
           'advisingEndDate': '${data['endDate'] ?? ''}',
           'activeSemesterSessionId': '${data['activeSemesterSessionId'] ?? ''}',
@@ -56,10 +56,12 @@ class AdvisingService {
   Future<Map<String, String?>?> getAdvisingInfo({
     bool fromFetch = false,
   }) async {
-    return readRequiredStringMapWithFallback(
-      keys: cacheKeys.toSet(),
-      fromFetch: fromFetch,
-      onCacheMiss: () => fetchAdvisingInfo(fromGet: true),
-    );
+    final data = await SembastCache().getStringMap(cacheKeys.toSet());
+    final isIncomplete = data.values.any((value) => value == null || value == '');
+    if (isIncomplete) {
+      if (fromFetch) return null;
+      return fetchAdvisingInfo(fromGet: true);
+    }
+    return data;
   }
 }

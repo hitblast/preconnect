@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
+import 'package:preconnect/api/sembast_cache.dart';
 
 class ProfileService {
   static final ProfileService _instance = ProfileService._internal();
@@ -156,74 +156,36 @@ class ProfileService {
         final data = jsonDecode(response.body);
         if (data is List && data.isNotEmpty) {
           final profile = data[0];
-          final asyncPrefs = SharedPreferencesAsync();
-          await asyncPrefs.setString('id', profile['id']?.toString() ?? '');
-          await asyncPrefs.setString(
-            'studentId',
-            profile['studentId']?.toString() ?? '',
-          );
-          await asyncPrefs.setString(
-            'program',
-            profile['programOrCourse'] ?? '',
-          );
-          await asyncPrefs.setString(
-            'programOrCourse',
-            profile['programOrCourse'] ?? '',
-          );
-          await asyncPrefs.setString(
-            'currentSemester',
-            profile['currentSemester'] ?? '',
-          );
-          await asyncPrefs.setString(
-            'earnedCredit',
-            profile['earnedCredit']?.toString() ?? '',
-          );
-          await asyncPrefs.setString(
-            'photoFilePath',
-            profile['filePath'] ?? '',
-          );
-          await asyncPrefs.setString('filePath', profile['filePath'] ?? '');
-          await asyncPrefs.setString(
-            'academicType',
-            profile['academicType'] ?? '',
-          );
-          await asyncPrefs.setString(
-            'attemptedCredit',
-            profile['attemptedCredit']?.toString() ?? '',
-          );
-          await asyncPrefs.setString(
-            'enrolledSessionSemesterId',
-            profile['enrolledSessionSemesterId']?.toString() ?? '',
-          );
-          await asyncPrefs.setString(
-            'currentSessionSemesterId',
-            profile['currentSessionSemesterId']?.toString() ?? '',
-          );
-          await asyncPrefs.setString(
-            'enrolledSemester',
-            profile['enrolledSemester'] ?? '',
-          );
-          await asyncPrefs.setString(
-            'departmentName',
-            profile['departmentName'] ?? '',
-          );
-          await asyncPrefs.setString(
-            'studentEmail',
-            profile['studentEmail'] ?? '',
-          );
-          await asyncPrefs.setString(
-            'bloodGroup',
-            _normalizeBloodType(
+          final cache = SembastCache();
+          await cache.setStringMap(<String, String>{
+            'id': profile['id']?.toString() ?? '',
+            'studentId': profile['studentId']?.toString() ?? '',
+            'program': profile['programOrCourse'] ?? '',
+            'programOrCourse': profile['programOrCourse'] ?? '',
+            'currentSemester': profile['currentSemester'] ?? '',
+            'earnedCredit': profile['earnedCredit']?.toString() ?? '',
+            'photoFilePath': profile['filePath'] ?? '',
+            'filePath': profile['filePath'] ?? '',
+            'academicType': profile['academicType'] ?? '',
+            'attemptedCredit': profile['attemptedCredit']?.toString() ?? '',
+            'enrolledSessionSemesterId':
+                profile['enrolledSessionSemesterId']?.toString() ?? '',
+            'currentSessionSemesterId':
+                profile['currentSessionSemesterId']?.toString() ?? '',
+            'enrolledSemester': profile['enrolledSemester'] ?? '',
+            'departmentName': profile['departmentName'] ?? '',
+            'studentEmail': profile['studentEmail'] ?? '',
+            'bloodGroup': _normalizeBloodType(
               bloodGroup: profile['bloodGroup'],
               bloodGroupName: profile['bloodGroupName'],
               bloodType: profile['bloodType'],
             ),
-          );
-          await asyncPrefs.setString('mobileNo', profile['mobileNo'] ?? '');
-          await asyncPrefs.setString('shortCode', profile['shortCode'] ?? '');
-          await asyncPrefs.setString('fullName', profile['fullName'] ?? '');
-          await asyncPrefs.setString('email', profile['studentEmail'] ?? '');
-          await asyncPrefs.setString('cgpa', profile['cgpa']?.toString() ?? '');
+            'mobileNo': profile['mobileNo'] ?? '',
+            'shortCode': profile['shortCode'] ?? '',
+            'fullName': profile['fullName'] ?? '',
+            'email': profile['studentEmail'] ?? '',
+            'cgpa': profile['cgpa']?.toString() ?? '',
+          });
 
           try {
             final miscUrl =
@@ -236,89 +198,40 @@ class ProfileService {
                 bloodGroupName: miscData['bloodGroupName'],
                 bloodType: miscData['bloodType'],
               );
-              if (resolvedBloodGroup.isNotEmpty) {
-                await asyncPrefs.setString('bloodGroup', resolvedBloodGroup);
-              }
-              await asyncPrefs.setString(
-                'permanentAddress',
-                miscData['permanentAddress']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'presentAddress',
-                miscData['presentAddress']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'isBothAddressSame',
-                _boolToYesNo(miscData['isBothAddressSame']),
-              );
-              await asyncPrefs.setString(
-                'permanentUpazilaName',
-                miscData['permanentUpazilaName']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'presentUpazilaName',
-                miscData['presentUpazilaName']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'fatherName',
-                miscData['fatherName']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'fatherMobileNo',
-                miscData['fatherMobileNo']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'fatherEmail',
-                miscData['fatherEmail']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'motherName',
-                miscData['motherName']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'motherMobileNo',
-                miscData['motherMobileNo']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'motherEmail',
-                miscData['motherEmail']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'localGuardianName',
-                miscData['localGuardianName']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'localGuardianMobileNo',
-                miscData['localGuardianMobileNo']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'localGuardianEmail',
-                miscData['localGuardianEmail']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'sponsoredBy',
-                miscData['sponsoredBy']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'countryName',
-                miscData['countryName']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'hobbies',
-                miscData['hobbies']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'awards',
-                miscData['awards']?.toString() ?? '',
-              );
-              await asyncPrefs.setString(
-                'hasDisability',
-                _boolToYesNo(miscData['hasDisability']),
-              );
-              await asyncPrefs.setString(
-                'disabilityDetails',
-                miscData['disabilityDetails']?.toString() ?? '',
-              );
+              await cache.setStringMap(<String, String>{
+                if (resolvedBloodGroup.isNotEmpty)
+                  'bloodGroup': resolvedBloodGroup,
+                'permanentAddress':
+                    miscData['permanentAddress']?.toString() ?? '',
+                'presentAddress': miscData['presentAddress']?.toString() ?? '',
+                'isBothAddressSame':
+                    _boolToYesNo(miscData['isBothAddressSame']),
+                'permanentUpazilaName':
+                    miscData['permanentUpazilaName']?.toString() ?? '',
+                'presentUpazilaName':
+                    miscData['presentUpazilaName']?.toString() ?? '',
+                'fatherName': miscData['fatherName']?.toString() ?? '',
+                'fatherMobileNo':
+                    miscData['fatherMobileNo']?.toString() ?? '',
+                'fatherEmail': miscData['fatherEmail']?.toString() ?? '',
+                'motherName': miscData['motherName']?.toString() ?? '',
+                'motherMobileNo':
+                    miscData['motherMobileNo']?.toString() ?? '',
+                'motherEmail': miscData['motherEmail']?.toString() ?? '',
+                'localGuardianName':
+                    miscData['localGuardianName']?.toString() ?? '',
+                'localGuardianMobileNo':
+                    miscData['localGuardianMobileNo']?.toString() ?? '',
+                'localGuardianEmail':
+                    miscData['localGuardianEmail']?.toString() ?? '',
+                'sponsoredBy': miscData['sponsoredBy']?.toString() ?? '',
+                'countryName': miscData['countryName']?.toString() ?? '',
+                'hobbies': miscData['hobbies']?.toString() ?? '',
+                'awards': miscData['awards']?.toString() ?? '',
+                'hasDisability': _boolToYesNo(miscData['hasDisability']),
+                'disabilityDetails':
+                    miscData['disabilityDetails']?.toString() ?? '',
+              });
             }
           } catch (_) {}
         }
@@ -329,18 +242,7 @@ class ProfileService {
   }
 
   Future<Map<String, String?>?> getProfile({bool fromFetch = false}) async {
-    final prefsWithCache = await SharedPreferencesWithCache.create(
-      cacheOptions: SharedPreferencesWithCacheOptions(
-        allowList: cacheKeys.toSet(),
-      ),
-    );
-
-    if (fromFetch) await prefsWithCache.reloadCache();
-
-    final Map<String, String?> profileData = {};
-    for (final key in cacheKeys) {
-      profileData[key] = prefsWithCache.getString(key);
-    }
+    final profileData = await SembastCache().getStringMap(cacheKeys.toSet());
 
     final anyRequiredMissing = _requiredKeys.any((key) {
       final value = profileData[key];

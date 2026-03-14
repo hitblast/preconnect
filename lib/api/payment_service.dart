@@ -3,6 +3,7 @@ import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/prefs_cache_utils.dart';
 import 'package:preconnect/api/profile_service.dart';
+import 'package:preconnect/api/sembast_cache.dart';
 
 class PaymentService {
   static final PaymentService _instance = PaymentService._internal();
@@ -30,7 +31,7 @@ class PaymentService {
       url: url,
       fromGet: fromGet,
       cacheResponse: (response) async {
-        await asyncPrefs.setString(_cacheKey, response.body);
+        await SembastCache().setString(_cacheKey, response.body);
       },
       readCache: ({required bool fromFetch}) =>
           getPaymentInfo(fromFetch: fromFetch),
@@ -38,7 +39,7 @@ class PaymentService {
   }
 
   Future<String?> getPaymentInfo({bool fromFetch = false}) async {
-    return readCachedStringWithFallback(
+    return readCachedSembastStringWithFallback(
       key: _cacheKey,
       fromFetch: fromFetch,
       onCacheMiss: () => fetchPaymentInfo(fromGet: true),

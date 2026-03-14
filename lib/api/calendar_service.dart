@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/api_config.dart';
+import 'package:preconnect/api/sembast_cache.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/model/calendar_info.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class CalendarService {
   CalendarService._internal();
@@ -102,21 +102,21 @@ class CalendarService {
   }
 
   Future<CalendarFeed?> _readCache() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_cacheKey);
-    if (raw == null || raw.trim().isEmpty) return null;
+    final cache = SembastCache();
+    final decoded = await cache.getJsonMap(_cacheKey);
+    if (decoded == null) return null;
     try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, dynamic>) return null;
       final feed = CalendarFeed.fromJson(decoded);
-      final start = prefs.getString(_rangeStartKey) ?? feed.rangeStart;
-      final end = prefs.getString(_rangeEndKey) ?? feed.rangeEnd;
-      final fingerprint =
-          prefs.getString(_sourceFingerprintKey) ?? feed.sourceFingerprint;
+      final meta = await cache.getStringMap(<String>{
+        _rangeStartKey,
+        _rangeEndKey,
+        _sourceFingerprintKey,
+      });
       return CalendarFeed(
-        rangeStart: start,
-        rangeEnd: end,
-        sourceFingerprint: fingerprint,
+        rangeStart: meta[_rangeStartKey] ?? feed.rangeStart,
+        rangeEnd: meta[_rangeEndKey] ?? feed.rangeEnd,
+        sourceFingerprint:
+            meta[_sourceFingerprintKey] ?? feed.sourceFingerprint,
         items: feed.items,
       );
     } catch (_) {
@@ -125,11 +125,13 @@ class CalendarService {
   }
 
   Future<void> _writeCache(CalendarFeed feed) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_cacheKey, jsonEncode(feed.toJson()));
-    await prefs.setString(_rangeStartKey, feed.rangeStart);
-    await prefs.setString(_rangeEndKey, feed.rangeEnd);
-    await prefs.setString(_sourceFingerprintKey, feed.sourceFingerprint);
+    final cache = SembastCache();
+    await cache.setJsonIfChanged(_cacheKey, feed.toJson());
+    await cache.setStringMap(<String, String>{
+      _rangeStartKey: feed.rangeStart,
+      _rangeEndKey: feed.rangeEnd,
+      _sourceFingerprintKey: feed.sourceFingerprint,
+    });
   }
 
   List<CalendarEntry> _parseEntries(dynamic raw) {
