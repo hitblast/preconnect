@@ -9,7 +9,7 @@ Thanks for your interest in contributing.
 
 ## Local Configuration
 1. Copy `.env.example` to `.env` and fill values as needed.
-2. For Android release builds, copy `android/key.properties.example` to `android/key.properties`.
+2. For Android release builds, create `android/key.properties` with your keystore values.
 
 ## Code Quality
 1. Format: `dart format .`

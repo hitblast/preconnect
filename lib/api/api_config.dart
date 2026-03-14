@@ -3,8 +3,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ApiConfig {
   ApiConfig._();
-  static const String playIntegrityCloudProjectNumberEnv =
-      String.fromEnvironment('PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER');
 
   static const String ssoBase =
       'https://sso.bracu.ac.bd/realms/bracu/protocol/openid-connect';
@@ -69,11 +67,7 @@ class ApiConfig {
     'Accept': 'application/json',
   };
 
-  static int? get playIntegrityCloudProjectNumber {
-    final value = playIntegrityCloudProjectNumberEnv.trim();
-    if (value.isEmpty) return null;
-    return int.tryParse(value);
-  }
+  static const int playIntegrityCloudProjectNumber = 53508941136;
 
   static const List<String> paymentTypes = [
     'ADMISSION_FEE',

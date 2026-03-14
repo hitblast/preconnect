@@ -21,8 +21,6 @@ class PlayIntegrity {
 
   static Future<void> prepare() async {
     if (!Platform.isAndroid) return;
-    final cloudProjectNumber = ApiConfig.playIntegrityCloudProjectNumber;
-    if (cloudProjectNumber == null) return;
 
     final preparedAt = _preparedAtUtc;
     if (_prepared && preparedAt != null) {
@@ -32,7 +30,7 @@ class PlayIntegrity {
     }
 
     await _channel.invokeMethod('prepare', <String, dynamic>{
-      'cloudProjectNumber': cloudProjectNumber,
+      'cloudProjectNumber': ApiConfig.playIntegrityCloudProjectNumber,
     });
     _prepared = true;
     _preparedAtUtc = DateTime.now().toUtc();
@@ -44,7 +42,6 @@ class PlayIntegrity {
     String body = '',
   }) async {
     if (!Platform.isAndroid) return null;
-    if (ApiConfig.playIntegrityCloudProjectNumber == null) return null;
 
     try {
       await prepare();

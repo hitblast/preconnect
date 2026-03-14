@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/auth_service.dart';
 import 'package:preconnect/api/profile_service.dart';
+import 'package:preconnect/api/progress_service.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/app.dart';
 import 'package:preconnect/pages/class_schedule.dart';
@@ -17,8 +18,9 @@ import 'package:preconnect/pages/student_profile.dart';
 import 'package:preconnect/pages/share_schedule.dart';
 import 'package:preconnect/pages/scan_schedule.dart';
 import 'package:preconnect/pages/friend_schedule.dart';
+import 'package:preconnect/pages/cgpa_calculator.dart';
 import 'package:preconnect/pages/devs.dart';
-import 'package:preconnect/pages/calender.dart';
+import 'package:preconnect/pages/calendar.dart';
 import 'package:preconnect/pages/more_quick_access.dart';
 import 'package:preconnect/pages/notifications.dart';
 import 'package:preconnect/pages/settings.dart';
@@ -27,6 +29,7 @@ import 'package:preconnect/pages/home_sections/exam_countdown.dart';
 import 'package:preconnect/pages/home_sections/student_overview.dart';
 import 'package:preconnect/pages/shared_widgets/quick_access_card.dart';
 import 'package:preconnect/pages/shared_widgets/section_badge.dart';
+import 'package:preconnect/model/progress_info.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/android_network_assist.dart';
@@ -85,7 +88,7 @@ class _HomePageState extends State<HomePage> {
       onLogout: () => _confirmLogout(context),
     ),
     HomeTab.moreQuickAccess: (_) => MoreQuickAccessPage(onNavigate: _setTab),
-    HomeTab.calendar: (_) => const CalenderPage(),
+    HomeTab.calendar: (_) => const CalendarPage(),
     HomeTab.profile: (_) => const StudentProfile(),
     HomeTab.studentSchedule: (_) => const ClassSchedule(),
     HomeTab.examSchedule: (_) => const ExamSchedule(),
@@ -466,6 +469,84 @@ class _HomeDashboardState extends State<_HomeDashboard> {
       holiday: holidayStatus,
       cardVisibility: cardVisibility,
     );
+  }
+
+  Future<void> _openCgpaCalculator(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text(
+          'Loading CGPA calculator...',
+          style: TextStyle(color: Colors.white),
+        ),
+        backgroundColor: BracuPalette.primary,
+        duration: const Duration(seconds: 20),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      ),
+    );
+
+    try {
+      final info = await ProgressService().getProgress();
+      final profile = await ProfileService().getProfile();
+      final scheduleJson = await ScheduleService().getStudentSchedule();
+      if (!context.mounted) return;
+
+      if (info == null) {
+        messenger.hideCurrentSnackBar();
+        showAppSnackBar(
+          context,
+          'No progress data available for CGPA calculator',
+        );
+        return;
+      }
+
+      final currentCgpa = (profile?['cgpa'] ?? '').trim();
+      final sections = _parseCurrentSemesterSections(scheduleJson);
+      messenger.hideCurrentSnackBar();
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CgpaCalculatorPage(
+            info: info,
+            currentSections: sections,
+            currentCgpa: currentCgpa,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      messenger.hideCurrentSnackBar();
+      showAppSnackBar(context, 'Could not open CGPA calculator');
+    }
+  }
+
+  List<section.Section> _parseCurrentSemesterSections(String? scheduleJson) {
+    if (scheduleJson == null || scheduleJson.trim().isEmpty) {
+      return const <section.Section>[];
+    }
+    try {
+      final decoded = jsonDecode(scheduleJson);
+      if (decoded is! List<dynamic>) return const <section.Section>[];
+      final sections = <section.Section>[];
+      final seen = <String>{};
+      for (final raw in decoded.whereType<Map<String, dynamic>>()) {
+        final item = section.Section.fromJson(raw);
+        final key =
+            '${item.sectionId}|${item.courseCode}|${item.sectionName}|${item.roomNumber}';
+        if (!seen.add(key)) continue;
+        sections.add(item);
+      }
+      sections.sort((a, b) {
+        final codeCmp = compareNaturalText(a.courseCode, b.courseCode);
+        if (codeCmp != 0) return codeCmp;
+        return compareNaturalText(a.sectionName, b.sectionName);
+      });
+      return sections;
+    } catch (_) {
+      return const <section.Section>[];
+    }
   }
 
   Future<void> _handleRefresh({bool notify = true}) async {
@@ -1131,70 +1212,96 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                 builder: (context, constraints) {
                                   const spacing = 12.0;
                                   final width =
-                                      (constraints.maxWidth - spacing * 2) / 3;
-                                  return Wrap(
-                                    spacing: spacing,
-                                    runSpacing: spacing,
-                                    children: [
-                                      QuickAccessCard(
-                                        width: width,
-                                        icon: Icons.person_outline,
-                                        title: 'Profile',
-                                        subtitle: 'Info & ID',
-                                        color: _primary,
-                                        onTap: () =>
-                                            widget.onNavigate(HomeTab.profile),
-                                      ),
-                                      QuickAccessCard(
-                                        width: width,
-                                        icon: Icons.schedule_outlined,
-                                        title: 'Classes',
-                                        subtitle: 'Schedules',
-                                        color: _accent,
-                                        onTap: () => widget.onNavigate(
-                                          HomeTab.studentSchedule,
+                                      (constraints.maxWidth - spacing * 3) / 4;
+                                  return Center(
+                                    child: Wrap(
+                                      alignment: WrapAlignment.center,
+                                      runAlignment: WrapAlignment.center,
+                                      spacing: spacing,
+                                      runSpacing: spacing,
+                                      children: [
+                                        QuickAccessCard(
+                                          width: width,
+                                          icon: Icons.person_outline,
+                                          title: 'Profile',
+                                          subtitle: 'Info & ID',
+                                          color: _primary,
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.profile,
+                                          ),
                                         ),
-                                      ),
-                                      QuickAccessCard(
-                                        width: width,
-                                        icon: Icons.alarm_outlined,
-                                        title: 'Alarms',
-                                        subtitle: 'Reminders',
-                                        color: const Color(0xFFFF8A34),
-                                        onTap: () =>
-                                            widget.onNavigate(HomeTab.alarms),
-                                      ),
-                                      QuickAccessCard(
-                                        width: width,
-                                        icon: Icons.event_note_outlined,
-                                        title: 'Exams',
-                                        subtitle: 'Dates',
-                                        color: const Color(0xFF7C56FF),
-                                        onTap: () => widget.onNavigate(
-                                          HomeTab.examSchedule,
+                                        QuickAccessCard(
+                                          width: width,
+                                          icon: Icons.schedule_outlined,
+                                          title: 'Classes',
+                                          subtitle: 'Schedules',
+                                          color: _accent,
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.studentSchedule,
+                                          ),
                                         ),
-                                      ),
-                                      QuickAccessCard(
-                                        width: width,
-                                        icon: Icons.people_outline,
-                                        title: 'Friends',
-                                        subtitle: 'Schedules',
-                                        color: const Color(0xFF5B8DEF),
-                                        onTap: () => widget.onNavigate(
-                                          HomeTab.friendSchedule,
+                                        QuickAccessCard(
+                                          width: width,
+                                          icon: Icons.alarm_outlined,
+                                          title: 'Alarms',
+                                          subtitle: 'Reminders',
+                                          color: const Color(0xFFFF8A34),
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.alarms,
+                                          ),
                                         ),
-                                      ),
-                                      QuickAccessCard(
-                                        width: width,
-                                        icon: Icons.more_horiz_rounded,
-                                        title: 'More',
-                                        subtitle: 'Options',
-                                        color: const Color(0xFF00A8E8),
-                                        onTap: () => widget.onNavigate(
-                                          HomeTab.moreQuickAccess,
+                                        QuickAccessCard(
+                                          width: width,
+                                          icon: Icons.event_note_outlined,
+                                          title: 'Exams',
+                                          subtitle: 'Dates',
+                                          color: const Color(0xFF7C56FF),
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.examSchedule,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                        QuickAccessCard(
+                                          width: width,
+                                          icon: Icons.people_outline,
+                                          title: 'Friends',
+                                          subtitle: 'Schedules',
+                                          color: const Color(0xFF5B8DEF),
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.friendSchedule,
+                                          ),
+                                        ),
+                                        QuickAccessCard(
+                                          width: width,
+                                          icon: Icons.calculate_outlined,
+                                          title: 'CGPA',
+                                          subtitle: 'Calculator',
+                                          color: const Color(0xFF2C9DFF),
+                                          onTap: () => _openCgpaCalculator(
+                                            context,
+                                          ),
+                                        ),
+                                        QuickAccessCard(
+                                          width: width,
+                                          icon: Icons.developer_mode_outlined,
+                                          title: 'Devs',
+                                          subtitle: 'About Us',
+                                          color: const Color(0xFF2C9DFF),
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.devs,
+                                          ),
+                                        ),
+                                        QuickAccessCard(
+                                          width: width,
+                                          icon: Icons.more_horiz_rounded,
+                                          title: 'More',
+                                          subtitle: 'Options',
+                                          color: const Color(0xFF00A8E8),
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.moreQuickAccess,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   );
                                 },
                               ),

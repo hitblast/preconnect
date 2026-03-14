@@ -5,14 +5,14 @@ import 'package:preconnect/model/calendar_info.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 
-class CalenderPage extends StatefulWidget {
-  const CalenderPage({super.key});
+class CalendarPage extends StatefulWidget {
+  const CalendarPage({super.key});
 
   @override
-  State<CalenderPage> createState() => _CalenderPageState();
+  State<CalendarPage> createState() => _CalendarPageState();
 }
 
-class _CalenderPageState extends State<CalenderPage> {
+class _CalendarPageState extends State<CalendarPage> {
   late Future<CalendarFeed?> _future;
   CalendarFeed? _lastFeed;
   GlobalKey? _highlightKey;
@@ -35,7 +35,7 @@ class _CalenderPageState extends State<CalenderPage> {
 
   void _onRefreshSignal() {
     if (!mounted) return;
-    if (RefreshBus.instance.reason == 'calender') return;
+    if (RefreshBus.instance.reason == 'calendar') return;
     _refresh(notify: false);
   }
 
@@ -52,14 +52,14 @@ class _CalenderPageState extends State<CalenderPage> {
       _lastFeed = refreshed;
     });
     if (notify) {
-      RefreshBus.instance.notify(reason: 'calender');
+      RefreshBus.instance.notify(reason: 'calendar');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return BracuPageScaffold(
-      title: 'Calender',
+      title: 'Calendar',
       subtitle: 'Semester Events',
       icon: Icons.calendar_today_outlined,
       body: FutureBuilder<CalendarFeed?>(
@@ -79,7 +79,7 @@ class _CalenderPageState extends State<CalenderPage> {
             return buildRefreshEmptyState(
               onRefresh: _refresh,
               topSpacing: 180,
-              message: 'No calender data available.',
+              message: 'No calendar data available.',
             );
           }
 

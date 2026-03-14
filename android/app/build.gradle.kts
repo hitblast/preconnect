@@ -50,9 +50,6 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
 
     }
 
@@ -83,12 +80,6 @@ android {
         }
     }
 
-    packaging {
-        jniLibs {
-            excludes += setOf("**/x86_64/*.so")
-            keepDebugSymbols += setOf("**/*.so")
-        }
-    }
 }
 
 flutter {
@@ -97,6 +88,11 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    implementation("com.google.android.play:feature-delivery:2.1.0")
+    implementation("com.google.android.play:feature-delivery-ktx:2.1.0")
+    implementation("com.google.android.play:app-update:2.1.0")
+    implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation("com.google.android.play:integrity:1.4.0")
     implementation("com.android.installreferrer:installreferrer:2.2")
+    implementation("com.google.android.play:core-common:2.0.4")
 }

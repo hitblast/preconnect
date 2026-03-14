@@ -63,8 +63,96 @@ ios/                 iOS configuration (Swift)
 macos/               macOS shell
 web/                 Web shell
 assets/              Icons & SVGs
-scripts/             Build & CI helpers
 ```
+
+## Getting Started
+
+### Requirements
+
+- Flutter stable
+- Android Studio with Android SDK
+- Java 17
+
+Check your setup:
+
+```bash
+flutter doctor -v
+```
+
+Install packages:
+
+```bash
+flutter pub get
+```
+
+### Environment setup
+
+Copy the example env file:
+
+```bash
+cp .env.example .env
+```
+
+Update [`.env.example`](.env.example) values in your local [`.env`](.env):
+
+- `storeFile`
+- `storePassword`
+- `keyAlias`
+- `keyPassword`
+- `DEVELOPMENT_TEAM`
+
+### Android signing setup
+
+Release builds require `android/key.properties`.
+
+Create `android/key.properties` manually with:
+
+```bash
+cat > android/key.properties <<'EOF'
+storeFile=preconnect-release-key.jks
+storePassword=YOUR_STORE_PASSWORD
+keyAlias=preconnect
+keyPassword=YOUR_KEY_PASSWORD
+EOF
+```
+
+Update the values to match your keystore. The Android release build will fail if `android/key.properties` is missing.
+
+### Run the app
+
+```bash
+flutter run
+```
+
+### Build Android APK
+
+Release APK:
+
+```bash
+flutter build apk --release --target-platform android-arm64
+```
+
+Output:
+
+```bash
+build/app/outputs/flutter-apk/app-release.apk
+```
+
+### Build Android AAB
+
+Release AAB:
+
+```bash
+flutter build appbundle --release --target-platform android-arm64
+```
+
+Output:
+
+```bash
+build/app/outputs/bundle/release/app-release.aab
+```
+
+Local release builds in this repo are Android ARM64 only. Desktop release builds are not part of the local release flow.
 
 ## Seat Status Proxy
 
@@ -95,7 +183,6 @@ Why this reduces Connect API calls:
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Security: [SECURITY.md](SECURITY.md)
 - Environment Example: [.env.example](.env.example)
-- Android Signing Example: [android/key.properties.example](android/key.properties.example)
 - Workflows: [.github/workflows/release.yml](.github/workflows/release.yml)
 
 ## Developer Credit

@@ -46,7 +46,7 @@ class QuickAccessCard extends StatelessWidget {
                 ],
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
               padding: const EdgeInsets.all(8),
@@ -68,6 +68,7 @@ class QuickAccessCard extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               title,
+              textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -77,6 +78,7 @@ class QuickAccessCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               subtitle,
+              textAlign: TextAlign.center,
               style: TextStyle(fontSize: 11, color: textSecondary),
             ),
           ],
