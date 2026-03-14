@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/pages/shared_widgets/quick_access_card.dart';
 import 'package:preconnect/pages/ui_kit.dart';
-import 'package:preconnect/pages/web_login_setup.dart';
 
 class MoreQuickAccessPage extends StatefulWidget {
   const MoreQuickAccessPage({super.key, required this.onNavigate});
@@ -54,6 +53,14 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
                     ),
                     QuickAccessCard(
                       width: width,
+                      icon: Icons.developer_mode_outlined,
+                      title: 'Devs',
+                      subtitle: 'About Us',
+                      color: const Color(0xFF2C9DFF),
+                      onTap: () => widget.onNavigate(HomeTab.devs),
+                    ),
+                    QuickAccessCard(
+                      width: width,
                       icon: Icons.calendar_today_outlined,
                       title: 'Events',
                       subtitle: 'Calendar',
@@ -91,20 +98,6 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
                       subtitle: 'Calculator',
                       color: const Color(0xFF2C9DFF),
                       onTap: () => openCgpaCalculatorPage(context),
-                    ),
-                    QuickAccessCard(
-                      width: width,
-                      icon: Icons.language_rounded,
-                      title: 'Web',
-                      subtitle: 'Login',
-                      color: const Color(0xFF1E88E5),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const WebLoginSetupPage(),
-                          ),
-                        );
-                      },
                     ),
                   ],
                 ),

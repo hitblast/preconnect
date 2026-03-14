@@ -5,6 +5,7 @@ enum HomeTab {
   notifications,
   dashboard,
   moreQuickAccess,
+  freeLabs,
   calendar,
   profile,
   studentSchedule,

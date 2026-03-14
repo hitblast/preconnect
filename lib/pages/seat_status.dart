@@ -515,7 +515,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
               value: '',
               label: 'Any Day',
               icon: Icons.all_inclusive_rounded,
-              subtitle: 'Show every class day',
+              subtitle: 'Every class day',
             ),
             ..._weekdayOrder.map(
               (day) => BracuSelectOption<String>(

@@ -19,6 +19,7 @@ import 'package:preconnect/pages/scan_schedule.dart';
 import 'package:preconnect/pages/friend_schedule.dart';
 import 'package:preconnect/pages/devs.dart';
 import 'package:preconnect/pages/calendar.dart';
+import 'package:preconnect/pages/free_labs.dart';
 import 'package:preconnect/pages/more_quick_access.dart';
 import 'package:preconnect/pages/notifications.dart';
 import 'package:preconnect/pages/settings.dart';
@@ -85,6 +86,7 @@ class _HomePageState extends State<HomePage> {
       onLogout: () => _confirmLogout(context),
     ),
     HomeTab.moreQuickAccess: (_) => MoreQuickAccessPage(onNavigate: _setTab),
+    HomeTab.freeLabs: (_) => const FreeLabsPage(),
     HomeTab.calendar: (_) => const CalendarPage(),
     HomeTab.profile: (_) => const StudentProfile(),
     HomeTab.studentSchedule: (_) => const ClassSchedule(),
@@ -1201,22 +1203,22 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                         ),
                                         QuickAccessCard(
                                           width: width,
+                                          icon: Icons.computer_outlined,
+                                          title: 'Free',
+                                          subtitle: 'Labs',
+                                          color: const Color(0xFF00A8E8),
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.freeLabs,
+                                          ),
+                                        ),
+                                        QuickAccessCard(
+                                          width: width,
                                           icon: Icons.insights_outlined,
                                           title: 'Seat',
                                           subtitle: 'Status',
                                           color: const Color(0xFF00A8E8),
                                           onTap: () => widget.onNavigate(
                                             HomeTab.seatStatus,
-                                          ),
-                                        ),
-                                        QuickAccessCard(
-                                          width: width,
-                                          icon: Icons.developer_mode_outlined,
-                                          title: 'Devs',
-                                          subtitle: 'About Us',
-                                          color: const Color(0xFF2C9DFF),
-                                          onTap: () => widget.onNavigate(
-                                            HomeTab.devs,
                                           ),
                                         ),
                                         QuickAccessCard(
