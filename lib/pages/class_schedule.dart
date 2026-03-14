@@ -276,32 +276,29 @@ class _ClassScheduleState extends State<ClassSchedule> {
 
   Widget _buildSemesterDropdownAction() {
     const currentMenuValue = -1;
-    return BracuSelectChip(
+    return BracuSelectDropdownChip<int>(
       label: _semesterLabel(_selectedSemesterSessionId),
-      onTap: () async {
-        final value = await showBracuSelectSheet<int>(
-          context,
-          title: 'Select Semester',
-          subtitle: 'Switch between current and archived class schedules',
-          selectedValue: _selectedSemesterSessionId ?? currentMenuValue,
-          options: [
-            const BracuSelectOption<int>(
-              value: currentMenuValue,
-              label: 'Current',
-              icon: Icons.bolt_rounded,
-              subtitle: 'Latest class schedule',
-            ),
-            ..._semesterSessionOptions.map(
-              (sessionId) => BracuSelectOption<int>(
-                value: sessionId,
-                label: _semesterLabel(sessionId),
-                icon: Icons.history_rounded,
-                subtitle: 'Archived semester',
-              ),
-            ),
-          ],
-        );
-        if (!mounted || value == null) return;
+      title: 'Select Semester',
+      subtitle: 'Switch between current and archived class schedules',
+      selectedValue: _selectedSemesterSessionId ?? currentMenuValue,
+      options: [
+        const BracuSelectOption<int>(
+          value: currentMenuValue,
+          label: 'Current',
+          icon: Icons.bolt_rounded,
+          subtitle: 'Latest class schedule',
+        ),
+        ..._semesterSessionOptions.map(
+          (sessionId) => BracuSelectOption<int>(
+            value: sessionId,
+            label: _semesterLabel(sessionId),
+            icon: Icons.history_rounded,
+            subtitle: 'Archived semester',
+          ),
+        ),
+      ],
+      onSelected: (value) {
+        if (!mounted) return;
         final sessionId = value == currentMenuValue ? null : value;
         unawaited(_selectSemester(sessionId));
       },
@@ -433,8 +430,8 @@ class _ClassScheduleState extends State<ClassSchedule> {
   @override
   Widget build(BuildContext context) {
     return BracuPageScaffold(
-      title: 'Class Schedule',
-      subtitle: 'Classes & Timing',
+      title: 'Schedules',
+      subtitle: 'Class Timing',
       icon: Icons.schedule_outlined,
       actions: [_buildSemesterDropdownAction()],
       body: FutureBuilder<_ScheduleData>(

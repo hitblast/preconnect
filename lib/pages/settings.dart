@@ -122,7 +122,7 @@ class _SettingsPageState extends State<SettingsPage> {
         onRefresh: _load,
         children: [
           if (_isLoading)
-            const BracuLoading(label: 'Loading settings...')
+            const BracuLoading(label: 'Loading...')
           else ...[
             Material(
               color: Colors.transparent,

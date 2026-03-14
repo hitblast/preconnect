@@ -27,8 +27,8 @@ class ScheduleService {
     final now = DateTime.now();
     final code = switch (now.month) {
       >= 1 && <= 4 => 1,
-      >= 5 && <= 8 => 3,
-      _ => 2,
+      >= 5 && <= 8 => 2,
+      _ => 3,
     };
     return now.year * 10 + code;
   }
@@ -46,10 +46,12 @@ class ScheduleService {
   int _previousSessionId(int sessionId) {
     final year = sessionId ~/ 10;
     final code = sessionId % 10;
-    if (code > 0) {
-      return (year * 10) + (code - 1);
-    }
-    return ((year - 1) * 10) + 3;
+    return switch (code) {
+      3 => (year * 10) + 2,
+      2 => (year * 10) + 1,
+      1 => ((year - 1) * 10) + 3,
+      _ => ((year - 1) * 10) + 3,
+    };
   }
 
   bool _hasAnyScheduleData(String? scheduleJson) {

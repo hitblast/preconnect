@@ -103,34 +103,8 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
     );
   }
 
-  Future<void> _changeFilter() async {
-    final selected = await showBracuSelectSheet<_RoomFilter>(
-      context,
-      title: 'Choose Filter',
-      subtitle: 'Filter free labs by room type',
-      options: const [
-        BracuSelectOption<_RoomFilter>(
-          value: _RoomFilter.classes,
-          label: 'Classes',
-          subtitle: 'Regular classrooms',
-          icon: Icons.class_outlined,
-        ),
-        BracuSelectOption<_RoomFilter>(
-          value: _RoomFilter.labs,
-          label: 'Labs',
-          subtitle: 'Computer and lab rooms',
-          icon: Icons.science_outlined,
-        ),
-        BracuSelectOption<_RoomFilter>(
-          value: _RoomFilter.theater,
-          label: 'Theaters',
-          subtitle: 'Lecture theater rooms',
-          icon: Icons.theaters_outlined,
-        ),
-      ],
-      selectedValue: _selectedFilter,
-    );
-    if (selected == null || selected == _selectedFilter) return;
+  Future<void> _changeFilter(_RoomFilter selected) async {
+    if (selected == _selectedFilter) return;
     final next = _lastAllSlots.isNotEmpty
         ? Future<List<_FreeRoomSlot>>.value(
             _applyFilter(_lastAllSlots, selected),
@@ -156,14 +130,37 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
       subtitle: 'No Schedule',
       icon: Icons.computer_outlined,
       actions: [
-        BracuSelectChip(
+        BracuSelectDropdownChip<_RoomFilter>(
           label: _selectedFilter.label,
           icon: switch (_selectedFilter) {
             _RoomFilter.classes => Icons.class_outlined,
             _RoomFilter.labs => Icons.science_outlined,
             _RoomFilter.theater => Icons.theaters_outlined,
           },
-          onTap: _changeFilter,
+          title: 'Choose Filter',
+          subtitle: 'Filter free labs by room type',
+          selectedValue: _selectedFilter,
+          options: const [
+            BracuSelectOption<_RoomFilter>(
+              value: _RoomFilter.labs,
+              label: 'Labs',
+              subtitle: 'Computer and lab rooms',
+              icon: Icons.science_outlined,
+            ),
+            BracuSelectOption<_RoomFilter>(
+              value: _RoomFilter.classes,
+              label: 'Classes',
+              subtitle: 'Regular classrooms',
+              icon: Icons.class_outlined,
+            ),
+            BracuSelectOption<_RoomFilter>(
+              value: _RoomFilter.theater,
+              label: 'Theaters',
+              subtitle: 'Lecture theater rooms',
+              icon: Icons.theaters_outlined,
+            ),
+          ],
+          onSelected: _changeFilter,
         ),
       ],
       body: FutureBuilder<List<_FreeRoomSlot>>(

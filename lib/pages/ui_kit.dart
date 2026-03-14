@@ -251,7 +251,7 @@ Future<void> openCgpaCalculatorPage(BuildContext context) async {
   messenger.showSnackBar(
     SnackBar(
       content: const Text(
-        'Loading CGPA calculator...',
+        'Loading...',
         style: TextStyle(color: Colors.white),
       ),
       backgroundColor: BracuPalette.primary,
@@ -348,8 +348,8 @@ String formatSemesterFromSessionIdInt(int semesterSessionId) {
   final code = semesterSessionId % 10;
   final label = switch (code) {
     1 => 'Spring',
-    2 => 'Fall',
-    3 => 'Summer',
+    2 => 'Summer',
+    3 => 'Fall',
     _ => 'Session',
   };
   return '$label $year';
@@ -621,6 +621,136 @@ Future<T?> showBracuSelectSheet<T>(
   );
 }
 
+Future<T?> showBracuSelectDropdown<T>(
+  BuildContext context, {
+  String? title,
+  String? subtitle,
+  required List<BracuSelectOption<T>> options,
+  T? selectedValue,
+}) async {
+  final renderBox = context.findRenderObject() as RenderBox?;
+  final overlay =
+      Overlay.of(context).context.findRenderObject() as RenderBox?;
+  if (renderBox == null || overlay == null) {
+    return showBracuSelectSheet<T>(
+      context,
+      title: title ?? 'Select Option',
+      subtitle: subtitle,
+      options: options,
+      selectedValue: selectedValue,
+    );
+  }
+
+  final target = renderBox.localToGlobal(Offset.zero, ancestor: overlay);
+  final textPrimary = BracuPalette.textPrimary(context);
+  final cardColor = BracuPalette.card(context);
+  final menuTop = target.dy + renderBox.size.height + 6;
+  final maxWidth = overlay.size.width - 24;
+  final estimatedWidth = options.fold<double>(
+    88,
+    (current, option) => math.max(current, 26 + (option.label.length * 10)),
+  );
+  final menuWidth = estimatedWidth.clamp(88, maxWidth);
+  final menuLeft = math.min(target.dx, overlay.size.width - menuWidth - 12);
+
+  return showGeneralDialog<T>(
+    context: context,
+    barrierLabel: 'Dismiss',
+    barrierDismissible: true,
+    barrierColor: Colors.transparent,
+    transitionDuration: const Duration(milliseconds: 120),
+    pageBuilder: (dialogContext, _, _) {
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () => Navigator.of(dialogContext).pop(),
+            ),
+          ),
+          Positioned(
+            left: menuLeft,
+            top: menuTop,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: const [
+                    BoxShadow(
+                      blurRadius: 18,
+                      offset: Offset(0, 8),
+                      color: Color(0x33000000),
+                    ),
+                  ],
+                ),
+                child: IntrinsicWidth(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: options.map((option) {
+                      final selected = option.value == selectedValue;
+                      return InkWell(
+                        onTap: () => Navigator.of(dialogContext).pop(option.value),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                option.label,
+                                style: TextStyle(
+                                  color: textPrimary,
+                                  fontSize: 14,
+                                  fontWeight: selected
+                                      ? FontWeight.w800
+                                      : FontWeight.w600,
+                                ),
+                              ),
+                              if (selected) ...[
+                                const SizedBox(width: 8),
+                                Icon(
+                                  Icons.check_rounded,
+                                  size: 18,
+                                  color: BracuPalette.primary,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
+          alignment: Alignment.topLeft,
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
 void attemptScrollToHighlightedKey({
   required GlobalKey? highlightKey,
   required bool hasRetried,
@@ -679,12 +809,12 @@ class BracuSelectChip extends StatelessWidget {
     final borderColor = selected
         ? BracuPalette.primary.withValues(alpha: compact ? 0.45 : 0.70)
         : textSecondary.withValues(alpha: 0.26);
-    final horizontalPadding = compact ? 14.0 : 16.0;
-    final verticalPadding = compact ? 10.0 : 11.0;
-    final resolvedRadius = compact ? 16.0 : borderRadius;
+    final horizontalPadding = compact ? 11.0 : 14.0;
+    final verticalPadding = compact ? 8.0 : 9.0;
+    final resolvedRadius = compact ? 14.0 : borderRadius;
     final labelStyle = TextStyle(
       color: BracuPalette.textPrimary(context),
-      fontSize: compact ? 13 : 14,
+      fontSize: compact ? 12 : 13,
       fontWeight: FontWeight.w700,
     );
 
@@ -706,20 +836,74 @@ class BracuSelectChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: compact ? 17 : 18, color: primaryColor),
-              const SizedBox(width: 8),
+              Icon(icon, size: compact ? 15 : 16, color: primaryColor),
+              const SizedBox(width: 6),
             ],
             Text(label, style: labelStyle),
             if (showArrow) ...[
-              SizedBox(width: compact ? 6 : 8),
+              SizedBox(width: compact ? 4 : 6),
               Icon(
                 Icons.expand_more_rounded,
-                size: compact ? 18 : 20,
+                size: compact ? 16 : 18,
                 color: primaryColor,
               ),
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class BracuSelectDropdownChip<T> extends StatelessWidget {
+  const BracuSelectDropdownChip({
+    super.key,
+    required this.label,
+    required this.options,
+    required this.selectedValue,
+    required this.onSelected,
+    this.title,
+    this.subtitle,
+    this.icon,
+    this.selected = false,
+    this.compact = false,
+    this.borderRadius = 18,
+    this.showArrow = true,
+  });
+
+  final String label;
+  final String? title;
+  final String? subtitle;
+  final IconData? icon;
+  final List<BracuSelectOption<T>> options;
+  final T? selectedValue;
+  final ValueChanged<T> onSelected;
+  final bool selected;
+  final bool compact;
+  final double borderRadius;
+  final bool showArrow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Builder(
+      builder: (chipContext) => BracuSelectChip(
+        label: label,
+        icon: icon,
+        selected: selected,
+        compact: compact,
+        borderRadius: borderRadius,
+        showArrow: showArrow,
+        onTap: () async {
+          final value = await showBracuSelectDropdown<T>(
+            chipContext,
+            title: title,
+            subtitle: subtitle,
+            options: options,
+            selectedValue: selectedValue,
+          );
+          if (value == null) return;
+          onSelected(value);
+        },
       ),
     );
   }

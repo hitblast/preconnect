@@ -25,6 +25,8 @@ class ExamSchedule extends StatefulWidget {
 class _ExamScheduleState extends State<ExamSchedule> {
   late Future<List<Section>> _future;
   final ScrollController _scrollController = ScrollController();
+  List<int> _semesterSessionOptions = const <int>[];
+  int? _selectedSemesterSessionId;
   GlobalKey? _highlightKey;
   String? _lastHighlightKey;
   bool _didScroll = false;
@@ -33,7 +35,7 @@ class _ExamScheduleState extends State<ExamSchedule> {
   @override
   void initState() {
     super.initState();
-    unawaited(ScheduleService().fetchStudentSchedule());
+    unawaited(_loadSemesterOptions());
     _future = _fetchExamSections();
     ExamSchedule.jumpSignal.addListener(_onJumpRequested);
     RefreshBus.instance.addListener(_onRefreshSignal);
@@ -64,17 +66,136 @@ class _ExamScheduleState extends State<ExamSchedule> {
   }
 
   Future<List<Section>> _fetchExamSections({bool forceRefresh = false}) async {
-    return ScheduleService().getStudentSections(forceRefresh: forceRefresh);
+    final service = ScheduleService();
+    if (_selectedSemesterSessionId == null) {
+      return service.getStudentSections(forceRefresh: forceRefresh);
+    }
+    if (forceRefresh) {
+      await service.fetchStudentScheduleForSemester(
+        semesterSessionId: _selectedSemesterSessionId,
+      );
+    }
+    return service.parseStudentSections(
+      await service.getStudentScheduleForSemester(
+        semesterSessionId: _selectedSemesterSessionId,
+        fromFetch: true,
+      ),
+    );
+  }
+
+  bool _sameIntList(List<int> a, List<int> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  Future<void> _loadSemesterOptions({
+    int? baseSessionId,
+    bool forceRefresh = false,
+  }) async {
+    final service = ScheduleService();
+    final cached = await service.getCachedValidSemesterSessionIds();
+    if (mounted &&
+        cached.isNotEmpty &&
+        !_sameIntList(_semesterSessionOptions, cached)) {
+      setState(() {
+        _semesterSessionOptions = cached;
+      });
+    }
+    if (!forceRefresh && cached.isNotEmpty) return;
+    final refreshed = await service.preloadValidSemesterSessionIds(
+      baseSessionId: baseSessionId,
+      forceRefresh: forceRefresh,
+    );
+    if (cached.isEmpty) {
+      unawaited(
+        service.preloadSemesterScheduleCache(
+          semesterSessionIds: refreshed,
+          forceRefresh: forceRefresh,
+        ),
+      );
+    }
+    if (!mounted || _sameIntList(_semesterSessionOptions, refreshed)) return;
+    setState(() {
+      _semesterSessionOptions = refreshed;
+    });
+  }
+
+  String _semesterLabel(int? sessionId) {
+    if (sessionId == null) return 'Current';
+    return formatSemesterFromSessionIdInt(sessionId);
+  }
+
+  Future<void> _selectSemester(int? sessionId) async {
+    if (_selectedSemesterSessionId == sessionId) return;
+    setState(() {
+      _selectedSemesterSessionId = sessionId;
+      _didScroll = false;
+      _scrollRetry = false;
+      _future = _fetchExamSections(forceRefresh: true);
+    });
+    await _future;
+  }
+
+  Widget _buildSemesterDropdownAction() {
+    const currentMenuValue = -1;
+    return BracuSelectDropdownChip<int>(
+      label: _semesterLabel(_selectedSemesterSessionId),
+      title: 'Select Semester',
+      subtitle: 'Switch between current and archived exam schedules',
+      selectedValue: _selectedSemesterSessionId ?? currentMenuValue,
+      options: [
+        const BracuSelectOption<int>(
+          value: currentMenuValue,
+          label: 'Current',
+          icon: Icons.bolt_rounded,
+          subtitle: 'Latest exam schedule',
+        ),
+        ..._semesterSessionOptions.map(
+          (sessionId) => BracuSelectOption<int>(
+            value: sessionId,
+            label: _semesterLabel(sessionId),
+            icon: Icons.history_rounded,
+            subtitle: 'Archived semester',
+          ),
+        ),
+      ],
+      onSelected: (value) {
+        if (!mounted) return;
+        final sessionId = value == currentMenuValue ? null : value;
+        unawaited(_selectSemester(sessionId));
+      },
+    );
   }
 
   Future<void> _handleRefresh({bool notify = true}) async {
     if (!await ensureOnline(context, notify: notify)) {
       return;
     }
+    final service = ScheduleService();
+    String? currentScheduleJson;
+    if (_selectedSemesterSessionId == null) {
+      currentScheduleJson = await service.fetchStudentSchedule();
+      final refreshed = await service.refreshArchiveSemesterCacheIfNeeded(
+        currentScheduleJson: currentScheduleJson,
+      );
+      if (mounted && !_sameIntList(_semesterSessionOptions, refreshed)) {
+        setState(() {
+          _semesterSessionOptions = refreshed;
+        });
+      }
+    }
     setState(() {
       _didScroll = false;
       _scrollRetry = false;
-      _future = _fetchExamSections(forceRefresh: true);
+      _future = _selectedSemesterSessionId == null
+          ? Future.value(
+              service.parseStudentSections(currentScheduleJson),
+            )
+          : _fetchExamSections(forceRefresh: true);
     });
     await _future;
     if (notify) {
@@ -113,16 +234,17 @@ class _ExamScheduleState extends State<ExamSchedule> {
   @override
   Widget build(BuildContext context) {
     return BracuPageScaffold(
-      title: 'Exam Schedule',
-      subtitle: 'Mid & Final Dates',
+      title: 'Exams',
+      subtitle: 'Mid & Final',
       icon: Icons.event_note_outlined,
+      actions: [_buildSemesterDropdownAction()],
       body: FutureBuilder<List<Section>>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return buildRefreshLoadingState(
               onRefresh: _handleRefresh,
-              label: 'Loading exams...',
+              label: 'Loading...',
             );
           } else if (snapshot.hasError) {
             return buildRefreshErrorState(
@@ -185,74 +307,79 @@ class _ExamScheduleState extends State<ExamSchedule> {
           if (midExams.isEmpty && finalExams.isEmpty) {
             return buildRefreshEmptyState(
               onRefresh: _handleRefresh,
-              message: 'No exams scheduled',
+              message: 'No exams found',
             );
           }
 
           final now = DateTime.now();
+          final shouldHighlightCurrentSemester =
+              _selectedSemesterSessionId == null;
           DateTime? nextExamTime;
           String? nextExamKey;
           DateTime? ongoingExamEnd;
           String? ongoingExamKey;
-          for (final s in sections) {
-            final midTime = BracuTime.parseDateTime(
-              s.sectionSchedule.midExamDate,
-              s.sectionSchedule.midExamStartTime,
-            );
-            final midEndTime = BracuTime.parseDateTime(
-              s.sectionSchedule.midExamDate,
-              s.sectionSchedule.midExamEndTime,
-            );
-            if (midTime != null) {
-              if (midEndTime != null &&
-                  now.isAfter(midTime) &&
-                  now.isBefore(midEndTime)) {
-                if (ongoingExamEnd == null ||
-                    midEndTime.isBefore(ongoingExamEnd)) {
-                  ongoingExamEnd = midEndTime;
-                  ongoingExamKey = '${s.sectionId}-mid';
-                }
-              } else if (midTime.isAfter(now)) {
-                if (nextExamTime == null || midTime.isBefore(nextExamTime)) {
-                  nextExamTime = midTime;
-                  nextExamKey = '${s.sectionId}-mid';
+          if (shouldHighlightCurrentSemester) {
+            for (final s in sections) {
+              final midTime = BracuTime.parseDateTime(
+                s.sectionSchedule.midExamDate,
+                s.sectionSchedule.midExamStartTime,
+              );
+              final midEndTime = BracuTime.parseDateTime(
+                s.sectionSchedule.midExamDate,
+                s.sectionSchedule.midExamEndTime,
+              );
+              if (midTime != null) {
+                if (midEndTime != null &&
+                    now.isAfter(midTime) &&
+                    now.isBefore(midEndTime)) {
+                  if (ongoingExamEnd == null ||
+                      midEndTime.isBefore(ongoingExamEnd)) {
+                    ongoingExamEnd = midEndTime;
+                    ongoingExamKey = '${s.sectionId}-mid';
+                  }
+                } else if (midTime.isAfter(now)) {
+                  if (nextExamTime == null || midTime.isBefore(nextExamTime)) {
+                    nextExamTime = midTime;
+                    nextExamKey = '${s.sectionId}-mid';
+                  }
                 }
               }
-            }
-            final finalTime = BracuTime.parseDateTime(
-              s.sectionSchedule.finalExamDate,
-              s.sectionSchedule.finalExamStartTime,
-            );
-            final finalEndTime = BracuTime.parseDateTime(
-              s.sectionSchedule.finalExamDate,
-              s.sectionSchedule.finalExamEndTime,
-            );
-            if (finalTime != null) {
-              if (finalEndTime != null &&
-                  now.isAfter(finalTime) &&
-                  now.isBefore(finalEndTime)) {
-                if (ongoingExamEnd == null ||
-                    finalEndTime.isBefore(ongoingExamEnd)) {
-                  ongoingExamEnd = finalEndTime;
-                  ongoingExamKey = '${s.sectionId}-final';
-                }
-              } else if (finalTime.isAfter(now)) {
-                if (nextExamTime == null || finalTime.isBefore(nextExamTime)) {
-                  nextExamTime = finalTime;
-                  nextExamKey = '${s.sectionId}-final';
+              final finalTime = BracuTime.parseDateTime(
+                s.sectionSchedule.finalExamDate,
+                s.sectionSchedule.finalExamStartTime,
+              );
+              final finalEndTime = BracuTime.parseDateTime(
+                s.sectionSchedule.finalExamDate,
+                s.sectionSchedule.finalExamEndTime,
+              );
+              if (finalTime != null) {
+                if (finalEndTime != null &&
+                    now.isAfter(finalTime) &&
+                    now.isBefore(finalEndTime)) {
+                  if (ongoingExamEnd == null ||
+                      finalEndTime.isBefore(ongoingExamEnd)) {
+                    ongoingExamEnd = finalEndTime;
+                    ongoingExamKey = '${s.sectionId}-final';
+                  }
+                } else if (finalTime.isAfter(now)) {
+                  if (nextExamTime == null ||
+                      finalTime.isBefore(nextExamTime)) {
+                    nextExamTime = finalTime;
+                    nextExamKey = '${s.sectionId}-final';
+                  }
                 }
               }
             }
           }
 
-          final highlightedKey = ongoingExamKey ?? nextExamKey;
+          final highlightedKey = shouldHighlightCurrentSemester
+              ? ongoingExamKey ?? nextExamKey
+              : null;
 
           final children = <Widget>[];
           _highlightKey = null;
 
           if (midExams.isNotEmpty) {
-            children.add(const BracuSectionTitle(title: 'Midterm'));
-            children.add(const SizedBox(height: 10));
             children.addAll(
               midExams.map((section) {
                 final schedule = section.sectionSchedule;
@@ -272,8 +399,8 @@ class _ExamScheduleState extends State<ExamSchedule> {
                             child: Text(
                               _formatExamDateLabel(schedule.midExamDate),
                               style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
                                 color: BracuPalette.textPrimary(context),
                               ),
                             ),
@@ -282,8 +409,8 @@ class _ExamScheduleState extends State<ExamSchedule> {
                             'Midterm',
                             textAlign: TextAlign.right,
                             style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
                               color: BracuPalette.textPrimary(context),
                             ),
                           ),
@@ -321,6 +448,7 @@ class _ExamScheduleState extends State<ExamSchedule> {
                                     ),
                                     style: TextStyle(
                                       color: BracuPalette.textPrimary(context),
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ],
@@ -373,8 +501,6 @@ class _ExamScheduleState extends State<ExamSchedule> {
           }
 
           if (finalExams.isNotEmpty) {
-            children.add(const BracuSectionTitle(title: 'Final'));
-            children.add(const SizedBox(height: 10));
             children.addAll(
               finalExams.map((section) {
                 final schedule = section.sectionSchedule;
@@ -394,8 +520,8 @@ class _ExamScheduleState extends State<ExamSchedule> {
                             child: Text(
                               _formatExamDateLabel(schedule.finalExamDate),
                               style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
                                 color: BracuPalette.textPrimary(context),
                               ),
                             ),
@@ -404,8 +530,8 @@ class _ExamScheduleState extends State<ExamSchedule> {
                             'Final',
                             textAlign: TextAlign.right,
                             style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
                               color: BracuPalette.textPrimary(context),
                             ),
                           ),
@@ -443,6 +569,7 @@ class _ExamScheduleState extends State<ExamSchedule> {
                                     ),
                                     style: TextStyle(
                                       color: BracuPalette.textPrimary(context),
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ],

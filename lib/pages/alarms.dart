@@ -236,7 +236,7 @@ class _AlarmPageState extends State<AlarmPage> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return buildRefreshLoadingState(
               onRefresh: _handleRefresh,
-              label: 'Loading classes...',
+              label: 'Loading...',
             );
           }
           if (snapshot.hasError) {

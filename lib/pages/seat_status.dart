@@ -498,38 +498,32 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     final label = _selectedDayFilter.isEmpty
         ? 'Any Day'
         : formatWeekdayTitle(_selectedDayFilter);
-    return BracuSelectChip(
+    return BracuSelectDropdownChip<String>(
       icon: Icons.calendar_today_outlined,
       label: label,
       selected: _selectedDayFilter.isNotEmpty,
       compact: true,
       borderRadius: 999,
-      onTap: () async {
-        final selected = await showBracuSelectSheet<String>(
-          context,
-          title: 'Filter by Day',
-          subtitle: 'Show seat status for a specific weekday',
-          selectedValue: _selectedDayFilter,
-          options: <BracuSelectOption<String>>[
-            const BracuSelectOption<String>(
-              value: '',
-              label: 'Any Day',
-              icon: Icons.all_inclusive_rounded,
-              subtitle: 'Every class day',
-            ),
-            ..._weekdayOrder.map(
-              (day) => BracuSelectOption<String>(
-                value: day,
-                label: formatWeekdayTitle(day),
-                icon: Icons.calendar_today_outlined,
-                subtitle: 'Only ${formatWeekdayTitle(day)}',
-              ),
-            ),
-          ],
-        );
-        if (selected == null) return;
-        _setDayFilter(selected);
-      },
+      title: 'Filter by Day',
+      subtitle: 'Show seat status for a specific weekday',
+      selectedValue: _selectedDayFilter,
+      options: <BracuSelectOption<String>>[
+        const BracuSelectOption<String>(
+          value: '',
+          label: 'Any Day',
+          icon: Icons.all_inclusive_rounded,
+          subtitle: 'Everyday',
+        ),
+        ..._weekdayOrder.map(
+          (day) => BracuSelectOption<String>(
+            value: day,
+            label: formatWeekdayTitle(day),
+            icon: Icons.calendar_today_outlined,
+            subtitle: 'Only ${formatWeekdayTitle(day)}',
+          ),
+        ),
+      ],
+      onSelected: _setDayFilter,
     );
   }
 
