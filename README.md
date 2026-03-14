@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="web/icons/Icon-192.png" alt="PreConnect icon" width="96" height="96" />
+
 # PreConnect
 
 Fast, Calm Academic Companion App.
