@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/model/section_info.dart';
 import 'package:preconnect/pages/shared_widgets/section_badge.dart';
@@ -81,12 +82,40 @@ class _ExamScheduleState extends State<ExamSchedule> {
     }
   }
 
+  String _formatExamDateLabel(String? input) {
+    if (input == null || input.trim().isEmpty) return '';
+    final raw = input.trim();
+    const patterns = <String>[
+      'yyyy-MM-dd',
+      'yyyy/MM/dd',
+      'yyyy.MM.dd',
+      'dd-MM-yyyy',
+      'dd/MM/yyyy',
+      'd/M/yyyy',
+      'd MMM yyyy',
+      'd MMM, yyyy',
+      'd-MMM-yyyy',
+      'MMM d, yyyy',
+    ];
+
+    DateTime? dt;
+    for (final pattern in patterns) {
+      try {
+        dt = DateFormat(pattern).parseStrict(raw);
+        break;
+      } catch (_) {}
+    }
+    dt ??= DateTime.tryParse(raw);
+    if (dt == null) return raw;
+    return DateFormat('EEEE, d MMMM, yyyy').format(dt);
+  }
+
   @override
   Widget build(BuildContext context) {
     return BracuPageScaffold(
       title: 'Exam Schedule',
       subtitle: 'Mid & Final Dates',
-      icon: Icons.school_outlined,
+      icon: Icons.event_note_outlined,
       body: FutureBuilder<List<Section>>(
         future: _future,
         builder: (context, snapshot) {
@@ -237,13 +266,28 @@ class _ExamScheduleState extends State<ExamSchedule> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        formatDate(schedule.midExamDate),
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: BracuPalette.textSecondary(context),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _formatExamDateLabel(schedule.midExamDate),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: BracuPalette.textPrimary(context),
+                              ),
+                            ),
+                          ),
+                          Text(
+                            'Midterm',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: BracuPalette.textPrimary(context),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       BracuCard(
@@ -276,9 +320,7 @@ class _ExamScheduleState extends State<ExamSchedule> {
                                       schedule.midExamEndTime,
                                     ),
                                     style: TextStyle(
-                                      color: BracuPalette.textSecondary(
-                                        context,
-                                      ),
+                                      color: BracuPalette.textPrimary(context),
                                     ),
                                   ),
                                 ],
@@ -346,13 +388,28 @@ class _ExamScheduleState extends State<ExamSchedule> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        formatDate(schedule.finalExamDate),
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: BracuPalette.textSecondary(context),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _formatExamDateLabel(schedule.finalExamDate),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: BracuPalette.textPrimary(context),
+                              ),
+                            ),
+                          ),
+                          Text(
+                            'Final',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: BracuPalette.textPrimary(context),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       BracuCard(
@@ -385,9 +442,7 @@ class _ExamScheduleState extends State<ExamSchedule> {
                                       schedule.finalExamEndTime,
                                     ),
                                     style: TextStyle(
-                                      color: BracuPalette.textSecondary(
-                                        context,
-                                      ),
+                                      color: BracuPalette.textPrimary(context),
                                     ),
                                   ),
                                 ],

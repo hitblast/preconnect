@@ -760,7 +760,9 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
 
   bool _isGreenProgram(_FreeRoomSlot slot) {
     final program = slot.dominantProgramCode.trim().toUpperCase();
-    return program == 'CSE' || program == 'EEE';
+    final roomNumber = slot.roomNumber.trim().toUpperCase();
+    final isLab = roomNumber.endsWith('L');
+    return isLab && (program == 'CSE' || program == 'EEE');
   }
 
   String _dominantProgramCode(_RoomSeed room) {
@@ -781,7 +783,7 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
   }
 
   Color? _roomCardBackgroundColor(_FreeRoomSlot slot) {
-    return _isGreenProgram(slot) ? const Color(0xFF0D2214) : null;
+    return null;
   }
 
   TextSpan _roomProgramLabelSpan(_FreeRoomSlot slot) {
