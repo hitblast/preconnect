@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:preconnect/pages/captive_wifi.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/pages/shared_widgets/quick_access_card.dart';
 import 'package:preconnect/pages/ui_kit.dart';
@@ -29,7 +28,7 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
           LayoutBuilder(
             builder: (context, constraints) {
               const spacing = 12.0;
-              final width = (constraints.maxWidth - spacing * 3) / 4;
+              final width = (constraints.maxWidth - spacing * 2) / 3;
               return Center(
                 child: Wrap(
                   alignment: WrapAlignment.center,
@@ -87,19 +86,11 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
                     ),
                     QuickAccessCard(
                       width: width,
-                      icon: Icons.school_outlined,
-                      title: 'Degree',
-                      subtitle: 'Progress',
+                      icon: Icons.calculate_outlined,
+                      title: 'CGPA',
+                      subtitle: 'Calculator',
                       color: const Color(0xFF2C9DFF),
-                      onTap: () => widget.onNavigate(HomeTab.degreeProgress),
-                    ),
-                    QuickAccessCard(
-                      width: width,
-                      icon: Icons.insights_outlined,
-                      title: 'Seat',
-                      subtitle: 'Status',
-                      color: const Color(0xFF00A8E8),
-                      onTap: () => widget.onNavigate(HomeTab.seatStatus),
+                      onTap: () => openCgpaCalculatorPage(context),
                     ),
                     QuickAccessCard(
                       width: width,
@@ -111,20 +102,6 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const WebLoginSetupPage(),
-                          ),
-                        );
-                      },
-                    ),
-                    QuickAccessCard(
-                      width: width,
-                      icon: Icons.wifi_rounded,
-                      title: 'WiFi',
-                      subtitle: 'Auto Login',
-                      color: const Color(0xFF00A86B),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const CaptiveWifiPage(),
                           ),
                         );
                       },

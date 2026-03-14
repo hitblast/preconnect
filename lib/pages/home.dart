@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/auth_service.dart';
 import 'package:preconnect/api/profile_service.dart';
-import 'package:preconnect/api/progress_service.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/app.dart';
 import 'package:preconnect/pages/class_schedule.dart';
@@ -18,7 +17,6 @@ import 'package:preconnect/pages/student_profile.dart';
 import 'package:preconnect/pages/share_schedule.dart';
 import 'package:preconnect/pages/scan_schedule.dart';
 import 'package:preconnect/pages/friend_schedule.dart';
-import 'package:preconnect/pages/cgpa_calculator.dart';
 import 'package:preconnect/pages/devs.dart';
 import 'package:preconnect/pages/calendar.dart';
 import 'package:preconnect/pages/more_quick_access.dart';
@@ -468,57 +466,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
       holiday: holidayStatus,
       cardVisibility: cardVisibility,
     );
-  }
-
-  Future<void> _openCgpaCalculator(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-    messenger.showSnackBar(
-      SnackBar(
-        content: const Text(
-          'Loading CGPA calculator...',
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: BracuPalette.primary,
-        duration: const Duration(seconds: 20),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      ),
-    );
-
-    try {
-      final info = await ProgressService().getProgress();
-      final profile = await ProfileService().getProfile();
-      final scheduleJson = await ScheduleService().getStudentSchedule();
-      if (!context.mounted) return;
-
-      if (info == null) {
-        messenger.hideCurrentSnackBar();
-        showAppSnackBar(
-          context,
-          'No progress data available for CGPA calculator',
-        );
-        return;
-      }
-
-      final currentCgpa = (profile?['cgpa'] ?? '').trim();
-      final sections = section.parseSectionsFromScheduleJson(scheduleJson);
-      messenger.hideCurrentSnackBar();
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => CgpaCalculatorPage(
-            info: info,
-            currentSections: sections,
-            currentCgpa: currentCgpa,
-          ),
-        ),
-      );
-    } catch (_) {
-      if (!context.mounted) return;
-      messenger.hideCurrentSnackBar();
-      showAppSnackBar(context, 'Could not open CGPA calculator');
-    }
   }
 
   Future<void> _handleRefresh({bool notify = true}) async {
@@ -1184,7 +1131,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                 builder: (context, constraints) {
                                   const spacing = 12.0;
                                   final width =
-                                      (constraints.maxWidth - spacing * 3) / 4;
+                                      (constraints.maxWidth - spacing * 2) / 3;
                                   return Center(
                                     child: Wrap(
                                       alignment: WrapAlignment.center,
@@ -1244,12 +1191,22 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                         ),
                                         QuickAccessCard(
                                           width: width,
-                                          icon: Icons.calculate_outlined,
-                                          title: 'CGPA',
-                                          subtitle: 'Calculator',
+                                          icon: Icons.school_outlined,
+                                          title: 'Degree',
+                                          subtitle: 'Progress',
                                           color: const Color(0xFF2C9DFF),
-                                          onTap: () => _openCgpaCalculator(
-                                            context,
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.degreeProgress,
+                                          ),
+                                        ),
+                                        QuickAccessCard(
+                                          width: width,
+                                          icon: Icons.insights_outlined,
+                                          title: 'Seat',
+                                          subtitle: 'Status',
+                                          color: const Color(0xFF00A8E8),
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.seatStatus,
                                           ),
                                         ),
                                         QuickAccessCard(

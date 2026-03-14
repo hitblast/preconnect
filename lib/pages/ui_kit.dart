@@ -5,7 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:native_file_preview/native_file_preview.dart';
+import 'package:preconnect/api/profile_service.dart';
+import 'package:preconnect/api/progress_service.dart';
+import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/api/grade_sheet_service.dart';
+import 'package:preconnect/model/progress_info.dart';
+import 'package:preconnect/model/section_info.dart' as section;
+import 'package:preconnect/pages/cgpa_calculator.dart';
 import 'package:preconnect/tools/time_utils.dart';
 import 'package:preconnect/tools/web_pdf_opener.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -206,6 +212,87 @@ Future<void> openGradeSheet(BuildContext context) async {
   } catch (_) {
     if (!context.mounted) return;
     showAppSnackBar(context, 'Could not open the PDF.');
+  }
+}
+
+List<section.Section> buildCurrentSectionsForCalculator(
+  ProgressInfo info,
+  String? scheduleJson,
+) {
+  final sections = section.parseSectionsFromScheduleJson(scheduleJson);
+  final courseTitleByCode = <String, String>{};
+  for (final course in info.curriculumCourses) {
+    final code = course.code.trim().toUpperCase();
+    final title = course.title.trim();
+    if (code.isEmpty || title.isEmpty) continue;
+    courseTitleByCode[code] = title;
+  }
+  for (final course in info.completedCourses) {
+    final code = course.code.trim().toUpperCase();
+    final title = course.title.trim();
+    if (code.isEmpty || title.isEmpty) continue;
+    courseTitleByCode.putIfAbsent(code, () => title);
+  }
+  return sections.where((current) {
+    final resolvedTitle =
+        (courseTitleByCode[current.courseCode.trim().toUpperCase()] ??
+                (current.name ?? ''))
+            .trim();
+    final hasNoRealName =
+        resolvedTitle.isEmpty ||
+        resolvedTitle.toUpperCase() == current.courseCode.trim().toUpperCase();
+    return !(current.courseCredit <= 0 && hasNoRealName);
+  }).toList();
+}
+
+Future<void> openCgpaCalculatorPage(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.clearSnackBars();
+  messenger.showSnackBar(
+    SnackBar(
+      content: const Text(
+        'Loading CGPA calculator...',
+        style: TextStyle(color: Colors.white),
+      ),
+      backgroundColor: BracuPalette.primary,
+      duration: const Duration(seconds: 20),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    ),
+  );
+
+  try {
+    final info = await ProgressService().getProgress();
+    final profile = await ProfileService().getProfile();
+    final scheduleJson = await ScheduleService().getStudentSchedule();
+    if (!context.mounted) return;
+
+    if (info == null) {
+      messenger.hideCurrentSnackBar();
+      showAppSnackBar(
+        context,
+        'No progress data available for CGPA calculator',
+      );
+      return;
+    }
+
+    final currentCgpa = (profile?['cgpa'] ?? '').trim();
+    final sections = buildCurrentSectionsForCalculator(info, scheduleJson);
+    messenger.hideCurrentSnackBar();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CgpaCalculatorPage(
+          info: info,
+          currentSections: sections,
+          currentCgpa: currentCgpa,
+        ),
+      ),
+    );
+  } catch (_) {
+    if (!context.mounted) return;
+    messenger.hideCurrentSnackBar();
+    showAppSnackBar(context, 'Could not open CGPA calculator');
   }
 }
 

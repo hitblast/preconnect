@@ -454,7 +454,7 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
                             MaterialPageRoute(
                               builder: (_) => CgpaCalculatorPage(
                                 info: info,
-                                currentSections: _currentSemesterSections,
+                                currentSections: currentSectionsForDisplay,
                                 currentCgpa: _cgpa,
                               ),
                             ),

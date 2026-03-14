@@ -60,7 +60,7 @@ class _CalendarPageState extends State<CalendarPage> {
   Widget build(BuildContext context) {
     return BracuPageScaffold(
       title: 'Calendar',
-      subtitle: 'Semester Events',
+      subtitle: 'Events',
       icon: Icons.calendar_today_outlined,
       body: FutureBuilder<CalendarFeed?>(
         future: _future,
@@ -254,36 +254,46 @@ class _CalendarCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.label.isEmpty ? 'Untitled Event' : item.label,
-                  style: TextStyle(
-                    color: BracuPalette.textPrimary(context),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                _buildTitle(context, item),
                 const SizedBox(height: 4),
                 Text(
                   timeLabel,
                   style: TextStyle(
-                    color: textSecondary,
+                    color: BracuPalette.textPrimary(context),
                     fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 if (item.department.isNotEmpty ||
                     item.faculty.isNotEmpty ||
                     item.actor.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(
-                    [
-                      if (item.faculty.isNotEmpty) item.faculty,
-                      if (item.department.isNotEmpty) item.department,
-                      if (item.actor.isNotEmpty) item.actor,
-                    ].join(' • '),
-                    style: TextStyle(
-                      color: textSecondary,
-                      fontSize: 11,
+                  RichText(
+                    text: TextSpan(
+                      style: TextStyle(
+                        color: textSecondary,
+                        fontSize: 11,
+                      ),
+                      children: [
+                        if (item.faculty.isNotEmpty)
+                          TextSpan(
+                            text: item.faculty,
+                            style: TextStyle(
+                              color: BracuPalette.textPrimary(context),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        if (item.department.isNotEmpty)
+                          TextSpan(
+                            text:
+                                '${item.faculty.isNotEmpty ? ' • ' : ''}${item.department}',
+                          ),
+                        if (item.actor.isNotEmpty)
+                          TextSpan(
+                            text:
+                                '${item.faculty.isNotEmpty || item.department.isNotEmpty ? ' • ' : ''}${item.actor}',
+                          ),
+                      ],
                     ),
                   ),
                 ],
@@ -328,12 +338,78 @@ class _CalendarCard extends StatelessWidget {
 
   String _badgeLabel(CalendarEntry item) {
     final key = item.typeKey.toUpperCase();
+    final courseToken = _courseToken(item);
+    if (key.contains('CLASS') && courseToken != null) {
+      final match = RegExp(r'-(\d+)$').firstMatch(courseToken);
+      if (match != null) return match.group(1) ?? 'CLS';
+    }
     if (key.contains('MID')) return 'MID';
     if (key.contains('FINAL')) return 'FIN';
     if (key.contains('CLASS')) return 'CLS';
     if (key.contains('HOLIDAY')) return 'OFF';
     if (key.contains('EXAM')) return 'EXM';
     return key.isEmpty ? 'EVT' : key.substring(0, key.length.clamp(0, 3));
+  }
+
+  String _displayLabel(CalendarEntry item) {
+    final raw = item.label.trim();
+    if (raw.isEmpty) return 'Untitled Event';
+    final extractedCode = _courseToken(item) ?? '';
+    final typeKey = item.typeKey.toUpperCase();
+    if (typeKey.contains('CLASS_SCHEDULE') && extractedCode.isNotEmpty) {
+      return extractedCode.replaceFirst(RegExp(r'-(\d+)$'), '');
+    }
+    var label = raw.replaceAll(RegExp(r'\s*\([^)]*\)\s*'), '').trim();
+    return label.isEmpty ? 'Untitled Event' : label;
+  }
+
+  String? _courseToken(CalendarEntry item) {
+    final raw = item.label.trim();
+    if (raw.isEmpty) return null;
+    final codeMatch = RegExp(r'\(([^)]+)\)').firstMatch(raw);
+    final token = codeMatch?.group(1)?.trim() ?? '';
+    return token.isEmpty ? null : token;
+  }
+
+  Widget _buildTitle(BuildContext context, CalendarEntry item) {
+    final title = _displayLabel(item);
+    final courseToken = _courseToken(item);
+    final key = item.typeKey.toUpperCase();
+    final textSecondary = BracuPalette.textSecondary(context);
+    if (key.contains('CLASS_SCHEDULE') &&
+        courseToken != null &&
+        !title.endsWith('L')) {
+      return Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: title,
+              style: TextStyle(
+                color: BracuPalette.textPrimary(context),
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            TextSpan(
+              text: ' Theory',
+              style: TextStyle(
+                color: textSecondary,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Text(
+      title,
+      style: TextStyle(
+        color: BracuPalette.textPrimary(context),
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+      ),
+    );
   }
 
   Color _badgeColor(String key) {

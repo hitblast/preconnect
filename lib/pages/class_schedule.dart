@@ -594,9 +594,10 @@ class _ClassScheduleState extends State<ClassSchedule> {
                                           adjusted.endTime,
                                         ),
                                         style: TextStyle(
-                                          color: BracuPalette.textSecondary(
+                                          color: BracuPalette.textPrimary(
                                             context,
                                           ),
+                                          fontWeight: FontWeight.w700,
                                         ),
                                       ),
                                     ],

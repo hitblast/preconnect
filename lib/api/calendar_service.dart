@@ -20,15 +20,12 @@ class CalendarService {
   static const String _sourceFingerprintKey = 'calendar_source_fingerprint';
 
   Future<CalendarFeed?> getCalendar() async {
-    final range = await _resolveRange();
     final cached = await _readCache();
-    if (cached != null &&
-        cached.rangeStart == range.startDate &&
-        cached.rangeEnd == range.endDate &&
-        cached.sourceFingerprint == range.sourceFingerprint) {
+    if (cached != null) {
       return cached;
     }
-    return fetchCalendar(fallback: cached, rangeOverride: range);
+    final range = await _resolveRange();
+    return fetchCalendar(rangeOverride: range);
   }
 
   Future<CalendarFeed?> fetchCalendar({
@@ -38,9 +35,6 @@ class CalendarService {
     final range = rangeOverride ?? await _resolveRange();
     final url =
         '${ApiConfig.connectApiBase}${ApiConfig.calendarPath(0, startDate: range.startDate, endDate: range.endDate)}';
-    if (!await _client.hasConnection()) {
-      return fallback ?? await _readCache();
-    }
     try {
       final response = await _client.authenticatedGet(url);
       final decoded = jsonDecode(response.body);
@@ -60,7 +54,7 @@ class CalendarService {
   Future<({String startDate, String endDate, String sourceFingerprint})>
   _resolveRange() async {
     final scheduleService = ScheduleService();
-    var scheduleJson = await scheduleService.getStudentSchedule(fromFetch: true);
+    var scheduleJson = await scheduleService.getStudentSchedule();
     scheduleJson ??= await scheduleService.fetchStudentSchedule(fromGet: true);
     final sections = scheduleService.parseStudentSections(scheduleJson);
 
