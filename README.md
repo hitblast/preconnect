@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="web/icons/Icon-192.png" alt="PreConnect icon" width="96" height="96" />
+<img src="web/icons/Icon-maskable-192.png" alt="PreConnect icon" width="96" height="96" />
 
 # PreConnect
 
@@ -131,7 +131,7 @@ flutter run
 Release APK:
 
 ```bash
-flutter build apk --release --target-platform android-arm64
+flutter build apk --release
 ```
 
 Output:
@@ -145,7 +145,7 @@ build/app/outputs/flutter-apk/app-release.apk
 Release AAB:
 
 ```bash
-flutter build appbundle --release --target-platform android-arm64
+flutter build appbundle --release
 ```
 
 Output:
