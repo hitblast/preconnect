@@ -452,7 +452,7 @@ class _WebLoginSetupPageState extends State<WebLoginSetupPage>
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'PreConnect.app • Prepare. Connect. Succeed.',
+                            'PreConnect • Prepare. Connect. Succeed.',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,

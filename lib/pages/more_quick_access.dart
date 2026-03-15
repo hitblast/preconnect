@@ -13,8 +13,6 @@ class MoreQuickAccessPage extends StatefulWidget {
 }
 
 class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
-  bool _isOpeningGradeSheet = false;
-
   @override
   Widget build(BuildContext context) {
     return BracuPageScaffold(
@@ -45,14 +43,6 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
                     ),
                     QuickAccessCard(
                       width: width,
-                      icon: Icons.notifications_none_rounded,
-                      title: 'Alerts',
-                      subtitle: 'Updates',
-                      color: const Color(0xFF5B8DEF),
-                      onTap: () => widget.onNavigate(HomeTab.notifications),
-                    ),
-                    QuickAccessCard(
-                      width: width,
                       icon: Icons.developer_mode_outlined,
                       title: 'Devs',
                       subtitle: 'About Us',
@@ -69,35 +59,27 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
                     ),
                     QuickAccessCard(
                       width: width,
-                      icon: Icons.picture_as_pdf_outlined,
-                      title: 'Grade',
-                      subtitle: 'Sheet',
-                      color: const Color(0xFFE53935),
-                      isLoading: _isOpeningGradeSheet,
-                      onTap: _isOpeningGradeSheet
-                          ? () {}
-                          : () async {
-                              setState(() {
-                                _isOpeningGradeSheet = true;
-                              });
-                              try {
-                                await openGradeSheet(context);
-                              } finally {
-                                if (mounted) {
-                                  setState(() {
-                                    _isOpeningGradeSheet = false;
-                                  });
-                                }
-                              }
-                            },
+                      icon: Icons.school_outlined,
+                      title: 'Degree',
+                      subtitle: 'Progress',
+                      color: const Color(0xFF2C9DFF),
+                      onTap: () => widget.onNavigate(HomeTab.degreeProgress),
                     ),
                     QuickAccessCard(
                       width: width,
-                      icon: Icons.calculate_outlined,
-                      title: 'CGPA',
-                      subtitle: 'Calculator',
-                      color: const Color(0xFF2C9DFF),
-                      onTap: () => openCgpaCalculatorPage(context),
+                      icon: Icons.computer_outlined,
+                      title: 'Free',
+                      subtitle: 'Labs',
+                      color: const Color(0xFF00A8E8),
+                      onTap: () => widget.onNavigate(HomeTab.freeLabs),
+                    ),
+                    QuickAccessCard(
+                      width: width,
+                      icon: Icons.insights_outlined,
+                      title: 'Seat',
+                      subtitle: 'Status',
+                      color: const Color(0xFF00A8E8),
+                      onTap: () => widget.onNavigate(HomeTab.seatStatus),
                     ),
                   ],
                 ),

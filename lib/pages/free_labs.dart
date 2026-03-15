@@ -711,11 +711,10 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
 
   List<_FreeRoomSlot> _visibleRoomSlots(List<_FreeRoomSlot> roomSlots) {
     final nowMinutes = _minutesOfDay(TimeOfDay.now());
-    final upcoming = roomSlots.where((item) {
+    return roomSlots.where((item) {
       final end = _minutesFromString(item.endTime);
       return end != null && end > nowMinutes;
     }).toList();
-    return upcoming.isNotEmpty ? upcoming : roomSlots;
   }
 
   bool _matchesFilter(String roomNumber, [_RoomFilter? filter]) {

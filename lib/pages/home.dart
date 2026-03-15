@@ -1088,7 +1088,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                           text:
                                               'https://play.google.com/store/apps/details?id=com.sabbirba.preconnect',
                                           subject:
-                                              'PreConnect.app • Prepare. Connect. Succeed.',
+                                              'PreConnect • Prepare. Connect. Succeed.',
                                         ),
                                       );
                                     },
@@ -1189,36 +1189,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                           color: const Color(0xFF5B8DEF),
                                           onTap: () => widget.onNavigate(
                                             HomeTab.friendSchedule,
-                                          ),
-                                        ),
-                                        QuickAccessCard(
-                                          width: width,
-                                          icon: Icons.school_outlined,
-                                          title: 'Degree',
-                                          subtitle: 'Progress',
-                                          color: const Color(0xFF2C9DFF),
-                                          onTap: () => widget.onNavigate(
-                                            HomeTab.degreeProgress,
-                                          ),
-                                        ),
-                                        QuickAccessCard(
-                                          width: width,
-                                          icon: Icons.computer_outlined,
-                                          title: 'Free',
-                                          subtitle: 'Labs',
-                                          color: const Color(0xFF00A8E8),
-                                          onTap: () => widget.onNavigate(
-                                            HomeTab.freeLabs,
-                                          ),
-                                        ),
-                                        QuickAccessCard(
-                                          width: width,
-                                          icon: Icons.insights_outlined,
-                                          title: 'Seat',
-                                          subtitle: 'Status',
-                                          color: const Color(0xFF00A8E8),
-                                          onTap: () => widget.onNavigate(
-                                            HomeTab.seatStatus,
                                           ),
                                         ),
                                         QuickAccessCard(
@@ -1513,7 +1483,7 @@ class _OpenWebCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'PreConnect.app • Prepare. Connect. Succeed.',
+                      'PreConnect • Prepare. Connect. Succeed.',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
