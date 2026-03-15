@@ -8,6 +8,7 @@ import 'package:preconnect/api/seat_alert_push_service.dart';
 import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/model/seat_status_info.dart';
+import 'package:preconnect/pages/notifications.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
@@ -52,6 +53,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   bool _isStreamConnecting = false;
   bool _isSavingCache = false;
   bool _availableOnly = false;
+  bool _alertsOnly = false;
   String _selectedDayFilter = '';
   final Set<String> _pendingInitials = <String>{};
   http.Client? _streamClient;
@@ -317,133 +319,95 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         _seatAlerts[item.sectionId] ?? SeatAlertConfig(sectionId: item.sectionId);
     var temp = existing;
     const thresholdOptions = <int>[1, 2, 3, 5, 10];
-    final updated = await showModalBottomSheet<SeatAlertConfig?>(
-      context: context,
-      backgroundColor: BracuPalette.card(context),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (sheetContext) {
-        final textPrimary = BracuPalette.textPrimary(sheetContext);
-        final textSecondary = BracuPalette.textSecondary(sheetContext);
-        return SafeArea(
-          child: StatefulBuilder(
-            builder: (context, setSheetState) {
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    final updated = await showBracuBottomSheet<SeatAlertConfig?>(
+      context,
+      title: '${item.courseCode} - ${item.sectionName}',
+      subtitle: '${item.remaining} seat${item.remaining == 1 ? '' : 's'} remaining',
+      maxHeightFactor: 0.82,
+      builder: (sheetContext, textPrimary, textSecondary) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return ListView(
+              shrinkWrap: true,
+              children: [
+                _buildSeatAlertRuleCard(
+                  context,
+                  label: 'When seats become available',
+                  subtitle: 'Alert when a seat becomes available',
+                  value: temp.notifyOnAvailable,
+                  onChanged: (value) {
+                    setSheetState(() {
+                      temp = temp.copyWith(notifyOnAvailable: value);
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
+                _buildSeatAlertRuleCard(
+                  context,
+                  label: 'When seats reach your limit',
+                  subtitle: 'Alert when seats reach your selected',
+                  value: temp.thresholdSeats != null,
+                  onChanged: (value) {
+                    setSheetState(() {
+                      temp = temp.copyWith(
+                        thresholdSeats: value ? (temp.thresholdSeats ?? 1) : null,
+                      );
+                    });
+                  },
+                ),
+                if (temp.thresholdSeats != null) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: thresholdOptions.map((threshold) {
+                      final selected = temp.thresholdSeats == threshold;
+                      return ChoiceChip(
+                        label: Text('$threshold+'),
+                        selected: selected,
+                        onSelected: (_) {
+                          setSheetState(() {
+                            temp = temp.copyWith(thresholdSeats: threshold);
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                _buildSeatAlertRuleCard(
+                  context,
+                  label: 'When seat count changes',
+                  subtitle: 'Alert when the seat count changes',
+                  value: temp.notifyOnAnyChange,
+                  onChanged: (value) {
+                    setSheetState(() {
+                      temp = temp.copyWith(notifyOnAnyChange: value);
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                Row(
                   children: [
-                    Center(
-                      child: Container(
-                        width: 42,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: textSecondary.withValues(alpha: 0.28),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        child: const Text('Cancel'),
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    Text(
-                      '${item.courseCode} - ${item.sectionName}',
-                      style: TextStyle(
-                        color: textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(temp),
+                        child: const Text('Save'),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${item.remaining} seat${item.remaining == 1 ? '' : 's'} remaining',
-                      style: TextStyle(
-                        color: textSecondary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('When seats become available'),
-                      value: temp.notifyOnAvailable,
-                      onChanged: (value) {
-                        setSheetState(() {
-                          temp = temp.copyWith(notifyOnAvailable: value);
-                        });
-                      },
-                    ),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('When seats reach your limit'),
-                      value: temp.thresholdSeats != null,
-                      onChanged: (value) {
-                        setSheetState(() {
-                          temp = temp.copyWith(
-                            thresholdSeats: value ? (temp.thresholdSeats ?? 1) : null,
-                          );
-                        });
-                      },
-                    ),
-                    if (temp.thresholdSeats != null) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: thresholdOptions.map((threshold) {
-                          final selected = temp.thresholdSeats == threshold;
-                          return ChoiceChip(
-                            label: Text('$threshold+'),
-                            selected: selected,
-                            onSelected: (_) {
-                              setSheetState(() {
-                                temp = temp.copyWith(thresholdSeats: threshold);
-                              });
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                    const SizedBox(height: 8),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('When seat count changes'),
-                      value: temp.notifyOnAnyChange,
-                      onChanged: (value) {
-                        setSheetState(() {
-                          temp = temp.copyWith(notifyOnAnyChange: value);
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        if (existing.hasAnyRule)
-                          TextButton(
-                            onPressed: () => Navigator.of(sheetContext).pop(
-                              SeatAlertConfig(sectionId: item.sectionId),
-                            ),
-                            child: const Text('Remove all'),
-                          ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => Navigator.of(sheetContext).pop(),
-                          child: const Text('Cancel'),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: () => Navigator.of(sheetContext).pop(temp),
-                          child: const Text('Save'),
-                        ),
-                      ],
                     ),
                   ],
                 ),
-              );
-            },
-          ),
+              ],
+            );
+          },
         );
       },
     );
@@ -469,6 +433,54 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       _seatAlerts[item.sectionId] = updated;
     });
     showAppSnackBar(context, 'Seat alert saved');
+  }
+
+  Widget _buildSeatAlertRuleCard(
+    BuildContext context, {
+    required String label,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    final textPrimary = BracuPalette.textPrimary(context);
+    final textSecondary = BracuPalette.textSecondary(context);
+    return BracuCard(
+      isHighlighted: value,
+      highlightColor: BracuPalette.primary,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
   }
 
   _SeatStatusCardData _buildFallbackCard({
@@ -641,7 +653,13 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       icon: Icons.insights_outlined,
       actions: [
         BracuNotificationsIconButton(
-          onTap: () => HomeTabRegistry.setActive(HomeTab.notifications),
+          onTap: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const NotificationsPage(),
+              ),
+            );
+          },
           iconSize: 24,
           padding: 8,
         ),
@@ -715,38 +733,11 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   }
 
   Widget _buildSearchField(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final hintColor = scheme.onSurface.withValues(alpha: 0.64);
-    final textColor = scheme.onSurface;
-    final borderColor = scheme.onSurface.withValues(alpha: 0.24);
-    return TextField(
-      key: ValueKey<String>('seat-search-${Theme.of(context).brightness.name}'),
+    return BracuSearchField(
       controller: _searchController,
-      style: TextStyle(color: textColor),
-      textInputAction: TextInputAction.search,
-      decoration: InputDecoration(
-        hintText: 'Search by anything...',
-        hintStyle: TextStyle(color: hintColor),
-        prefixIcon: Icon(Icons.search, color: hintColor),
-        suffixIcon: _searchQuery.trim().isEmpty
-            ? null
-            : IconButton(
-                onPressed: () => _searchController.clear(),
-                icon: Icon(Icons.close, color: hintColor),
-              ),
-        filled: true,
-        fillColor: BracuPalette.card(context).withValues(alpha: 0.92),
-        isDense: true,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: borderColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: scheme.primary),
-        ),
-      ),
+      hintText: 'Search by anything...',
+      query: _searchQuery,
+      keySuffix: 'seat',
     );
   }
 
@@ -759,6 +750,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         runSpacing: 8,
         children: [
           _buildAvailabilityFilterAction(),
+          _buildAlertsFilterAction(),
           _buildDayFilterAction(context),
         ],
       ),
@@ -808,9 +800,24 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     );
   }
 
+  Widget _buildAlertsFilterAction() {
+    return _FilterChip(
+      icon: Icons.notifications_active_outlined,
+      label: 'Alerts',
+      selected: _alertsOnly,
+      onTap: () => _setAlertsFilter(!_alertsOnly),
+      showArrow: false,
+    );
+  }
+
   void _setAvailableFilter(bool next) {
     if (next == _availableOnly) return;
     _refreshVisibleCards(availableOnly: next);
+  }
+
+  void _setAlertsFilter(bool next) {
+    if (next == _alertsOnly) return;
+    _refreshVisibleCards(alertsOnly: next);
   }
 
   void _setDayFilter(String next) {
@@ -820,20 +827,24 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 
   void _refreshVisibleCards({
     bool? availableOnly,
+    bool? alertsOnly,
     String? dayFilter,
     String? query,
   }) {
     final resolvedAvailableOnly = availableOnly ?? _availableOnly;
+    final resolvedAlertsOnly = alertsOnly ?? _alertsOnly;
     final resolvedDayFilter = dayFilter ?? _selectedDayFilter;
     final resolvedQuery = query ?? _searchQuery;
     final nextVisible = _filterCards(
       _cards,
       resolvedQuery,
       availableOnly: resolvedAvailableOnly,
+      alertsOnly: resolvedAlertsOnly,
       dayFilter: resolvedDayFilter,
     );
     final filtersChanged =
         resolvedAvailableOnly != _availableOnly ||
+        resolvedAlertsOnly != _alertsOnly ||
         resolvedDayFilter != _selectedDayFilter ||
         resolvedQuery != _searchQuery;
     if (!filtersChanged && !_areCardListsDifferent(_visibleCards, nextVisible)) {
@@ -841,6 +852,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     }
     setState(() {
       _availableOnly = resolvedAvailableOnly;
+      _alertsOnly = resolvedAlertsOnly;
       _selectedDayFilter = resolvedDayFilter;
       _searchQuery = resolvedQuery;
       _visibleCards
@@ -854,12 +866,16 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     List<_SeatStatusCardData> source,
     String query, {
     required bool availableOnly,
+    required bool alertsOnly,
     required String dayFilter,
   }) {
     final q = query.trim().toLowerCase();
     return source.where((card) {
       if (q.isNotEmpty && !card.searchToken.contains(q)) return false;
       if (availableOnly && card.remaining <= 0) return false;
+      if (alertsOnly && _seatAlerts[card.sectionId]?.hasAnyRule != true) {
+        return false;
+      }
 
       if (dayFilter.isNotEmpty) {
         final schedules = <SeatStatusClassSchedule>[
@@ -888,6 +904,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       nextCards,
       _searchQuery,
       availableOnly: _availableOnly,
+      alertsOnly: _alertsOnly,
       dayFilter: _selectedDayFilter,
     );
     if (!mounted) return;

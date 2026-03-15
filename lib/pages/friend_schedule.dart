@@ -626,26 +626,16 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
           ),
           const SizedBox(height: 12),
           if (decodedSchedules.isNotEmpty) ...[
-            TextField(
+            BracuSearchField(
               controller: _searchController,
-              autofocus: false,
-              decoration: InputDecoration(
-                hintText: 'Search',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () => _searchController.clear(),
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
+              hintText: 'Search',
+              query: _searchQuery,
+              borderRadius: 14,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
               ),
+              keySuffix: 'friend-schedule',
             ),
             const SizedBox(height: 12),
           ],

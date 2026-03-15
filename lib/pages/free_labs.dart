@@ -599,111 +599,57 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
     List<_FreeRoomSlot> roomSlots,
   ) async {
     final visibleRoomSlots = _visibleRoomSlots(roomSlots);
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: BracuPalette.card(context),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (sheetContext) {
-        final textPrimary = BracuPalette.textPrimary(sheetContext);
-        final textSecondary = BracuPalette.textSecondary(sheetContext);
-        return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.85,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 42,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: textSecondary.withValues(alpha: 0.28),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                          Text(
-                            '${slot.roomNumber} • ${_roomTypeLabel(slot.roomNumber)}',
-                            style: TextStyle(
-                              color: textPrimary,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          if (_roomHeaderSubtitle(slot).isNotEmpty)
-                            Text.rich(
-                              _roomHeaderSubtitleSpan(slot, textSecondary),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(sheetContext).pop(),
-                        icon: Icon(Icons.close_rounded, color: textSecondary),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Today',
-                    style: TextStyle(
-                      color: textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  ...visibleRoomSlots.map(
-                    (item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: BracuCard(
-                        isHighlighted: item.statusLabel == 'Available',
-                        highlightColor: BracuPalette.primary,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                formatTimeRange(item.startTime, item.endTime),
-                                style: TextStyle(
-                                  color: textPrimary,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            if (item.statusLabel.isNotEmpty)
-                              Text(
-                                item.statusLabel,
-                                style: TextStyle(
-                                  color: textSecondary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+    await showBracuBottomSheet<void>(
+      context,
+      title: '${slot.roomNumber} • ${_roomTypeLabel(slot.roomNumber)}',
+      subtitle: _roomHeaderSubtitle(slot),
+      maxHeightFactor: 0.85,
+      builder: (sheetContext, textPrimary, textSecondary) {
+        return ListView(
+          shrinkWrap: true,
+          children: [
+            Text(
+              'Today',
+              style: TextStyle(
+                color: textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
               ),
             ),
-          ),
+            const SizedBox(height: 10),
+            ...visibleRoomSlots.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: BracuCard(
+                  isHighlighted: item.statusLabel == 'Available',
+                  highlightColor: BracuPalette.primary,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          formatTimeRange(item.startTime, item.endTime),
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (item.statusLabel.isNotEmpty)
+                        Text(
+                          item.statusLabel,
+                          style: TextStyle(
+                            color: textSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -829,42 +775,6 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
     return '';
   }
 
-  TextSpan _roomHeaderSubtitleSpan(_FreeRoomSlot slot, Color secondary) {
-    final baseStyle = TextStyle(
-      color: secondary,
-      fontSize: 13,
-      fontWeight: FontWeight.w600,
-    );
-    final codeStyle = baseStyle.copyWith(
-      color: BracuPalette.textPrimary(context),
-      fontWeight: FontWeight.w800,
-    );
-    final subtitle = _roomHeaderSubtitle(slot);
-    final spans = <TextSpan>[];
-    final pattern = RegExp(r'\([^)]*\)');
-    var start = 0;
-    for (final match in pattern.allMatches(subtitle)) {
-      if (match.start > start) {
-        spans.add(
-          TextSpan(
-            text: subtitle.substring(start, match.start),
-            style: baseStyle,
-          ),
-        );
-      }
-      spans.add(
-        TextSpan(
-          text: subtitle.substring(match.start, match.end),
-          style: codeStyle,
-        ),
-      );
-      start = match.end;
-    }
-    if (start < subtitle.length) {
-      spans.add(TextSpan(text: subtitle.substring(start), style: baseStyle));
-    }
-    return TextSpan(children: spans, style: baseStyle);
-  }
 }
 
 class _FreeRoomSlot {

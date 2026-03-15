@@ -190,7 +190,21 @@ Why this reduces Connect API calls:
 - Security: [SECURITY.md](SECURITY.md)
 - Environment Example: [.env.example](.env.example)
 - Workflows: [.github/workflows/release.yml](.github/workflows/release.yml)
-- Hosted Seat Status API Server: `https://api.preconnect.app`
+- Hosted Seat Status API Server: [api.preconnect.app](https://api.preconnect.app)
+- Web App: [web.preconnect.app](https://web.preconnect.app)
+- Status Page: [status.preconnect.app](https://status.preconnect.app)
+
+## Support PreConnect
+
+Community driven and free for every student.
+
+If you want to support the project locally, you can send to:
+
+- bKash / Nagad / Upay: **01865493144**
+
+Reference (required): **PreConnect App**
+
+Bug reports, feature requests, and ideas are welcome. Please create issues in our GitHub repo.
 
 ## Developer Credit
 - NaiveInvestigator — GitHub: [@NaiveInvestigator](https://github.com/NaiveInvestigator)

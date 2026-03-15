@@ -1217,7 +1217,19 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                               ),
                             ],
                             const SizedBox(height: 12),
-                            _OpenWebCard(
+                            BracuActionBannerCard(
+                              icon: Icons.favorite_outline_rounded,
+                              title: 'Support PreConnect',
+                              subtitle: 'Open QR and funding instructions',
+                              iconColor: const Color(0xFF00A8E8),
+                              onTap: () => showBracuFundingSupportSheet(context),
+                            ),
+                            const SizedBox(height: 12),
+                            BracuActionBannerCard(
+                              icon: Icons.open_in_new,
+                              title: 'Open PreConnect Web',
+                              subtitle:
+                                  'PreConnect • Prepare. Connect. Succeed.',
                               onTap: () => _openPreconnectWeb(
                                 context,
                                 'https://preconnect.app',
@@ -1435,80 +1447,6 @@ class _SectionTitle extends StatelessWidget {
         fontSize: 16,
         fontWeight: FontWeight.w600,
         color: BracuPalette.textPrimary(context),
-      ),
-    );
-  }
-}
-
-class _OpenWebCard extends StatelessWidget {
-  const _OpenWebCard({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          color: BracuPalette.primary.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: BracuPalette.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.open_in_new,
-                  color: BracuPalette.primary,
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Open PreConnect Web',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: BracuPalette.textPrimary(context),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'PreConnect • Prepare. Connect. Succeed.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: BracuPalette.textSecondary(context),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                color: BracuPalette.textSecondary(context),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

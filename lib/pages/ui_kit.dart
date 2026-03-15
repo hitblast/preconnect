@@ -13,6 +13,7 @@ import 'package:preconnect/api/grade_sheet_service.dart';
 import 'package:preconnect/model/progress_info.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/cgpa_calculator.dart';
+import 'package:preconnect/tools/cached_image.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/time_utils.dart';
 import 'package:preconnect/tools/web_pdf_opener.dart';
@@ -298,6 +299,272 @@ Future<void> openCgpaCalculatorPage(BuildContext context) async {
   }
 }
 
+const String _kPreconnectSupportQrUrl = 'https://preconnect.app/bkash-qr.jpg';
+const String _kPreconnectSupportNumber = '01865493144';
+const String _kPreconnectSupportReference = 'PreConnect App';
+
+Future<void> showBracuFundingSupportSheet(BuildContext context) async {
+  await showBracuBottomSheet<void>(
+    context,
+    title: 'Support PreConnect',
+    subtitle: 'Help fund the iOS release and future app costs',
+    maxHeightFactor: 0.86,
+    builder: (sheetContext, textPrimary, textSecondary) {
+      return ListView(
+        shrinkWrap: true,
+        children: [
+          Text(
+            'PreConnect is student-built and stays free for everyone. Contributions help cover the Apple Developer membership and future publishing costs.',
+            style: TextStyle(
+              color: textSecondary,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 14),
+          const BracuFundingSupportContent(),
+        ],
+      );
+    },
+  );
+}
+
+class BracuActionBannerCard extends StatelessWidget {
+  const BracuActionBannerCard({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.iconColor = BracuPalette.primary,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: iconColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: iconColor,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: BracuPalette.textPrimary(context),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: BracuPalette.textSecondary(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                color: BracuPalette.textSecondary(context),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class BracuFundingSupportContent extends StatelessWidget {
+  const BracuFundingSupportContent({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF0B0B0B)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: BracuPalette.primary.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Column(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              color: Colors.white,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final size = constraints.maxWidth;
+                  return CachedImage(
+                    url: _kPreconnectSupportQrUrl,
+                    width: size,
+                    height: size,
+                    fit: BoxFit.contain,
+                    placeholder: const Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                    error: const Icon(Icons.qr_code_2_rounded),
+                  );
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const BracuSupportNumberRow(number: _kPreconnectSupportNumber),
+        ],
+      ),
+    );
+  }
+}
+
+class BracuSupportNumberRow extends StatelessWidget {
+  const BracuSupportNumberRow({super.key, required this.number});
+
+  final String number;
+
+  @override
+  Widget build(BuildContext context) {
+    final textSecondary = BracuPalette.textSecondary(context);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  number,
+                  style: TextStyle(
+                    color: BracuPalette.textPrimary(context),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () async {
+                    await Clipboard.setData(ClipboardData(text: number));
+                    if (context.mounted) {
+                      showAppSnackBar(context, 'Number copied');
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: const Padding(
+                    padding: EdgeInsets.all(2),
+                    child: Icon(
+                      Icons.copy_rounded,
+                      size: 16,
+                      color: BracuPalette.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'bKash / Nagad / Upay',
+              style: TextStyle(color: textSecondary, fontSize: 11),
+            ),
+            const SizedBox(height: 4),
+            SizedBox(
+              width: 220,
+              child: Column(
+                children: [
+                  Text(
+                    'Send money with reference',
+                    style: TextStyle(color: textSecondary, fontSize: 11),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        _kPreconnectSupportReference,
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () async {
+                          await Clipboard.setData(
+                            const ClipboardData(text: _kPreconnectSupportReference),
+                          );
+                          if (context.mounted) {
+                            showAppSnackBar(context, 'Reference copied');
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: const Padding(
+                          padding: EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.copy_rounded,
+                            size: 14,
+                            color: BracuPalette.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 String normalizeWeekday(String? day) {
   if (day == null) return '';
   final trimmed = day.trim();
@@ -437,12 +704,17 @@ class BracuSelectOption<T> {
   final String? subtitle;
 }
 
-Future<T?> showBracuSelectSheet<T>(
+Future<T?> showBracuBottomSheet<T>(
   BuildContext context, {
   required String title,
   String? subtitle,
-  required List<BracuSelectOption<T>> options,
-  T? selectedValue,
+  double maxHeightFactor = 0.72,
+  required Widget Function(
+    BuildContext sheetContext,
+    Color textPrimary,
+    Color textSecondary,
+  )
+  builder,
 }) {
   return showModalBottomSheet<T>(
     context: context,
@@ -457,7 +729,7 @@ Future<T?> showBracuSelectSheet<T>(
       return SafeArea(
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.72,
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * maxHeightFactor,
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
@@ -513,111 +785,123 @@ Future<T?> showBracuSelectSheet<T>(
                 ),
                 const SizedBox(height: 10),
                 Flexible(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final option = options[index];
-                      final selected = option.value == selectedValue;
-                      return Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(18),
-                          onTap: () =>
-                              Navigator.of(sheetContext).pop(option.value),
-                          child: Ink(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 13,
-                            ),
-                            decoration: BoxDecoration(
-                              color: selected
-                                  ? BracuPalette.primary.withValues(alpha: 0.12)
-                                  : BracuPalette.card(sheetContext)
-                                        .withValues(alpha: 0.72),
-                              borderRadius: BorderRadius.circular(18),
-                              border: Border.all(
-                                color: selected
-                                    ? BracuPalette.primary.withValues(alpha: 0.70)
-                                    : textSecondary.withValues(alpha: 0.18),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: selected
-                                        ? BracuPalette.primary.withValues(
-                                            alpha: 0.14,
-                                          )
-                                        : textSecondary.withValues(alpha: 0.10),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Icon(
-                                    option.icon ??
-                                        (selected
-                                            ? Icons.check_rounded
-                                            : Icons.tune_rounded),
-                                    size: 18,
-                                    color: selected
-                                        ? BracuPalette.primary
-                                        : textSecondary,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        option.label,
-                                        style: TextStyle(
-                                          color: textPrimary,
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      if (option.subtitle != null &&
-                                          option.subtitle!.trim().isNotEmpty) ...[
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          option.subtitle!.trim(),
-                                          style: TextStyle(
-                                            color: textSecondary,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Icon(
-                                  selected
-                                      ? Icons.check_circle_rounded
-                                      : Icons.chevron_right_rounded,
-                                  size: selected ? 20 : 18,
-                                  color: selected
-                                      ? BracuPalette.primary
-                                      : textSecondary.withValues(alpha: 0.7),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  child: builder(sheetContext, textPrimary, textSecondary),
                 ),
               ],
             ),
           ),
         ),
+      );
+    },
+  );
+}
+
+Future<T?> showBracuSelectSheet<T>(
+  BuildContext context, {
+  required String title,
+  String? subtitle,
+  required List<BracuSelectOption<T>> options,
+  T? selectedValue,
+}) {
+  return showBracuBottomSheet<T>(
+    context,
+    title: title,
+    subtitle: subtitle,
+    maxHeightFactor: 0.72,
+    builder: (sheetContext, textPrimary, textSecondary) {
+      return ListView.separated(
+        shrinkWrap: true,
+        itemCount: options.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        itemBuilder: (context, index) {
+          final option = options[index];
+          final selected = option.value == selectedValue;
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () => Navigator.of(sheetContext).pop(option.value),
+              child: Ink(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 13,
+                ),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? BracuPalette.primary.withValues(alpha: 0.12)
+                      : BracuPalette.card(sheetContext).withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: selected
+                        ? BracuPalette.primary.withValues(alpha: 0.70)
+                        : textSecondary.withValues(alpha: 0.18),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? BracuPalette.primary.withValues(alpha: 0.14)
+                            : textSecondary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        option.icon ??
+                            (selected ? Icons.check_rounded : Icons.tune_rounded),
+                        size: 18,
+                        color: selected
+                            ? BracuPalette.primary
+                            : textSecondary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            option.label,
+                            style: TextStyle(
+                              color: textPrimary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (option.subtitle != null &&
+                              option.subtitle!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              option.subtitle!.trim(),
+                              style: TextStyle(
+                                color: textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Icon(
+                      selected
+                          ? Icons.check_circle_rounded
+                          : Icons.chevron_right_rounded,
+                      size: selected ? 20 : 18,
+                      color: selected
+                          ? BracuPalette.primary
+                          : textSecondary.withValues(alpha: 0.7),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       );
     },
   );
@@ -1005,6 +1289,76 @@ class _BracuNotificationsIconButtonState
           ],
         );
       },
+    );
+  }
+}
+
+class BracuSearchField extends StatelessWidget {
+  const BracuSearchField({
+    super.key,
+    required this.controller,
+    required this.hintText,
+    this.query = '',
+    this.onClear,
+    this.autofocus = false,
+    this.fillAlpha = 0.92,
+    this.borderRadius = 12,
+    this.contentPadding,
+    this.keySuffix,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final String query;
+  final VoidCallback? onClear;
+  final bool autofocus;
+  final double fillAlpha;
+  final double borderRadius;
+  final EdgeInsetsGeometry? contentPadding;
+  final String? keySuffix;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final hintColor = scheme.onSurface.withValues(alpha: 0.64);
+    final textColor = scheme.onSurface;
+    final borderColor = scheme.onSurface.withValues(alpha: 0.24);
+    return TextField(
+      key: keySuffix == null
+          ? null
+          : ValueKey<String>(
+              'bracu-search-$keySuffix-${Theme.of(context).brightness.name}',
+            ),
+      controller: controller,
+      autofocus: autofocus,
+      style: TextStyle(color: textColor),
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: TextStyle(color: hintColor),
+        prefixIcon: Icon(Icons.search, color: hintColor),
+        suffixIcon: query.trim().isEmpty
+            ? null
+            : IconButton(
+                onPressed: onClear ?? controller.clear,
+                icon: Icon(Icons.close, color: hintColor),
+              ),
+        filled: true,
+        fillColor: BracuPalette.card(context).withValues(alpha: fillAlpha),
+        isDense: true,
+        contentPadding: contentPadding,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
+          borderSide: BorderSide(color: scheme.primary),
+        ),
+      ),
     );
   }
 }

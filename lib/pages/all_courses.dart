@@ -116,42 +116,11 @@ class _AllCoursesPageState extends State<AllCoursesPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
         children: [
-          TextField(
+          BracuSearchField(
             controller: _searchController,
-            style: TextStyle(color: BracuPalette.textPrimary(context)),
-            decoration: InputDecoration(
-              hintText: 'Search by course code or title',
-              hintStyle: TextStyle(color: BracuPalette.textSecondary(context)),
-              prefixIcon: Icon(
-                Icons.search,
-                color: BracuPalette.textSecondary(context),
-              ),
-              suffixIcon: _searchQuery.isEmpty
-                  ? null
-                  : IconButton(
-                      onPressed: () => _searchController.clear(),
-                      icon: Icon(
-                        Icons.close,
-                        color: BracuPalette.textSecondary(context),
-                      ),
-                    ),
-              isDense: true,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: BracuPalette.textSecondary(
-                    context,
-                  ).withValues(alpha: 0.24),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: BracuPalette.primary),
-              ),
-            ),
+            hintText: 'Search by course code or title',
+            query: _searchQuery,
+            keySuffix: 'all-courses',
           ),
           const SizedBox(height: 10),
           Center(

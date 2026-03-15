@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:preconnect/pages/api_test.dart';
 import 'package:preconnect/pages/ui_kit.dart';
@@ -186,54 +185,7 @@ class _DevsPageState extends State<DevsPage> {
                       style: TextStyle(color: textSecondary),
                     ),
                     const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0xFF0B0B0B)
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: BracuPalette.primary.withValues(alpha: 0.12),
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              color: Colors.white,
-                              child: LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final size = constraints.maxWidth;
-                                  return CachedImage(
-                                    url: 'https://preconnect.app/bkash-qr.jpg',
-                                    width: size,
-                                    height: size,
-                                    fit: BoxFit.contain,
-                                    placeholder: const Center(
-                                      child: SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      ),
-                                    ),
-                                    error: const Icon(Icons.qr_code_2_rounded),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          _SupportNumberRow(number: '01865493144'),
-                        ],
-                      ),
-                    ),
+                    const BracuFundingSupportContent(),
                   ],
                 ),
               ),
@@ -366,104 +318,4 @@ class _LinkChip extends StatelessWidget {
 
 Future<void> _openRepo(BuildContext context) async {
   await openExternalUrl(context, 'https://github.com/sabbirba/preconnect');
-}
-
-class _SupportNumberRow extends StatelessWidget {
-  const _SupportNumberRow({required this.number});
-
-  final String number;
-
-  @override
-  Widget build(BuildContext context) {
-    final textSecondary = BracuPalette.textSecondary(context);
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  number,
-                  style: TextStyle(
-                    color: BracuPalette.textPrimary(context),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                InkWell(
-                  onTap: () async {
-                    await Clipboard.setData(ClipboardData(text: number));
-                    if (context.mounted) {
-                      showAppSnackBar(context, 'Number copied');
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: const Padding(
-                    padding: EdgeInsets.all(2),
-                    child: Icon(
-                      Icons.copy_rounded,
-                      size: 16,
-                      color: BracuPalette.primary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'bKash / Nagad / Upay',
-              style: TextStyle(color: textSecondary, fontSize: 11),
-            ),
-            const SizedBox(height: 4),
-            SizedBox(
-              width: 220,
-              child: Column(
-                children: [
-                  Text(
-                    'Send money with reference',
-                    style: TextStyle(color: textSecondary, fontSize: 11),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        'PreConnect App',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(width: 4),
-                      InkWell(
-                        onTap: () async {
-                          await Clipboard.setData(
-                            const ClipboardData(text: 'PreConnect App'),
-                          );
-                          if (context.mounted) {
-                            showAppSnackBar(context, 'Reference copied');
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(8),
-                        child: const Padding(
-                          padding: EdgeInsets.all(2),
-                          child: Icon(
-                            Icons.copy_rounded,
-                            size: 14,
-                            color: BracuPalette.primary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
 }
