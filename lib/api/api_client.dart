@@ -121,6 +121,95 @@ class ApiClient {
     throw ApiException(response.statusCode, response.body);
   }
 
+  Future<http.Response> authenticatedRequest(
+    String method,
+    String url, {
+    String body = '',
+    Map<String, String> additionalHeaders = const <String, String>{},
+    Set<int> acceptedStatusCodes = const <int>{200},
+  }) async {
+    if (method.trim().toUpperCase() == 'GET') {
+      return authenticatedGet(
+        url,
+        additionalHeaders: additionalHeaders,
+        acceptedStatusCodes: acceptedStatusCodes,
+      );
+    }
+    if (!await _ensureWebSessionActive()) {
+      await AuthService().logout();
+      throw const SessionExpiredException();
+    }
+
+    final token = await getAccessToken();
+    if (token == null || token.isEmpty) {
+      throw const UnauthenticatedException();
+    }
+
+    final normalizedMethod = method.trim().toUpperCase();
+    final headers = await _authHeaders(
+      token,
+      method: normalizedMethod,
+      url: url,
+      body: body,
+    );
+    if (additionalHeaders.isNotEmpty) {
+      headers.addAll(additionalHeaders);
+    }
+
+    final response = await _sendAuthenticatedRequest(
+      normalizedMethod,
+      url,
+      headers: headers,
+      body: body,
+    );
+    if (acceptedStatusCodes.contains(response.statusCode)) return response;
+
+    if (response.statusCode == 401) {
+      final refreshStatus = await AuthService().refreshTokenStatus();
+      if (refreshStatus == TokenRefreshStatus.invalidSession) {
+        await AuthService().logout();
+        throw const SessionExpiredException();
+      }
+      if (refreshStatus == TokenRefreshStatus.retryableFailure) {
+        throw ApiException(
+          401,
+          'Token refresh failed due to transient connectivity issues',
+        );
+      }
+
+      final newToken = await getAccessToken();
+      if (newToken == null || newToken.isEmpty) {
+        throw const SessionExpiredException();
+      }
+
+      final retryHeaders = await _authHeaders(
+        newToken,
+        method: normalizedMethod,
+        url: url,
+        body: body,
+      );
+      if (additionalHeaders.isNotEmpty) {
+        retryHeaders.addAll(additionalHeaders);
+      }
+      final retryResponse = await _sendAuthenticatedRequest(
+        normalizedMethod,
+        url,
+        headers: retryHeaders,
+        body: body,
+      );
+      if (acceptedStatusCodes.contains(retryResponse.statusCode)) {
+        return retryResponse;
+      }
+      if (retryResponse.statusCode == 401) {
+        await AuthService().logout();
+        throw const SessionExpiredException();
+      }
+      throw ApiException(retryResponse.statusCode, retryResponse.body);
+    }
+
+    throw ApiException(response.statusCode, response.body);
+  }
+
   Future<bool> _ensureWebSessionActive() async {
     if (!kIsWeb) return true;
     final now = DateTime.now();
@@ -239,5 +328,34 @@ class ApiClient {
     } catch (_) {}
 
     return headers;
+  }
+
+  Future<http.Response> _sendAuthenticatedRequest(
+    String method,
+    String url, {
+    required Map<String, String> headers,
+    required String body,
+  }) {
+    final uri = Uri.parse(url);
+    switch (method) {
+      case 'POST':
+        return http
+            .post(uri, headers: headers, body: body)
+            .timeout(_requestTimeout);
+      case 'PUT':
+        return http
+            .put(uri, headers: headers, body: body)
+            .timeout(_requestTimeout);
+      case 'PATCH':
+        return http
+            .patch(uri, headers: headers, body: body)
+            .timeout(_requestTimeout);
+      case 'DELETE':
+        return http
+            .delete(uri, headers: headers, body: body.isEmpty ? null : body)
+            .timeout(_requestTimeout);
+      default:
+        throw ArgumentError.value(method, 'method', 'Unsupported HTTP method');
+    }
   }
 }

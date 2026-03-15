@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:in_app_update/in_app_update.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/auth_service.dart';
+import 'package:preconnect/api/seat_alert_push_service.dart';
 import 'package:preconnect/pages/home.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/pages/login.dart';
@@ -99,10 +100,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     unawaited(_initializeAppLock());
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      SeatAlertPushService().initialize().catchError((_) {});
       PlayIntegrity.prepare().catchError((_) {});
       PlayInstallReferrer.prefetch().catchError((_) {});
       unawaited(_setupQuickAccessShortcuts());
       unawaited(_runStartupChecks());
+      unawaited(_consumePendingSeatAlertLaunch());
       if (_initialLoggedIn) {
         _validateSessionInBackground();
       }
@@ -124,10 +127,29 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _handleShortcutAction(pendingAction);
   }
 
+  Future<void> _consumePendingSeatAlertLaunch() async {
+    final pendingSectionId = await SeatAlertPushService().consumePendingSectionId();
+    if (pendingSectionId == null) return;
+    if (!_initialLoggedIn && !_canOpenOffline) return;
+    HomePage.requestShortcutTab(HomeTab.seatStatus);
+    final navigator = _navigatorKey.currentState;
+    if (navigator != null) {
+      navigator.pushNamedAndRemoveUntil('/home', (route) => false);
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _navigatorKey.currentState?.pushNamedAndRemoveUntil(
+        '/home',
+        (route) => false,
+      );
+    });
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_consumePendingShortcutAction());
+      unawaited(_consumePendingSeatAlertLaunch());
       unawaited(_refreshAndUnlockIfNeeded());
     }
     if (state == AppLifecycleState.inactive ||

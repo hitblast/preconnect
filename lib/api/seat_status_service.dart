@@ -92,6 +92,9 @@ class SeatStatusService {
   final StoreRef<int, Object?> _detailsStore = intMapStoreFactory.store(
     'seat_status_details',
   );
+  final StoreRef<int, Object?> _alertsStore = intMapStoreFactory.store(
+    'seat_status_alerts',
+  );
   final StoreRef<String, Object?> _staffStore = StoreRef<String, Object?>(
     'seat_status_staff',
   );
@@ -198,6 +201,49 @@ class SeatStatusService {
         await _metaStore.record(_freeLabsSlotsKey).put(txn, slots);
         await _metaStore.record(_freeLabsSlotsDateKey).put(txn, dateKey);
       });
+    } catch (_) {}
+  }
+
+  Future<Map<int, SeatAlertConfig>> loadSeatAlertConfigs() async {
+    try {
+      final db = await _openDb();
+      final records = await _alertsStore.find(db);
+      final output = <int, SeatAlertConfig>{};
+      for (final record in records) {
+        final raw = record.value;
+        if (raw is! Map) continue;
+        final key = record.key;
+        try {
+          final config = SeatAlertConfig.fromJson(
+            key,
+            raw.cast<String, dynamic>(),
+          );
+          if (config.hasAnyRule) {
+            output[key] = config;
+          }
+        } catch (_) {}
+      }
+      return output;
+    } catch (_) {
+      return const <int, SeatAlertConfig>{};
+    }
+  }
+
+  Future<void> saveSeatAlertConfig(SeatAlertConfig config) async {
+    try {
+      final db = await _openDb();
+      if (!config.hasAnyRule) {
+        await _alertsStore.record(config.sectionId).delete(db);
+        return;
+      }
+      await _alertsStore.record(config.sectionId).put(db, config.toJson());
+    } catch (_) {}
+  }
+
+  Future<void> removeSeatAlertConfig(int sectionId) async {
+    try {
+      final db = await _openDb();
+      await _alertsStore.record(sectionId).delete(db);
     } catch (_) {}
   }
 
@@ -455,8 +501,11 @@ class SeatStatusService {
   Future<Map<int, SeatStatusDetailsResponse>>
   _fetchAllSectionsDetailsBundle() async {
     try {
-      final raw = await _fetchJson(_allSectionsDetailsUrl);
-      final parsed = _parseDetailsBundleResponse(raw);
+      final body = await _fetchText(_allSectionsDetailsUrl);
+      final parsed = await compute(
+        _parseDetailsBundleResponseFromBody,
+        body,
+      );
       await _saveDetailsIfAny(parsed);
       return parsed;
     } catch (_) {
@@ -497,6 +546,14 @@ class SeatStatusService {
       acceptedStatusCodes: const <int>{200},
     );
     return jsonDecode(response.body);
+  }
+
+  Future<String> _fetchText(String url) async {
+    final response = await _client.publicGet(
+      url,
+      acceptedStatusCodes: const <int>{200},
+    );
+    return response.body;
   }
 
   Future<void> _saveDetailsIfAny(
@@ -580,6 +637,12 @@ Map<int, SeatStatusDetailsResponse> _parseDetailsBundleResponse(dynamic raw) {
   }
 
   return const <int, SeatStatusDetailsResponse>{};
+}
+
+Map<int, SeatStatusDetailsResponse> _parseDetailsBundleResponseFromBody(
+  String body,
+) {
+  return _parseDetailsBundleResponse(jsonDecode(body));
 }
 
 Map<int, int> _parseSeatMapResponse(dynamic raw) {
@@ -704,3 +767,85 @@ class SeatStatusStaffInfo {
     };
   }
 }
+
+class SeatAlertConfig {
+  const SeatAlertConfig({
+    required this.sectionId,
+    this.notifyOnAvailable = false,
+    this.availableOneTime = true,
+    this.thresholdSeats,
+    this.thresholdOneTime = true,
+    this.notifyOnAnyChange = false,
+    this.changeCooldownMinutes = 5,
+    this.lastChangeNotifiedAtMs,
+  });
+
+  final int sectionId;
+  final bool notifyOnAvailable;
+  final bool availableOneTime;
+  final int? thresholdSeats;
+  final bool thresholdOneTime;
+  final bool notifyOnAnyChange;
+  final int changeCooldownMinutes;
+  final int? lastChangeNotifiedAtMs;
+
+  bool get hasAnyRule =>
+      notifyOnAvailable || thresholdSeats != null || notifyOnAnyChange;
+
+  factory SeatAlertConfig.fromJson(int sectionId, Map<String, dynamic> json) {
+    return SeatAlertConfig(
+      sectionId: sectionId,
+      notifyOnAvailable: json['notifyOnAvailable'] == true,
+      availableOneTime: json['availableOneTime'] != false,
+      thresholdSeats: int.tryParse('${json['thresholdSeats'] ?? ''}'),
+      thresholdOneTime: json['thresholdOneTime'] != false,
+      notifyOnAnyChange: json['notifyOnAnyChange'] == true,
+      changeCooldownMinutes:
+          int.tryParse('${json['changeCooldownMinutes'] ?? ''}') ?? 5,
+      lastChangeNotifiedAtMs: int.tryParse(
+        '${json['lastChangeNotifiedAtMs'] ?? ''}',
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'notifyOnAvailable': notifyOnAvailable,
+      'availableOneTime': availableOneTime,
+      'thresholdSeats': thresholdSeats,
+      'thresholdOneTime': thresholdOneTime,
+      'notifyOnAnyChange': notifyOnAnyChange,
+      'changeCooldownMinutes': changeCooldownMinutes,
+      'lastChangeNotifiedAtMs': lastChangeNotifiedAtMs,
+    };
+  }
+
+  SeatAlertConfig copyWith({
+    bool? notifyOnAvailable,
+    bool? availableOneTime,
+    Object? thresholdSeats = _seatAlertSentinel,
+    bool? thresholdOneTime,
+    bool? notifyOnAnyChange,
+    int? changeCooldownMinutes,
+    Object? lastChangeNotifiedAtMs = _seatAlertSentinel,
+  }) {
+    return SeatAlertConfig(
+      sectionId: sectionId,
+      notifyOnAvailable: notifyOnAvailable ?? this.notifyOnAvailable,
+      availableOneTime: availableOneTime ?? this.availableOneTime,
+      thresholdSeats: identical(thresholdSeats, _seatAlertSentinel)
+          ? this.thresholdSeats
+          : thresholdSeats as int?,
+      thresholdOneTime: thresholdOneTime ?? this.thresholdOneTime,
+      notifyOnAnyChange: notifyOnAnyChange ?? this.notifyOnAnyChange,
+      changeCooldownMinutes:
+          changeCooldownMinutes ?? this.changeCooldownMinutes,
+      lastChangeNotifiedAtMs:
+          identical(lastChangeNotifiedAtMs, _seatAlertSentinel)
+          ? this.lastChangeNotifiedAtMs
+          : lastChangeNotifiedAtMs as int?,
+    );
+  }
+}
+
+const Object _seatAlertSentinel = Object();

@@ -111,6 +111,7 @@ class _HomePageState extends State<HomePage> {
       _builtTabs.add(pendingShortcutTab);
     }
     HomeTabRegistry.setActive(selectedTab);
+    HomeTabRegistry.activeTab.addListener(_onRegistryTabChanged);
     _shortcutTabSubscription = HomePage._shortcutTabController.stream.listen((
       tab,
     ) {
@@ -122,7 +123,15 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _shortcutTabSubscription?.cancel();
+    HomeTabRegistry.activeTab.removeListener(_onRegistryTabChanged);
     super.dispose();
+  }
+
+  void _onRegistryTabChanged() {
+    if (!mounted) return;
+    final requestedTab = HomeTabRegistry.activeTab.value;
+    if (requestedTab == selectedTab) return;
+    _setTab(requestedTab);
   }
 
   void _setTab(HomeTab tab) {

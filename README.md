@@ -163,6 +163,11 @@ The app does not call BRACU Connect seat-status endpoints directly. It uses the 
 - `GET /staff/:initial`
 - `GET /seat-status/stream` (real-time trigger)
 - `GET /course-prerequisites`
+- `POST /push/device/register`
+- `POST /push/device/unregister`
+- `PUT /push/seat-alerts`
+- `PUT /push/seat-alerts/:sectionId`
+- `DELETE /push/seat-alerts/:sectionId`
 
 Current client flow:
 
@@ -176,6 +181,7 @@ Why this reduces Connect API calls:
 - Shared upstream fetches across all users
 - CDN/cache-friendly response headers
 - No repeated per-device direct Connect seat-status polling
+- Seat alerts are wired through Firebase Cloud Messaging and the hosted seat-status server API.
 
 ## Documentation & Policies
 
@@ -184,6 +190,7 @@ Why this reduces Connect API calls:
 - Security: [SECURITY.md](SECURITY.md)
 - Environment Example: [.env.example](.env.example)
 - Workflows: [.github/workflows/release.yml](.github/workflows/release.yml)
+- Hosted Seat Status API Server: `https://api.preconnect.app`
 
 ## Developer Credit
 - NaiveInvestigator — GitHub: [@NaiveInvestigator](https://github.com/NaiveInvestigator)

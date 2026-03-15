@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:preconnect/api/seat_alert_push_service.dart';
 import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/model/seat_status_info.dart';
@@ -32,12 +33,14 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   ];
 
   final SeatStatusService _service = SeatStatusService();
+  final SeatAlertPushService _pushService = SeatAlertPushService();
   final List<_SeatStatusCardData> _cards = <_SeatStatusCardData>[];
   final List<_SeatStatusCardData> _visibleCards = <_SeatStatusCardData>[];
   final Map<int, SeatStatusDetailsResponse> _detailsCache =
       <int, SeatStatusDetailsResponse>{};
   final Map<String, SeatStatusStaffInfo> _staffInfoByInitial =
       <String, SeatStatusStaffInfo>{};
+  final Map<int, SeatAlertConfig> _seatAlerts = <int, SeatAlertConfig>{};
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
   bool _isInitialLoading = true;
@@ -68,6 +71,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       });
     });
     unawaited(_reloadAll());
+    unawaited(_loadSeatAlerts());
     _isSavingCache = _service.isSavingDetailsCache.value;
     _service.isSavingDetailsCache.addListener(_onCacheSaveStateChanged);
     WidgetsBinding.instance.addObserver(this);
@@ -167,6 +171,19 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     }
   }
 
+  Future<void> _loadSeatAlerts() async {
+    final loaded = await _service.loadSeatAlertConfigs();
+    try {
+      await _pushService.syncAllSeatAlertConfigs(loaded);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _seatAlerts
+        ..clear()
+        ..addAll(loaded);
+    });
+  }
+
   List<_SeatStatusCardData> _buildCardsFromDetailsMap(
     Map<int, SeatStatusDetailsResponse> detailsMap,
   ) {
@@ -185,6 +202,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     Map<int, SeatStatusDetailsResponse> detailsMap,
   ) async {
     if (!mounted || detailsMap.isEmpty) return;
+    final previousCards = List<_SeatStatusCardData>.from(_cards);
     _detailsCache
       ..clear()
       ..addAll(detailsMap);
@@ -197,8 +215,260 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         _isInitialLoading = false;
       });
     }
+    await _processSeatAlerts(previousCards, updated);
     unawaited(_loadCachedStaffInfoForDetails(detailsMap.values));
     _queueStaffInfoResolve(detailsMap.values);
+  }
+
+  Future<void> _processSeatAlerts(
+    List<_SeatStatusCardData> previous,
+    List<_SeatStatusCardData> next,
+  ) async {
+    if (_seatAlerts.isEmpty) return;
+    final previousById = {
+      for (final item in previous) item.sectionId: item,
+    };
+    final nextById = {
+      for (final item in next) item.sectionId: item,
+    };
+    final triggeredMessages = <String>[];
+    var changedConfig = false;
+    final now = DateTime.now();
+
+    for (final entry in _seatAlerts.entries.toList()) {
+      final sectionId = entry.key;
+      var config = entry.value;
+      final oldItem = previousById[sectionId];
+      final newItem = nextById[sectionId];
+      if (newItem == null) continue;
+      final oldRemaining = oldItem?.remaining;
+      final newRemaining = newItem.remaining;
+
+      if (config.notifyOnAvailable &&
+          (oldRemaining == null || oldRemaining <= 0) &&
+          newRemaining > 0) {
+        triggeredMessages.add(
+          '${newItem.courseCode}-${newItem.sectionName} now has $newRemaining seat${newRemaining == 1 ? '' : 's'} available',
+        );
+        if (config.availableOneTime) {
+          config = config.copyWith(notifyOnAvailable: false);
+          changedConfig = true;
+        }
+      }
+
+      final threshold = config.thresholdSeats;
+      if (threshold != null &&
+          (oldRemaining == null || oldRemaining < threshold) &&
+          newRemaining >= threshold) {
+        triggeredMessages.add(
+          '${newItem.courseCode}-${newItem.sectionName} reached $newRemaining available seat${newRemaining == 1 ? '' : 's'}',
+        );
+        if (config.thresholdOneTime) {
+          config = config.copyWith(thresholdSeats: null);
+          changedConfig = true;
+        }
+      }
+
+      if (config.notifyOnAnyChange &&
+          oldRemaining != null &&
+          oldRemaining != newRemaining) {
+        final diff = newRemaining - oldRemaining;
+        final direction = diff > 0 ? 'up' : 'down';
+        triggeredMessages.add(
+          '${newItem.courseCode}-${newItem.sectionName} changed $direction to $newRemaining seats',
+        );
+        config = config.copyWith(
+          lastChangeNotifiedAtMs: now.millisecondsSinceEpoch,
+        );
+        changedConfig = true;
+      }
+
+      if (!config.hasAnyRule) {
+        _seatAlerts.remove(sectionId);
+        await _service.removeSeatAlertConfig(sectionId);
+        try {
+          await _pushService.removeSeatAlertConfig(sectionId);
+        } catch (_) {}
+        changedConfig = true;
+        continue;
+      }
+      if (config != entry.value) {
+        _seatAlerts[sectionId] = config;
+        await _service.saveSeatAlertConfig(config);
+        try {
+          await _pushService.syncSeatAlertConfig(config);
+        } catch (_) {}
+      }
+    }
+
+    if (changedConfig && mounted) {
+      setState(() {});
+    }
+    if (triggeredMessages.isEmpty || !mounted) return;
+    final first = triggeredMessages.first;
+    final suffix = triggeredMessages.length > 1
+        ? ' • +${triggeredMessages.length - 1} more'
+        : '';
+    showAppSnackBar(context, '$first$suffix');
+  }
+
+  Future<void> _openSeatAlertSheet(_SeatStatusCardData item) async {
+    final existing =
+        _seatAlerts[item.sectionId] ?? SeatAlertConfig(sectionId: item.sectionId);
+    var temp = existing;
+    const thresholdOptions = <int>[1, 2, 3, 5, 10];
+    final updated = await showModalBottomSheet<SeatAlertConfig?>(
+      context: context,
+      backgroundColor: BracuPalette.card(context),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        final textPrimary = BracuPalette.textPrimary(sheetContext);
+        final textSecondary = BracuPalette.textSecondary(sheetContext);
+        return SafeArea(
+          child: StatefulBuilder(
+            builder: (context, setSheetState) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 42,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: textSecondary.withValues(alpha: 0.28),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      '${item.courseCode} - ${item.sectionName}',
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${item.remaining} seat${item.remaining == 1 ? '' : 's'} remaining',
+                      style: TextStyle(
+                        color: textSecondary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('When seats become available'),
+                      value: temp.notifyOnAvailable,
+                      onChanged: (value) {
+                        setSheetState(() {
+                          temp = temp.copyWith(notifyOnAvailable: value);
+                        });
+                      },
+                    ),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('When seats reach your limit'),
+                      value: temp.thresholdSeats != null,
+                      onChanged: (value) {
+                        setSheetState(() {
+                          temp = temp.copyWith(
+                            thresholdSeats: value ? (temp.thresholdSeats ?? 1) : null,
+                          );
+                        });
+                      },
+                    ),
+                    if (temp.thresholdSeats != null) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: thresholdOptions.map((threshold) {
+                          final selected = temp.thresholdSeats == threshold;
+                          return ChoiceChip(
+                            label: Text('$threshold+'),
+                            selected: selected,
+                            onSelected: (_) {
+                              setSheetState(() {
+                                temp = temp.copyWith(thresholdSeats: threshold);
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('When seat count changes'),
+                      value: temp.notifyOnAnyChange,
+                      onChanged: (value) {
+                        setSheetState(() {
+                          temp = temp.copyWith(notifyOnAnyChange: value);
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        if (existing.hasAnyRule)
+                          TextButton(
+                            onPressed: () => Navigator.of(sheetContext).pop(
+                              SeatAlertConfig(sectionId: item.sectionId),
+                            ),
+                            child: const Text('Remove all'),
+                          ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(temp),
+                          child: const Text('Save'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+    if (!mounted || updated == null) return;
+    if (!updated.hasAnyRule) {
+      await _service.removeSeatAlertConfig(item.sectionId);
+      try {
+        await _pushService.removeSeatAlertConfig(item.sectionId);
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _seatAlerts.remove(item.sectionId);
+      });
+      showAppSnackBar(context, 'Seat alert removed');
+      return;
+    }
+    await _service.saveSeatAlertConfig(updated);
+    try {
+      await _pushService.syncSeatAlertConfig(updated);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _seatAlerts[item.sectionId] = updated;
+    });
+    showAppSnackBar(context, 'Seat alert saved');
   }
 
   _SeatStatusCardData _buildFallbackCard({
@@ -369,6 +639,13 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       title: 'Seat Status',
       subtitle: 'Live Sections',
       icon: Icons.insights_outlined,
+      actions: [
+        BracuNotificationsIconButton(
+          onTap: () => HomeTabRegistry.setActive(HomeTab.notifications),
+          iconSize: 24,
+          padding: 8,
+        ),
+      ],
       body: Stack(
         children: [
           BracuRefreshListBuilder(
@@ -401,7 +678,11 @@ class _SeatStatusPageState extends State<SeatStatusPage>
               final item = _visibleCards[index - 1];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: _SeatStatusCard(item: item),
+                child: _SeatStatusCard(
+                  item: item,
+                  hasAlert: _seatAlerts[item.sectionId]?.hasAnyRule == true,
+                  onAlertTap: () => _openSeatAlertSheet(item),
+                ),
               );
             },
           ),
@@ -975,9 +1256,15 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 }
 
 class _SeatStatusCard extends StatelessWidget {
-  const _SeatStatusCard({required this.item});
+  const _SeatStatusCard({
+    required this.item,
+    required this.hasAlert,
+    required this.onAlertTap,
+  });
 
   final _SeatStatusCardData item;
+  final bool hasAlert;
+  final VoidCallback onAlertTap;
 
   Future<void> _openFacultyEmail(BuildContext context) async {
     await openMailComposer(context, item.facultyEmail);
@@ -1075,16 +1362,18 @@ class _SeatStatusCard extends StatelessWidget {
                     color: Colors.transparent,
                     child: InkWell(
                       customBorder: const CircleBorder(),
-                      onTap: () {
-                        showAppSnackBar(context, 'Seat alerts coming soon.');
-                      },
+                      onTap: onAlertTap,
                       child: Container(
                         width: 38,
                         height: 38,
                         alignment: Alignment.center,
                         child: Icon(
-                          Icons.notifications_outlined,
-                          color: BracuPalette.textPrimary(context),
+                          hasAlert
+                              ? Icons.notifications_active_rounded
+                              : Icons.notifications_outlined,
+                          color: hasAlert
+                              ? BracuPalette.primary
+                              : BracuPalette.textPrimary(context),
                           size: 20,
                         ),
                       ),

@@ -15,6 +15,7 @@ class ApiConfig {
   static const String cdnBase = 'https://connect.bracu.ac.bd/cdn';
   static const String seatStatusProxyBase = 'https://api.preconnect.app';
   static const String webLoginBrokerBase = seatStatusProxyBase;
+  static const String pushAlertsBase = seatStatusProxyBase;
 
   static const String clientId = 'slm';
   static const String redirectUri = 'https://connect.bracu.ac.bd/';
@@ -61,6 +62,13 @@ class ApiConfig {
       '/reg/v1/calendar/$calendarId?startDate=$startDate&endDate=$endDate';
 
   static String notificationViewPath(int id) => '/ns/notifications/view/$id';
+
+  static const String pushDeviceRegisterPath = '/push/device/register';
+  static const String pushDeviceUnregisterPath = '/push/device/unregister';
+  static const String seatAlertSubscriptionsPath = '/push/seat-alerts';
+
+  static String seatAlertSubscriptionPath(int sectionId) =>
+      '$seatAlertSubscriptionsPath/$sectionId';
 
   static const Map<String, String> apiHeaders = {
     'X-REALM': 'bracu',

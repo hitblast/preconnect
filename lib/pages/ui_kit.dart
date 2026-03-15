@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:native_file_preview/native_file_preview.dart';
+import 'package:preconnect/api/notification_service.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/api/progress_service.dart';
 import 'package:preconnect/api/schedule_service.dart';
@@ -12,6 +13,7 @@ import 'package:preconnect/api/grade_sheet_service.dart';
 import 'package:preconnect/model/progress_info.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/cgpa_calculator.dart';
+import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/time_utils.dart';
 import 'package:preconnect/tools/web_pdf_opener.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -905,6 +907,104 @@ class BracuSelectDropdownChip<T> extends StatelessWidget {
           onSelected(value);
         },
       ),
+    );
+  }
+}
+
+class BracuNotificationsIconButton extends StatefulWidget {
+  const BracuNotificationsIconButton({
+    super.key,
+    required this.onTap,
+    this.iconSize = 20,
+    this.padding = 7,
+  });
+
+  final VoidCallback onTap;
+  final double iconSize;
+  final double padding;
+
+  @override
+  State<BracuNotificationsIconButton> createState() =>
+      _BracuNotificationsIconButtonState();
+}
+
+class _BracuNotificationsIconButtonState
+    extends State<BracuNotificationsIconButton> {
+  late Future<NotificationsFeed?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = NotificationService().getRecentNotifications();
+    RefreshBus.instance.addListener(_onRefreshSignal);
+  }
+
+  @override
+  void dispose() {
+    RefreshBus.instance.removeListener(_onRefreshSignal);
+    super.dispose();
+  }
+
+  void _onRefreshSignal() {
+    if (!mounted || !RefreshBus.instance.isReason('notifications')) return;
+    setState(() {
+      _future = NotificationService().getRecentNotifications();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<NotificationsFeed?>(
+      future: _future,
+      builder: (context, snapshot) {
+        final newCount = snapshot.data?.newCount ?? 0;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            InkWell(
+              onTap: widget.onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: EdgeInsets.all(widget.padding),
+                decoration: BoxDecoration(
+                  color: BracuPalette.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.notifications_outlined,
+                  size: widget.iconSize,
+                  color: BracuPalette.primary,
+                ),
+              ),
+            ),
+            if (newCount > 0)
+              Positioned(
+                top: -4,
+                right: -4,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 18),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD63B3B),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    newCount > 9 ? '9+' : '$newCount',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
