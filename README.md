@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="web/icons/Icon-192.png" alt="PreConnect icon" width="96" height="96" />
+<img src="assets/logo/preconnect-logo-transparent.png" alt="PreConnect icon" width="96" height="96" />
 
 # PreConnect
 

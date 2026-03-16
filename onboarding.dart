@@ -230,12 +230,43 @@ class _HeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Center(
-          child: Image.asset(
-            'assets/logo/preconnect-logo-transparent.png',
-            width: 120,
-            height: 120,
-            filterQuality: FilterQuality.high,
+        Container(
+          height: 260,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            color: Colors.white,
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned(
+                top: 18,
+                left: 20,
+                child: _BadgeIcon(
+                  icon: Icons.schedule_outlined,
+                  color: const Color(0xFF7C56FF),
+                ),
+              ),
+              Positioned(
+                top: 18,
+                right: 20,
+                child: _BadgeIcon(
+                  icon: Icons.school_outlined,
+                  color: BracuPalette.accent,
+                ),
+              ),
+              Center(
+                child: Image.asset(
+                  'assets/splash/preconnect-splash.png',
+                  width: 360,
+                  height: 360,
+                  filterQuality: FilterQuality.high,
+                  color: Colors.white,
+                  colorBlendMode: BlendMode.multiply,
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 14),

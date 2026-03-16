@@ -542,10 +542,10 @@ class _BootPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       body: Center(
         child: Image.asset(
-          'assets/splash/preconnect-splash.png',
+          'assets/logo/preconnect-logo-transparent.png',
           width: 108,
           height: 108,
           filterQuality: FilterQuality.high,
