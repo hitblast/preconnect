@@ -252,30 +252,6 @@ class _HeroCard extends StatelessWidget {
   }
 }
 
-class _BadgeIcon extends StatelessWidget {
-  const _BadgeIcon({required this.icon, required this.color});
-
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.center,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.13),
-          shape: BoxShape.circle,
-          border: Border.all(color: color.withValues(alpha: 0.18)),
-        ),
-        child: Icon(icon, size: 20, color: color),
-      ),
-    );
-  }
-}
-
 class _InfoCard extends StatelessWidget {
   const _InfoCard({
     required this.icon,

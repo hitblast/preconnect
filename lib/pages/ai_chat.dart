@@ -4,22 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
-import 'package:preconnect/api/advising_service.dart';
 import 'package:preconnect/api/api_config.dart';
-import 'package:preconnect/api/attendance_service.dart';
-import 'package:preconnect/api/calendar_service.dart';
-import 'package:preconnect/api/notification_service.dart';
-import 'package:preconnect/api/payment_service.dart';
-import 'package:preconnect/api/profile_service.dart';
-import 'package:preconnect/api/progress_service.dart';
-import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/api/sembast_cache.dart';
-import 'package:preconnect/api/seat_status_service.dart';
-import 'package:preconnect/model/calendar_info.dart';
 import 'package:preconnect/pages/ui_kit.dart';
-import 'package:preconnect/tools/holiday_status.dart';
-import 'package:preconnect/tools/ramadan_timing.dart';
 
 Future<void> showAiChatBottomSheet(
   BuildContext context, {
@@ -321,14 +308,12 @@ class _AiChatPanelState extends State<AiChatPanel> {
     _scrollToBottom();
 
     try {
-      final localContext = await _buildLocalContext();
       final response = await http
           .post(
             Uri.parse('${ApiConfig.aiChatBase}${ApiConfig.aiChatPath}'),
             headers: const {'content-type': 'application/json'},
             body: jsonEncode({
               'message': text,
-              if (localContext.isNotEmpty) 'localContext': localContext,
               'history': history,
             }),
           )
@@ -382,243 +367,6 @@ class _AiChatPanelState extends State<AiChatPanel> {
         curve: Curves.easeOutCubic,
       );
     });
-  }
-
-  Future<Map<String, dynamic>> _buildLocalContext() async {
-    final profile = await _guard(() => ProfileService().getProfile()) ?? {};
-    final progress = await _guard(() => ProgressService().getProgress());
-    final scheduleJson = await _guard(() => ScheduleService().getStudentSchedule());
-    final attendanceRaw = await _guard(
-      () => AttendanceService().getAttendanceInfo(),
-    );
-    final paymentRaw = await _guard(() => PaymentService().getPaymentInfo());
-    final advising = await _guard(() => AdvisingService().getAdvisingInfo());
-    final calendar = await _guard(() => CalendarService().getCalendar());
-    final notifications = await _guard(
-      () => NotificationService().getRecentNotifications(),
-    );
-    final holiday = await _guard(() => HolidayTiming.getTodayStatus());
-    final ramadan = await _guard(() => RamadanTiming.getRamadanStatus());
-    final seatAlerts = await _guard(
-          () => SeatStatusService().loadSeatAlertConfigs(),
-        ) ??
-        const <int, dynamic>{};
-    final sections = ScheduleService().parseStudentSections(scheduleJson);
-
-    final fullName = (profile['fullName'] ?? '').trim();
-    final departmentName = (profile['departmentName'] ?? '').trim();
-    final currentSemester = (profile['currentSemester'] ?? '').trim();
-    final today = DateFormat('EEEE').format(DateTime.now()).toUpperCase();
-
-    final todayClasses = <Map<String, String>>[];
-    final currentCourses = <String>{};
-    final completedCourses = <Map<String, String>>[];
-    final remainingCourses = <Map<String, String>>[];
-    final headerProgress = <Map<String, String>>[];
-    final calendarItems = <Map<String, String>>[];
-    final notificationItems = <Map<String, String>>[];
-    final seatAlertItems = <Map<String, dynamic>>[];
-
-    for (final item in sections) {
-      currentCourses.add(item.courseCode.trim());
-      for (final slot in item.sectionSchedule.classSchedules) {
-        if (slot.day.trim().toUpperCase() != today) continue;
-        todayClasses.add({
-          'courseCode': item.courseCode.trim(),
-          'section': item.sectionName.trim(),
-          'startTime': slot.startTime.trim(),
-          'endTime': slot.endTime.trim(),
-          'room': item.roomNumber.trim(),
-        });
-      }
-    }
-
-    if (progress != null) {
-      for (final item in progress.completedCourses) {
-        completedCourses.add({
-          'code': item.code.trim(),
-          'title': item.title.trim(),
-          'semesterSession': item.semesterSession.trim(),
-          'grade': item.grade.trim(),
-          'credit': _formatDouble(item.credit),
-        });
-      }
-      for (final item in progress.remainingCourses.take(24)) {
-        remainingCourses.add({
-          'code': item.code.trim(),
-          'title': item.title.trim(),
-          'prerequisiteExpression': item.prerequisiteExpression.trim(),
-        });
-      }
-      for (final item in progress.headerProgress) {
-        headerProgress.add({
-          'title': item.title.trim(),
-          'requiredCredit': _formatDouble(item.requiredCredit),
-          'earnedCredit': _formatDouble(item.earnedCredit),
-        });
-      }
-    }
-
-    if (calendar != null) {
-      for (final item in calendar.items.take(12)) {
-        calendarItems.add(_calendarEntryToMap(item));
-      }
-    }
-
-    if (notifications != null) {
-      for (final item in notifications.items.take(8)) {
-        notificationItems.add({
-          'title': item.title,
-          'module': item.module,
-          'seen': item.seen ? 'true' : 'false',
-        });
-      }
-    }
-
-    for (final entry in seatAlerts.entries) {
-      final alert = entry.value;
-      seatAlertItems.add({
-        'sectionId': entry.key,
-        'notifyOnAvailable': alert.notifyOnAvailable,
-        'thresholdSeats': alert.thresholdSeats,
-        'notifyOnAnyChange': alert.notifyOnAnyChange,
-        'changeCooldownMinutes': alert.changeCooldownMinutes,
-      });
-    }
-
-    todayClasses.sort((a, b) => a['startTime']!.compareTo(b['startTime']!));
-    completedCourses.sort(
-      (a, b) => (a['code'] ?? '').compareTo(b['code'] ?? ''),
-    );
-    remainingCourses.sort(
-      (a, b) => (a['code'] ?? '').compareTo(b['code'] ?? ''),
-    );
-
-    return {
-      'profile': {
-        if (fullName.isNotEmpty) 'fullName': fullName,
-        if ((profile['studentId'] ?? '').trim().isNotEmpty)
-          'studentId': (profile['studentId'] ?? '').trim(),
-        if ((profile['email'] ?? '').trim().isNotEmpty)
-          'email': (profile['email'] ?? '').trim(),
-        if ((profile['mobileNo'] ?? '').trim().isNotEmpty)
-          'mobileNo': (profile['mobileNo'] ?? '').trim(),
-        if ((profile['bloodGroup'] ?? '').trim().isNotEmpty)
-          'bloodGroup': (profile['bloodGroup'] ?? '').trim(),
-        if (departmentName.isNotEmpty) 'departmentName': departmentName,
-        if (currentSemester.isNotEmpty) 'currentSemester': currentSemester,
-        if ((profile['program'] ?? '').trim().isNotEmpty)
-          'program': (profile['program'] ?? '').trim(),
-        if ((profile['cgpa'] ?? '').trim().isNotEmpty)
-          'cgpa': (profile['cgpa'] ?? '').trim(),
-      },
-      if (fullName.isNotEmpty) 'fullName': fullName,
-      if (departmentName.isNotEmpty) 'departmentName': departmentName,
-      if (currentSemester.isNotEmpty) 'currentSemester': currentSemester,
-      if (todayClasses.isNotEmpty) 'todayClasses': todayClasses.take(8).toList(),
-      if (_decodeJsonString(attendanceRaw) != null)
-        'attendance': _decodeJsonString(attendanceRaw),
-      if (_decodeJsonString(paymentRaw) != null)
-        'payment': _decodeJsonString(paymentRaw),
-      if (advising != null && advising.isNotEmpty) 'advising': advising,
-      if (calendar != null)
-        'calendar': {
-          'rangeStart': calendar.rangeStart,
-          'rangeEnd': calendar.rangeEnd,
-          'items': calendarItems,
-        },
-      if (notifications != null)
-        'notifications': {
-          'newCount': notifications.newCount,
-          'items': notificationItems,
-        },
-      if (holiday != null)
-        'holiday': {
-          'isTodayHoliday': holiday.isTodayHoliday,
-          'todayHolidayNames': holiday.todayHolidayNames,
-          'nextHolidaysThisYear': holiday.nextHolidaysThisYear
-              .take(12)
-              .map(
-                (item) => {
-                  'startDate': item.startDate,
-                  'endDate': item.endDate,
-                  'label': item.label,
-                },
-              )
-              .toList(),
-        },
-      if (ramadan != null)
-        'ramadan': {
-          'isRamadan': ramadan.isRamadan,
-          'ramadanDay': ramadan.ramadanDay,
-          'sehriEndsAt': ramadan.sehriEndsAt,
-          'iftarAt': ramadan.iftarAt,
-        },
-      if (seatAlertItems.isNotEmpty) 'seatAlerts': seatAlertItems,
-      if (progress != null)
-        'progress': {
-          'programName': progress.programName.trim(),
-          'academicDegree': progress.academicDegree.trim(),
-          'curriculumSession': progress.curriculumSession.trim(),
-          'totalCredit': _formatDouble(progress.totalCredit),
-          'completedCredit': _formatDouble(progress.completedCredit),
-          'headerProgress': headerProgress,
-          'completedCourses': completedCourses.take(80).toList(),
-          'remainingCourses': remainingCourses,
-        },
-      if (currentCourses.isNotEmpty)
-        'currentCourses': currentCourses
-            .where((code) => code.isNotEmpty)
-            .take(12)
-            .toList()
-          ..sort(),
-    };
-  }
-
-  Future<T?> _guard<T>(Future<T> Function() loader) async {
-    try {
-      return await loader();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  String _formatDouble(double value) {
-    if (value == value.roundToDouble()) {
-      return value.toStringAsFixed(0);
-    }
-    return value.toStringAsFixed(2);
-  }
-
-  dynamic _decodeJsonString(String? raw) {
-    final value = (raw ?? '').trim();
-    if (value.isEmpty) return null;
-    try {
-      return jsonDecode(value);
-    } catch (_) {
-      return value;
-    }
-  }
-
-  Map<String, String> _calendarEntryToMap(CalendarEntry item) {
-    return {
-      'label': item.label,
-      'typeKey': item.typeKey,
-      'date': item.date,
-      'startDate': item.startDate,
-      'endDate': item.endDate,
-      'startTime': item.startTime,
-      'endTime': item.endTime,
-      'place': item.place,
-      'roomNumber': item.roomNumber,
-      'roomName': item.roomName,
-      'building': item.building,
-      'faculty': item.faculty,
-      'department': item.department,
-      'actor': item.actor,
-      'sessionLabel': item.sessionLabel,
-      'ref': item.ref,
-    };
   }
 
   @override
