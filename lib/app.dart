@@ -14,6 +14,7 @@ import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/play_install_referrer.dart';
 import 'package:preconnect/tools/play_integrity.dart';
 import 'package:preconnect/tools/app_lock_service.dart';
+import 'package:preconnect/tools/push_notifications_service.dart';
 import 'package:preconnect/tools/token_storage.dart';
 import 'package:preconnect/tools/web_login_session_store.dart';
 
@@ -30,9 +31,9 @@ class AppBootstrapState {
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, required this.bootstrapState});
+  const MyApp({super.key, this.bootstrapState});
 
-  final AppBootstrapState bootstrapState;
+  final AppBootstrapState? bootstrapState;
 
   static Future<AppBootstrapState> bootstrap() async {
     final prefs = await SharedPreferences.getInstance();
@@ -84,12 +85,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   static const String _shortcutExams = 'quick.exams';
   static const String _shortcutFriends = 'quick.friends';
 
-  late final ValueNotifier<ThemeMode> _themeMode = ValueNotifier<ThemeMode>(
-    widget.bootstrapState.themeMode,
-  );
+  late final ValueNotifier<ThemeMode> _themeMode;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-  late final bool _initialLoggedIn = widget.bootstrapState.isLoggedIn;
-  late final bool _canOpenOffline = widget.bootstrapState.canOpenOffline;
+  late bool _initialLoggedIn;
+  late bool _canOpenOffline;
+  AppBootstrapState? _resolvedBootstrapState;
   bool _appLockEnabled = false;
   bool _isUnlocked = true;
   bool _isUnlocking = false;
@@ -97,9 +97,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _resolvedBootstrapState = widget.bootstrapState;
+    _initialLoggedIn = widget.bootstrapState?.isLoggedIn ?? false;
+    _canOpenOffline = widget.bootstrapState?.canOpenOffline ?? false;
+    _themeMode = ValueNotifier<ThemeMode>(
+      widget.bootstrapState?.themeMode ?? ThemeMode.system,
+    );
     WidgetsBinding.instance.addObserver(this);
+    if (_resolvedBootstrapState == null) {
+      unawaited(_bootstrapInBackground());
+    }
     unawaited(_initializeAppLock());
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      PushNotificationsService().initialize().catchError((_) {});
       SeatAlertPushService().initialize().catchError((_) {});
       PlayIntegrity.prepare().catchError((_) {});
       PlayInstallReferrer.prefetch().catchError((_) {});
@@ -110,6 +120,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         _validateSessionInBackground();
       }
     });
+  }
+
+  Future<void> _bootstrapInBackground() async {
+    final next = await MyApp.bootstrap();
+    if (!mounted) return;
+    _resolvedBootstrapState = next;
+    _initialLoggedIn = next.isLoggedIn;
+    _canOpenOffline = next.canOpenOffline;
+    _themeMode.value = next.themeMode;
+    setState(() {});
   }
 
   Future<void> _setupQuickAccessShortcuts() async {
@@ -471,9 +491,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               '/home': (context) => const HomePage(),
               '/onboarding': (context) => const OnboardingPage(),
             },
-            home: (_initialLoggedIn || _canOpenOffline)
-                ? const HomePage()
-                : const OnboardingPage(),
+            home: _resolvedBootstrapState == null
+                ? const _BootPage()
+                : (_initialLoggedIn || _canOpenOffline)
+                      ? const HomePage()
+                      : const OnboardingPage(),
           ),
         );
       },
@@ -508,5 +530,24 @@ class ThemeController extends InheritedWidget {
   @override
   bool updateShouldNotify(ThemeController oldWidget) {
     return notifier != oldWidget.notifier;
+  }
+}
+
+class _BootPage extends StatelessWidget {
+  const _BootPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Center(
+        child: Image.asset(
+          'assets/splash/preconnect-splash.png',
+          width: 108,
+          height: 108,
+          filterQuality: FilterQuality.high,
+        ),
+      ),
+    );
   }
 }

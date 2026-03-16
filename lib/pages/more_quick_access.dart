@@ -25,7 +25,7 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
           LayoutBuilder(
             builder: (context, constraints) {
               const spacing = 12.0;
-              final width = (constraints.maxWidth - spacing * 2) / 3;
+              final width = (constraints.maxWidth - spacing * 3) / 4;
               return Center(
                 child: Wrap(
                   alignment: WrapAlignment.center,
@@ -51,22 +51,6 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
                     ),
                     QuickAccessCard(
                       width: width,
-                      icon: Icons.calendar_today_outlined,
-                      title: 'Events',
-                      subtitle: 'Calendar',
-                      color: const Color(0xFF00A86B),
-                      onTap: () => widget.onNavigate(HomeTab.calendar),
-                    ),
-                    QuickAccessCard(
-                      width: width,
-                      icon: Icons.school_outlined,
-                      title: 'Degree',
-                      subtitle: 'Progress',
-                      color: const Color(0xFF2C9DFF),
-                      onTap: () => widget.onNavigate(HomeTab.degreeProgress),
-                    ),
-                    QuickAccessCard(
-                      width: width,
                       icon: Icons.computer_outlined,
                       title: 'Free',
                       subtitle: 'Labs',
@@ -85,6 +69,17 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
                 ),
               );
             },
+          ),
+          const SizedBox(height: 12),
+          BracuActionBannerCard(
+            icon: Icons.open_in_new,
+            title: 'Open PreConnect Web',
+            subtitle: 'PreConnect • Prepare. Connect. Succeed.',
+            onTap: () => openExternalUrl(
+              context,
+              'https://preconnect.app',
+              failureMessage: 'Unable to open browser.',
+            ),
           ),
         ],
       ),

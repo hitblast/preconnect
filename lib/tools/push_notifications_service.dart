@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:preconnect/api/seat_alert_push_service.dart';
 import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/firebase_options.dart';
@@ -38,21 +39,15 @@ class PushNotificationsService {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
     final messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
     await messaging.setForegroundNotificationPresentationOptions(
       alert: true,
       badge: true,
       sound: true,
     );
 
-    await _syncCurrentToken();
+    await _syncCurrentTokenIfAuthorized();
     _tokenRefreshSubscription = messaging.onTokenRefresh.listen((token) {
-      unawaited(_syncToken(token));
+      unawaited(_syncTokenIfAuthorized(token));
     });
     _messageOpenedSubscription = FirebaseMessaging.onMessageOpenedApp.listen((
       message,
@@ -70,6 +65,42 @@ class PushNotificationsService {
     _initialized = true;
   }
 
+  Future<bool> hasNotificationPermission() async {
+    if (!_isSupportedPlatform) return false;
+    await _ensureFirebaseInitialized();
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    return settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional;
+  }
+
+  Future<bool> ensureNotificationPermission() async {
+    if (!_isSupportedPlatform) return false;
+    await _ensureFirebaseInitialized();
+    if (await hasNotificationPermission()) {
+      await _syncCurrentTokenIfAuthorized();
+      return true;
+    }
+
+    final settings = await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      provisional: false,
+    );
+    final granted =
+        settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional;
+    if (granted) {
+      await _syncCurrentTokenIfAuthorized();
+    }
+    return granted;
+  }
+
+  Future<bool> openSystemNotificationSettings() async {
+    if (!_isSupportedPlatform) return false;
+    return openAppSettings();
+  }
+
   Future<void> dispose() async {
     await _tokenRefreshSubscription?.cancel();
     await _messageOpenedSubscription?.cancel();
@@ -84,8 +115,24 @@ class PushNotificationsService {
     return platform == TargetPlatform.android || platform == TargetPlatform.iOS;
   }
 
-  Future<void> _syncCurrentToken() async {
+  Future<void> _ensureFirebaseInitialized() async {
+    try {
+      Firebase.app();
+    } catch (_) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
+  }
+
+  Future<void> _syncCurrentTokenIfAuthorized() async {
+    if (!await hasNotificationPermission()) return;
     final token = await FirebaseMessaging.instance.getToken();
+    await _syncToken(token);
+  }
+
+  Future<void> _syncTokenIfAuthorized(String? token) async {
+    if (!await hasNotificationPermission()) return;
     await _syncToken(token);
   }
 

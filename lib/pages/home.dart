@@ -1142,7 +1142,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                 builder: (context, constraints) {
                                   const spacing = 12.0;
                                   final width =
-                                      (constraints.maxWidth - spacing * 2) / 3;
+                                      (constraints.maxWidth - spacing * 3) / 4;
                                   return Center(
                                     child: Wrap(
                                       alignment: WrapAlignment.center,
@@ -1163,7 +1163,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                         QuickAccessCard(
                                           width: width,
                                           icon: Icons.schedule_outlined,
-                                          title: 'Classes',
+                                          title: 'Class',
                                           subtitle: 'Schedules',
                                           color: _accent,
                                           onTap: () => widget.onNavigate(
@@ -1173,7 +1173,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                         QuickAccessCard(
                                           width: width,
                                           icon: Icons.alarm_outlined,
-                                          title: 'Alarms',
+                                          title: 'Alarm',
                                           subtitle: 'Reminders',
                                           color: const Color(0xFFFF8A34),
                                           onTap: () => widget.onNavigate(
@@ -1183,7 +1183,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                         QuickAccessCard(
                                           width: width,
                                           icon: Icons.event_note_outlined,
-                                          title: 'Exams',
+                                          title: 'Exam',
                                           subtitle: 'Dates',
                                           color: const Color(0xFF7C56FF),
                                           onTap: () => widget.onNavigate(
@@ -1198,6 +1198,26 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                           color: const Color(0xFF5B8DEF),
                                           onTap: () => widget.onNavigate(
                                             HomeTab.friendSchedule,
+                                          ),
+                                        ),
+                                        QuickAccessCard(
+                                          width: width,
+                                          icon: Icons.calendar_today_outlined,
+                                          title: 'Events',
+                                          subtitle: 'Calendar',
+                                          color: const Color(0xFF00A86B),
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.calendar,
+                                          ),
+                                        ),
+                                        QuickAccessCard(
+                                          width: width,
+                                          icon: Icons.school_outlined,
+                                          title: 'Degree',
+                                          subtitle: 'Progress',
+                                          color: const Color(0xFF2C9DFF),
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.degreeProgress,
                                           ),
                                         ),
                                         QuickAccessCard(
@@ -1223,17 +1243,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                               subtitle: 'Open QR and funding instructions',
                               iconColor: const Color(0xFF00A8E8),
                               onTap: () => showBracuFundingSupportSheet(context),
-                            ),
-                            const SizedBox(height: 12),
-                            BracuActionBannerCard(
-                              icon: Icons.open_in_new,
-                              title: 'Open PreConnect Web',
-                              subtitle:
-                                  'PreConnect • Prepare. Connect. Succeed.',
-                              onTap: () => _openPreconnectWeb(
-                                context,
-                                'https://preconnect.app',
-                              ),
                             ),
                             const SizedBox(height: 12),
                           ],
@@ -1450,14 +1459,6 @@ class _SectionTitle extends StatelessWidget {
       ),
     );
   }
-}
-
-Future<void> _openPreconnectWeb(BuildContext context, String url) async {
-  await openExternalUrl(
-    context,
-    url,
-    failureMessage: 'Unable to open browser.',
-  );
 }
 
 class _ScheduleTile extends StatelessWidget {

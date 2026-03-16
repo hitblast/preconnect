@@ -145,7 +145,12 @@ String? _lastSnackMessage;
 Timer? _snackAutoTimer;
 final NativeFilePreview _nativeFilePreview = NativeFilePreview();
 
-void showAppSnackBar(BuildContext context, String message) {
+void showAppSnackBar(
+  BuildContext context,
+  String message, {
+  String actionLabel = 'Close',
+  VoidCallback? onAction,
+}) {
   if (kIsWeb) return;
   final trimmed = message.trim();
   if (trimmed.isEmpty) return;
@@ -170,9 +175,14 @@ void showAppSnackBar(BuildContext context, String message) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       action: SnackBarAction(
-        label: 'Close',
+        label: actionLabel,
         textColor: Colors.white,
         onPressed: () {
+          if (onAction != null) {
+            onAction();
+            messenger.hideCurrentSnackBar();
+            return;
+          }
           messenger.hideCurrentSnackBar();
         },
       ),
@@ -302,6 +312,8 @@ Future<void> openCgpaCalculatorPage(BuildContext context) async {
 const String _kPreconnectSupportQrUrl = 'https://preconnect.app/bkash-qr.jpg';
 const String _kPreconnectSupportNumber = '01865493144';
 const String _kPreconnectSupportReference = 'PreConnect App';
+const String _kPreconnectWhatsAppUrl =
+    'https://api.whatsapp.com/send?phone=8801865493144&text=Hi%20PreConnect%2C%20I%20want%20to%20become%20a%20sponsor%20for%20the%20app.';
 
 Future<void> showBracuFundingSupportSheet(BuildContext context) async {
   await showBracuBottomSheet<void>(
@@ -459,7 +471,78 @@ class BracuFundingSupportContent extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const BracuSupportNumberRow(number: _kPreconnectSupportNumber),
+          const SizedBox(height: 12),
+          Text(
+            "We're looking for Sponsor",
+            style: TextStyle(
+              color: BracuPalette.textPrimary(context),
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Support our iOS App Store launch',
+            style: TextStyle(
+              color: BracuPalette.textSecondary(context),
+              fontSize: 13,
+              height: 1.35,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _BracuSponsorActionChip(
+                icon: Icons.call_outlined,
+                label: _kPreconnectSupportNumber,
+                onTap: () => copyToClipboard(context, _kPreconnectSupportNumber),
+              ),
+              _BracuSponsorActionChip(
+                icon: Icons.chat_bubble_outline_rounded,
+                label: 'WhatsApp',
+                onTap: () => openExternalUrl(
+                  context,
+                  _kPreconnectWhatsAppUrl,
+                  failureMessage: 'Unable to open WhatsApp.',
+                ),
+              ),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _BracuSponsorActionChip extends StatelessWidget {
+  const _BracuSponsorActionChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 15),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: BracuPalette.textPrimary(context),
+        side: BorderSide(
+          color: BracuPalette.primary.withValues(alpha: 0.18),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
       ),
     );
   }

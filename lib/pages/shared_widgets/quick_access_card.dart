@@ -31,7 +31,7 @@ class QuickAccessCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       child: Container(
         width: width,
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(9),
         decoration: BoxDecoration(
           color: BracuPalette.card(context),
           borderRadius: BorderRadius.circular(18),

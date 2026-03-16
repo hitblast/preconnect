@@ -10,6 +10,7 @@ import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/model/seat_status_info.dart';
 import 'package:preconnect/pages/notifications.dart';
 import 'package:preconnect/pages/ui_kit.dart';
+import 'package:preconnect/tools/push_notifications_service.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/refresh_guard.dart';
 import 'package:preconnect/tools/time_utils.dart';
@@ -424,6 +425,13 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       showAppSnackBar(context, 'Seat alert removed');
       return;
     }
+    final permissionGranted = await PushNotificationsService()
+        .ensureNotificationPermission();
+    if (!permissionGranted) {
+      if (!mounted) return;
+      _showSeatAlertPermissionSnackBar();
+      return;
+    }
     await _service.saveSeatAlertConfig(updated);
     try {
       await _pushService.syncSeatAlertConfig(updated);
@@ -433,6 +441,34 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       _seatAlerts[item.sectionId] = updated;
     });
     showAppSnackBar(context, 'Seat alert saved');
+  }
+
+  Future<void> _handleSeatAlertTap(_SeatStatusCardData item) async {
+    final existing = _seatAlerts[item.sectionId];
+    if (existing?.hasAnyRule == true) {
+      await _openSeatAlertSheet(item);
+      return;
+    }
+
+    final permissionGranted = await PushNotificationsService()
+        .ensureNotificationPermission();
+    if (!mounted) return;
+    if (!permissionGranted) {
+      _showSeatAlertPermissionSnackBar();
+      return;
+    }
+    await _openSeatAlertSheet(item);
+  }
+
+  void _showSeatAlertPermissionSnackBar() {
+    showAppSnackBar(
+      context,
+      'Allow notifications to enable seat alerts.',
+      actionLabel: 'Settings',
+      onAction: () {
+        unawaited(PushNotificationsService().openSystemNotificationSettings());
+      },
+    );
   }
 
   Widget _buildSeatAlertRuleCard(
@@ -699,7 +735,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                 child: _SeatStatusCard(
                   item: item,
                   hasAlert: _seatAlerts[item.sectionId]?.hasAnyRule == true,
-                  onAlertTap: () => _openSeatAlertSheet(item),
+                  onAlertTap: () => _handleSeatAlertTap(item),
                 ),
               );
             },
