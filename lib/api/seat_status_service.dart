@@ -650,7 +650,7 @@ Map<int, int> _parseSeatMapResponse(dynamic raw) {
 
   void addEntry(int? sectionId, int? remaining) {
     if (sectionId == null || sectionId <= 0) return;
-    result[sectionId] = remaining == null || remaining < 0 ? 0 : remaining;
+    result[sectionId] = remaining ?? 0;
   }
 
   int? remainingFromMap(Map<dynamic, dynamic> map) {

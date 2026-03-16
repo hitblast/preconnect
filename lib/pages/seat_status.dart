@@ -568,8 +568,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     final main = details.section;
     final lab = details.childSection;
     final total = main.capacity;
-    final resolvedRemaining = (total - main.consumedSeat).clamp(0, total);
-    final resolvedConsumed = (total - resolvedRemaining).clamp(0, total);
+    final resolvedRemaining = total - main.consumedSeat;
+    final resolvedConsumed = main.consumedSeat;
     return _SeatStatusCardData(
       sectionId: sectionId,
       courseCode: _pickNonEmpty(main.courseCode, 'SEC$sectionId'),
