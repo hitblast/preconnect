@@ -373,13 +373,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       final availability = info.updateAvailability;
       final installStatus = info.installStatus;
 
-      if (installStatus == InstallStatus.downloaded ||
-          availability ==
-              UpdateAvailability.developerTriggeredUpdateInProgress) {
-        return await _runImmediateUpdate();
+      if (installStatus == InstallStatus.downloaded) {
+        return await _completeFlexibleUpdate();
+      }
+      if (availability ==
+          UpdateAvailability.developerTriggeredUpdateInProgress) {
+        return await _completeFlexibleUpdate();
       }
       if (availability == UpdateAvailability.updateAvailable) {
-        return await _runImmediateUpdate();
+        final result = await InAppUpdate.startFlexibleUpdate();
+        return result == AppUpdateResult.success;
       }
       return false;
     } catch (_) {
@@ -387,10 +390,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  Future<bool> _runImmediateUpdate() async {
+  Future<bool> _completeFlexibleUpdate() async {
     try {
-      final result = await InAppUpdate.performImmediateUpdate();
-      return result == AppUpdateResult.success;
+      await InAppUpdate.completeFlexibleUpdate();
+      return true;
     } catch (_) {
       return false;
     }

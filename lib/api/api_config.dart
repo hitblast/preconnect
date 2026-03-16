@@ -16,6 +16,8 @@ class ApiConfig {
   static const String seatStatusProxyBase = 'https://api.preconnect.app';
   static const String webLoginBrokerBase = seatStatusProxyBase;
   static const String pushAlertsBase = seatStatusProxyBase;
+  static const String aiChatBase = 'https://ai.preconnect.app';
+  static const String aiChatPath = '/chat';
 
   static const String clientId = 'slm';
   static const String redirectUri = 'https://connect.bracu.ac.bd/';

@@ -19,6 +19,7 @@ import 'package:preconnect/pages/scan_schedule.dart';
 import 'package:preconnect/pages/friend_schedule.dart';
 import 'package:preconnect/pages/devs.dart';
 import 'package:preconnect/pages/calendar.dart';
+import 'package:preconnect/pages/ai_chat.dart';
 import 'package:preconnect/pages/free_labs.dart';
 import 'package:preconnect/pages/more_quick_access.dart';
 import 'package:preconnect/pages/notifications.dart';
@@ -168,95 +169,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
-    final shouldLogout = await showDialog<bool>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.25),
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: BracuPalette.card(context),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.18),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.logout, color: BracuPalette.primary),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Confirm Sign Out?',
-                      style: TextStyle(
-                        color: BracuPalette.textPrimary(context),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Sign out will clear cached data. You can sign in again for fresh data.',
-                  style: TextStyle(
-                    color: BracuPalette.textSecondary(context),
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: BracuPalette.primary,
-                          side: BorderSide(
-                            color: BracuPalette.primary.withValues(alpha: 0.6),
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: BracuPalette.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: const Text('Sign Out'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    final shouldLogout = await showBracuConfirmationDialog(
+      context,
+      icon: Icons.logout,
+      title: 'Confirm Sign Out?',
+      message:
+          'Sign out will clear cached data. You can sign in again for fresh data.',
+      confirmLabel: 'Sign Out',
     );
 
-    if (shouldLogout == true) {
+    if (shouldLogout) {
       if (!context.mounted) return;
       await AuthService().logout();
       RefreshBus.instance.notify(reason: 'auth');
@@ -1236,6 +1158,8 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                 },
                               ),
                             ],
+                            const SizedBox(height: 12),
+                            const AiChatEntryCard(),
                             const SizedBox(height: 12),
                             BracuActionBannerCard(
                               icon: Icons.favorite_outline_rounded,
