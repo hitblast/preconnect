@@ -154,6 +154,27 @@ Output:
 build/app/outputs/bundle/release/app-release.aab
 ```
 
+## Data Safety and Privacy (Critical Dependencies)
+
+Key packages related to user data safety/privacy are listed below.
+
+| Package | What it does for privacy/safety |
+| --- | --- |
+| `flutter_secure_storage` | Stores sensitive auth/session tokens in encrypted device-backed secure storage (Keychain/Keystore), instead of plain local storage. |
+| `shared_preferences` | Stores non-sensitive app settings and flags (for example onboarding and UI preferences). Not used for secret credentials. |
+| `sembast` | Provides structured local database caching so app data can stay on-device and support offline usage with controlled reads/writes. |
+| `local_auth` | Enables optional biometric/PIN app lock so only the device owner can open protected screens. |
+| `firebase_core` + `firebase_messaging` | Powers push notifications (for example seat alerts). Device messaging tokens are used for delivery and can be registered/unregistered from the server even app is closed. |
+| `permission_handler` | Ensures runtime permissions (camera/notifications) are requested explicitly and can be denied by the user. |
+| `crypto` | Used for cryptographic hashing in integrity/security flows to strengthen request validation. |
+
+Privacy notes:
+
+- Sensitive tokens are kept in secure storage, not plain preferences.
+- Users can control OS-level permissions (camera/notifications) at any time.
+- Local caches are used to improve offline and performance behavior.
+- Notification delivery depends on Firebase Cloud Messaging.
+
 ## Seat Status Proxy
 
 The app does not call BRACU Connect seat-status endpoints directly. It uses the hosted proxy API:

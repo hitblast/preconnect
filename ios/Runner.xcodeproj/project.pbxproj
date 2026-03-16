@@ -13,7 +13,6 @@
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		45E7E488C6E77DF95C7A9315 /* AlarmkitWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB8FB1FA898FEEE0F853903 /* AlarmkitWidgetBundle.swift */; };
-		460DF1754F489C0346D8FB93 /* AlarmkitWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 243E2C42A36C75412BFE839F /* AlarmkitWidgetExtension.appex */; };
 		6E6A791CB0218081D3330F5B /* AlarmkitWidgetLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EDDB615786A69812A9955A4 /* AlarmkitWidgetLiveActivity.swift */; };
 		6F9A1D9C3E8B4C7A9012D3E4 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F9A1D9C3E8B4C7A9012D3E3 /* SceneDelegate.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
@@ -36,13 +35,6 @@
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
 		};
-		42EA5E0C1F97EFEACBD6FCA3 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 80F437744B18B551B2CCB37E;
-			remoteInfo = AlarmkitWidgetExtension;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -62,7 +54,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				460DF1754F489C0346D8FB93 /* AlarmkitWidgetExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -312,7 +303,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				374B73DEB2407A9AE29B30FD /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
@@ -559,10 +549,6 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
-		};
-		374B73DEB2407A9AE29B30FD /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			targetProxy = 42EA5E0C1F97EFEACBD6FCA3 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
