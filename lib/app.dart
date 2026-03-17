@@ -16,6 +16,7 @@ import 'package:preconnect/tools/play_install_referrer.dart';
 import 'package:preconnect/tools/play_integrity.dart';
 import 'package:preconnect/tools/app_lock_service.dart';
 import 'package:preconnect/tools/push_notifications_service.dart';
+import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/token_storage.dart';
 
 class AppBootstrapState {
@@ -58,10 +59,14 @@ class MyApp extends StatefulWidget {
   static Future<bool> _hasOfflineSnapshot(SharedPreferences prefs) async {
     final cache = SembastCache();
     final studentId =
-        ((await cache.getString('studentId')) ?? prefs.getString('studentId') ?? '')
+        ((await cache.getString('studentId')) ??
+                prefs.getString('studentId') ??
+                '')
             .trim();
     final fullName =
-        ((await cache.getString('fullName')) ?? prefs.getString('fullName') ?? '')
+        ((await cache.getString('fullName')) ??
+                prefs.getString('fullName') ??
+                '')
             .trim();
     final schedule =
         ((await cache.getString('StudentSchedule')) ??
@@ -87,7 +92,8 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+class _MyAppState extends State<MyApp>
+    with WidgetsBindingObserver, RefreshBusState {
   static const String _pendingShortcutPrefsKey = 'pending_shortcut_action';
   static const String _shortcutProfile = 'quick.profile';
   static const String _shortcutClasses = 'quick.classes';
@@ -117,6 +123,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       unawaited(_bootstrapInBackground());
     }
     unawaited(_initializeAppLock());
+    bindRefreshBus(_onRefreshSignal);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       PushNotificationsService().initialize().catchError((_) {});
       SeatAlertPushService().initialize().catchError((_) {});
@@ -157,7 +164,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _consumePendingSeatAlertLaunch() async {
-    final pendingSectionId = await SeatAlertPushService().consumePendingSectionId();
+    final pendingSectionId = await SeatAlertPushService()
+        .consumePendingSectionId();
     if (pendingSectionId == null) return;
     if (!_initialLoggedIn && !_canOpenOffline) return;
     HomePage.requestShortcutTab(HomeTab.seatStatus);
@@ -193,8 +201,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    unbindRefreshBus(_onRefreshSignal);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _onRefreshSignal() {
+    if (!mounted) return;
+    if (isRefreshingFrom('app_lock_settings_changed')) {
+      unawaited(_refreshAndUnlockIfNeeded());
+    }
   }
 
   void _handleShortcutAction(String action) {
@@ -507,8 +523,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             home: _resolvedBootstrapState == null
                 ? const _StartupFrame()
                 : (_initialLoggedIn || _canOpenOffline)
-                      ? const HomePage()
-                      : const OnboardingPage(),
+                ? const HomePage()
+                : const OnboardingPage(),
           ),
         );
       },

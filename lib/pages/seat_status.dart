@@ -23,7 +23,7 @@ class SeatStatusPage extends StatefulWidget {
 }
 
 class _SeatStatusPageState extends State<SeatStatusPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RefreshBusState {
   static const List<String> _weekdayOrder = <String>[
     'SUNDAY',
     'MONDAY',
@@ -80,7 +80,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     WidgetsBinding.instance.addObserver(this);
     HomeTabRegistry.activeTab.addListener(_onActiveTabChanged);
     _updatePollingStrategy();
-    RefreshBus.instance.addListener(_onRefreshSignal);
+    bindRefreshBus(_onRefreshSignal);
   }
 
   @override
@@ -91,7 +91,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     HomeTabRegistry.activeTab.removeListener(_onActiveTabChanged);
     _searchDebounce?.cancel();
     _searchController.dispose();
-    RefreshBus.instance.removeListener(_onRefreshSignal);
+    unbindRefreshBus(_onRefreshSignal);
     super.dispose();
   }
 
@@ -117,7 +117,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 
   void _onRefreshSignal() {
     if (!mounted) return;
-    if (RefreshBus.instance.reason == 'seat_status') {
+    if (isRefreshingFrom('seat_status')) {
       return;
     }
     unawaited(_handleRefresh(notify: false));
@@ -227,12 +227,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     List<_SeatStatusCardData> next,
   ) async {
     if (_seatAlerts.isEmpty) return;
-    final previousById = {
-      for (final item in previous) item.sectionId: item,
-    };
-    final nextById = {
-      for (final item in next) item.sectionId: item,
-    };
+    final previousById = {for (final item in previous) item.sectionId: item};
+    final nextById = {for (final item in next) item.sectionId: item};
     final triggeredMessages = <String>[];
     var changedConfig = false;
     final now = DateTime.now();
@@ -316,13 +312,15 @@ class _SeatStatusPageState extends State<SeatStatusPage>
 
   Future<void> _openSeatAlertSheet(_SeatStatusCardData item) async {
     final existing =
-        _seatAlerts[item.sectionId] ?? SeatAlertConfig(sectionId: item.sectionId);
+        _seatAlerts[item.sectionId] ??
+        SeatAlertConfig(sectionId: item.sectionId);
     var temp = existing;
     const thresholdOptions = <int>[1, 2, 3, 5, 10];
     final updated = await showBracuBottomSheet<SeatAlertConfig?>(
       context,
       title: '${item.courseCode} - ${item.sectionName}',
-      subtitle: '${item.remaining} seat${item.remaining == 1 ? '' : 's'} remaining',
+      subtitle:
+          '${item.remaining} seat${item.remaining == 1 ? '' : 's'} remaining',
       maxHeightFactor: 0.82,
       builder: (sheetContext, textPrimary, textSecondary) {
         return StatefulBuilder(
@@ -350,7 +348,9 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                   onChanged: (value) {
                     setSheetState(() {
                       temp = temp.copyWith(
-                        thresholdSeats: value ? (temp.thresholdSeats ?? 1) : null,
+                        thresholdSeats: value
+                            ? (temp.thresholdSeats ?? 1)
+                            : null,
                       );
                     });
                   },
@@ -385,7 +385,9 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                     setSheetState(() {
                       temp = temp.copyWith(
                         notifyOnAnyChange: value,
-                        changeCooldownMinutes: value ? 0 : temp.changeCooldownMinutes,
+                        changeCooldownMinutes: value
+                            ? 0
+                            : temp.changeCooldownMinutes,
                       );
                     });
                   },
@@ -500,10 +502,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
             ),
           ),
           const SizedBox(width: 12),
-          Switch.adaptive(
-            value: value,
-            onChanged: onChanged,
-          ),
+          Switch.adaptive(value: value, onChanged: onChanged),
         ],
       ),
     );
@@ -702,9 +701,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
               if (showLoadingState) {
                 return const Padding(
                   padding: EdgeInsets.only(top: 28),
-                  child: Center(
-                    child: BracuLoading(label: 'Loading...'),
-                  ),
+                  child: Center(child: BracuLoading(label: 'Loading...')),
                 );
               }
               if (!hasCards) {
@@ -873,7 +870,8 @@ class _SeatStatusPageState extends State<SeatStatusPage>
         resolvedAlertsOnly != _alertsOnly ||
         resolvedDayFilter != _selectedDayFilter ||
         resolvedQuery != _searchQuery;
-    if (!filtersChanged && !_areCardListsDifferent(_visibleCards, nextVisible)) {
+    if (!filtersChanged &&
+        !_areCardListsDifferent(_visibleCards, nextVisible)) {
       return;
     }
     setState(() {
@@ -1295,7 +1293,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
   String _facultyMetaForInitial(String facultyInitial) {
     return '';
   }
-
 }
 
 class _SeatStatusCard extends StatelessWidget {

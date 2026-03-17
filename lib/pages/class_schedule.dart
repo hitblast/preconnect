@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/model/section_info.dart' as section;
-import 'package:preconnect/pages/shared_widgets/section_badge.dart';
+import 'package:preconnect/pages/shared_widgets/schedule_entry_card.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/ramadan_timing.dart';
@@ -22,7 +22,7 @@ class ClassSchedule extends StatefulWidget {
   State<ClassSchedule> createState() => _ClassScheduleState();
 }
 
-class _ClassScheduleState extends State<ClassSchedule> {
+class _ClassScheduleState extends State<ClassSchedule> with RefreshBusState {
   static const int _initialVisibleWeekCount = 1;
   static const List<String> _weekdayNames = <String>[
     'MONDAY',
@@ -50,20 +50,20 @@ class _ClassScheduleState extends State<ClassSchedule> {
     unawaited(_loadSemesterOptions());
     _future = _loadSchedule();
     ClassSchedule.jumpSignal.addListener(_onJumpRequested);
-    RefreshBus.instance.addListener(_onRefreshSignal);
+    bindRefreshBus(_onRefreshSignal);
   }
 
   @override
   void dispose() {
     ClassSchedule.jumpSignal.removeListener(_onJumpRequested);
     _scrollController.dispose();
-    RefreshBus.instance.removeListener(_onRefreshSignal);
+    unbindRefreshBus(_onRefreshSignal);
     super.dispose();
   }
 
   void _onRefreshSignal() {
     if (!mounted) return;
-    if (RefreshBus.instance.reason == 'class_schedule') {
+    if (isRefreshingFrom('class_schedule')) {
       return;
     }
     unawaited(_handleRefresh(notify: false));
@@ -397,11 +397,8 @@ class _ClassScheduleState extends State<ClassSchedule> {
       return _weekdayNames
           .where(grouped.containsKey)
           .map(
-            (day) => _RenderedScheduleSection(
-              day: day,
-              date: null,
-              weekOffset: 0,
-            ),
+            (day) =>
+                _RenderedScheduleSection(day: day, date: null, weekOffset: 0),
           )
           .toList();
     }
@@ -473,9 +470,7 @@ class _ClassScheduleState extends State<ClassSchedule> {
             final day = sectionInfo.day;
             final schedules = grouped[day]!;
             final dayDate = sectionInfo.date;
-            final dayDateLabel = dayDate == null
-                ? ''
-                : formatLongDate(dayDate);
+            final dayDateLabel = dayDate == null ? '' : formatLongDate(dayDate);
 
             children.add(
               Column(
@@ -508,22 +503,6 @@ class _ClassScheduleState extends State<ClassSchedule> {
                     final faculties = entry["faculties"] as String?;
                     final consumedSeat = entry["consumedSeat"] as int?;
                     final courseType = (entry["courseType"] as String?)?.trim();
-                    final courseTypeLabel =
-                        (courseType != null && courseType.isNotEmpty)
-                        ? courseType[0].toUpperCase() +
-                              courseType.substring(1).toLowerCase()
-                        : '';
-                    final codeLabel = '$code'.trim();
-                    final facultyLabel = (faculties ?? '').trim();
-                    final consumedLabel = consumedSeat == null
-                        ? ''
-                        : '($consumedSeat)';
-                    final adjusted = RamadanTiming.adjustRange(
-                      s.startTime,
-                      s.endTime,
-                      isRamadan: isRamadan,
-                    );
-
                     final isScrollTarget =
                         shouldHighlightCurrentSemester &&
                         scrollSchedule == s &&
@@ -539,126 +518,17 @@ class _ClassScheduleState extends State<ClassSchedule> {
                     }
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: BracuCard(
+                      child: ScheduleEntryCard(
                         key: isScrollTarget ? _highlightKey : null,
-                        isHighlighted: isScrollTarget,
-                        highlightColor: BracuPalette.primary,
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SectionBadge(
-                                  label: formatSectionBadge(
-                                    sectionName?.toString(),
-                                  ),
-                                  color: BracuPalette.primary,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  flex: 7,
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text.rich(
-                                        TextSpan(
-                                          children: [
-                                            TextSpan(
-                                              text: codeLabel,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                            if (courseTypeLabel.isNotEmpty)
-                                              TextSpan(
-                                                text: ' $courseTypeLabel',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                  color:
-                                                      BracuPalette.textSecondary(
-                                                        context,
-                                                      ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        formatTimeRange(
-                                          adjusted.startTime,
-                                          adjusted.endTime,
-                                        ),
-                                        style: TextStyle(
-                                          color: BracuPalette.textPrimary(
-                                            context,
-                                          ),
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  flex: 4,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        room.toString(),
-                                        textAlign: TextAlign.right,
-                                        style: TextStyle(
-                                          color: BracuPalette.textPrimary(
-                                            context,
-                                          ),
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      if (facultyLabel.isNotEmpty ||
-                                          consumedLabel.isNotEmpty) ...[
-                                        const SizedBox(height: 2),
-                                        Text.rich(
-                                          TextSpan(
-                                            children: [
-                                              if (facultyLabel.isNotEmpty)
-                                                TextSpan(
-                                                  text: facultyLabel,
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w700,
-                                                    color:
-                                                        BracuPalette.textPrimary(
-                                                          context,
-                                                        ),
-                                                  ),
-                                                ),
-                                              if (consumedLabel.isNotEmpty)
-                                                TextSpan(
-                                                  text:
-                                                      '${facultyLabel.isEmpty ? '' : ' '}$consumedLabel',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    color:
-                                                        BracuPalette.textSecondary(
-                                                          context,
-                                                        ),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                          textAlign: TextAlign.right,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
+                        sectionName: sectionName?.toString(),
+                        courseCode: '$code',
+                        schedule: s,
+                        isRamadan: isRamadan,
+                        roomNumber: room?.toString(),
+                        faculties: faculties,
+                        consumedSeat: consumedSeat,
+                        courseType: courseType,
+                        highlighted: isScrollTarget,
                       ),
                     );
                   }),

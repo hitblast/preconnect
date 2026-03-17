@@ -23,7 +23,8 @@ class ShareSchedulePage extends StatefulWidget {
   State<ShareSchedulePage> createState() => _ShareSchedulePageState();
 }
 
-class _ShareSchedulePageState extends State<ShareSchedulePage> {
+class _ShareSchedulePageState extends State<ShareSchedulePage>
+    with RefreshBusState {
   static const int _qrPayloadVersion = 4;
   String? _base64Data;
   bool isLoading = false;
@@ -42,18 +43,18 @@ class _ShareSchedulePageState extends State<ShareSchedulePage> {
     unawaited(ProfileService().fetchProfile());
     unawaited(ScheduleService().fetchStudentSchedule());
     _loadCachedAndRefresh();
-    RefreshBus.instance.addListener(_onRefreshSignal);
+    bindRefreshBus(_onRefreshSignal);
   }
 
   @override
   void dispose() {
-    RefreshBus.instance.removeListener(_onRefreshSignal);
+    unbindRefreshBus(_onRefreshSignal);
     super.dispose();
   }
 
   void _onRefreshSignal() {
     if (!mounted) return;
-    final reason = RefreshBus.instance.reason;
+    final reason = refreshBusReason;
     if (reason == 'share_schedule') {
       return;
     }

@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 class RefreshBus extends ChangeNotifier {
   RefreshBus._();
@@ -19,5 +19,22 @@ class RefreshBus extends ChangeNotifier {
     _reason = reason;
     _tick++;
     notifyListeners();
+  }
+}
+
+mixin RefreshBusState<T extends StatefulWidget> on State<T> {
+  String? get refreshBusReason => RefreshBus.instance.reason;
+
+  bool isRefreshingFrom(String reason) => RefreshBus.instance.isReason(reason);
+
+  bool isRefreshingFromAny(Iterable<String> reasons) =>
+      RefreshBus.instance.isAnyReason(reasons);
+
+  void bindRefreshBus(void Function() handler) {
+    RefreshBus.instance.addListener(handler);
+  }
+
+  void unbindRefreshBus(void Function() handler) {
+    RefreshBus.instance.removeListener(handler);
   }
 }

@@ -24,7 +24,8 @@ class DegreeProgressPage extends StatefulWidget {
   State<DegreeProgressPage> createState() => _DegreeProgressPageState();
 }
 
-class _DegreeProgressPageState extends State<DegreeProgressPage> {
+class _DegreeProgressPageState extends State<DegreeProgressPage>
+    with RefreshBusState {
   static const int _coursesChunkSize = 7;
 
   late Future<ProgressInfo?> _future;
@@ -51,18 +52,18 @@ class _DegreeProgressPageState extends State<DegreeProgressPage> {
     unawaited(_loadCgpa());
     unawaited(_loadSummary());
     unawaited(_loadCurrentSemesterCourses());
-    RefreshBus.instance.addListener(_onRefreshSignal);
+    bindRefreshBus(_onRefreshSignal);
   }
 
   @override
   void dispose() {
-    RefreshBus.instance.removeListener(_onRefreshSignal);
+    unbindRefreshBus(_onRefreshSignal);
     super.dispose();
   }
 
   void _onRefreshSignal() {
     if (!mounted) return;
-    final reason = RefreshBus.instance.reason;
+    final reason = refreshBusReason;
     if (reason == 'degree_progress') return;
     if (reason != 'home_dashboard' &&
         reason != 'student_profile' &&

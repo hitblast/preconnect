@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:preconnect/app.dart';
 import 'package:preconnect/pages/captive_wifi.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/pages/web_login_setup.dart';
@@ -118,8 +119,31 @@ class _SettingsPageState extends State<SettingsPage> {
       title: 'Settings',
       subtitle: 'Customize',
       icon: Icons.settings_outlined,
+      actions: [
+        ValueListenableBuilder<ThemeMode>(
+          valueListenable: ThemeController.of(context),
+          builder: (context, mode, _) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return IconButton(
+              tooltip: isDark ? 'Light mode' : 'Dark mode',
+              onPressed: () => ThemeController.setTheme(
+                context,
+                isDark ? ThemeMode.light : ThemeMode.dark,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              visualDensity: VisualDensity.compact,
+              icon: Icon(
+                isDark ? Icons.wb_sunny_outlined : Icons.dark_mode_outlined,
+                color: BracuPalette.primary,
+              ),
+            );
+          },
+        ),
+      ],
       body: BracuRefreshList(
         onRefresh: _load,
+        showScrollTopButton: false,
         children: [
           if (_isLoading)
             const BracuLoading(label: 'Loading...')

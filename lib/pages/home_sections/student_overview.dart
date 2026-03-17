@@ -9,7 +9,6 @@ class StudentOverviewCard extends StatelessWidget {
     required this.department,
     required this.currentSemester,
     required this.currentSessionSemesterId,
-    required this.onOpenNotifications,
     required this.onOpenSettings,
     required this.onLogout,
     this.countdown,
@@ -20,7 +19,6 @@ class StudentOverviewCard extends StatelessWidget {
   final String department;
   final String currentSemester;
   final String currentSessionSemesterId;
-  final VoidCallback onOpenNotifications;
   final VoidCallback onOpenSettings;
   final Future<void> Function() onLogout;
   final Widget? countdown;
@@ -48,8 +46,6 @@ class StudentOverviewCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                BracuNotificationsIconButton(onTap: onOpenNotifications),
                 const SizedBox(width: 8),
                 _IconButton(
                   icon: Icons.settings_outlined,
@@ -85,7 +81,10 @@ class StudentOverviewCard extends StatelessWidget {
 }
 
 class _IconButton extends StatelessWidget {
-  const _IconButton({required this.icon, required this.onTap});
+  const _IconButton({
+    required this.icon,
+    required this.onTap,
+  });
 
   final IconData icon;
   final VoidCallback onTap;

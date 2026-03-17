@@ -31,7 +31,7 @@ class StudentProfile extends StatefulWidget {
 }
 
 class _StudentProfileState extends State<StudentProfile>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, RefreshBusState {
   Map<String, String?>? _profile = {};
   String? _photoUrl;
   File? _cachedImageFile;
@@ -51,19 +51,19 @@ class _StudentProfileState extends State<StudentProfile>
     );
     unawaited(_preloadDegreeProgress());
     unawaited(_loadProfile());
-    RefreshBus.instance.addListener(_onRefreshSignal);
+    bindRefreshBus(_onRefreshSignal);
   }
 
   @override
   void dispose() {
     _refreshController.dispose();
-    RefreshBus.instance.removeListener(_onRefreshSignal);
+    unbindRefreshBus(_onRefreshSignal);
     super.dispose();
   }
 
   void _onRefreshSignal() {
     if (!mounted) return;
-    final reason = RefreshBus.instance.reason;
+    final reason = refreshBusReason;
     if (reason == 'student_profile') {
       return;
     }

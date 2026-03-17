@@ -22,7 +22,7 @@ class ExamSchedule extends StatefulWidget {
   State<ExamSchedule> createState() => _ExamScheduleState();
 }
 
-class _ExamScheduleState extends State<ExamSchedule> {
+class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
   late Future<List<Section>> _future;
   final ScrollController _scrollController = ScrollController();
   List<int> _semesterSessionOptions = const <int>[];
@@ -38,20 +38,20 @@ class _ExamScheduleState extends State<ExamSchedule> {
     unawaited(_loadSemesterOptions());
     _future = _fetchExamSections();
     ExamSchedule.jumpSignal.addListener(_onJumpRequested);
-    RefreshBus.instance.addListener(_onRefreshSignal);
+    bindRefreshBus(_onRefreshSignal);
   }
 
   @override
   void dispose() {
     ExamSchedule.jumpSignal.removeListener(_onJumpRequested);
     _scrollController.dispose();
-    RefreshBus.instance.removeListener(_onRefreshSignal);
+    unbindRefreshBus(_onRefreshSignal);
     super.dispose();
   }
 
   void _onRefreshSignal() {
     if (!mounted) return;
-    if (RefreshBus.instance.reason == 'exam_schedule') {
+    if (isRefreshingFrom('exam_schedule')) {
       return;
     }
     unawaited(_handleRefresh(notify: false));
@@ -192,9 +192,7 @@ class _ExamScheduleState extends State<ExamSchedule> {
       _didScroll = false;
       _scrollRetry = false;
       _future = _selectedSemesterSessionId == null
-          ? Future.value(
-              service.parseStudentSections(currentScheduleJson),
-            )
+          ? Future.value(service.parseStudentSections(currentScheduleJson))
           : _fetchExamSections(forceRefresh: true);
     });
     await _future;

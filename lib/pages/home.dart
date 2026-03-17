@@ -74,7 +74,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with RefreshBusState {
   HomeTab selectedTab = HomeTab.dashboard;
   StreamSubscription<HomeTab>? _shortcutTabSubscription;
 
@@ -186,10 +186,7 @@ class _HomePageState extends State<HomePage> {
       themeNotifier.value = ThemeMode.system;
       RefreshBus.instance.notify(reason: 'auth');
       if (!mounted) return;
-      navigator.pushNamedAndRemoveUntil(
-        '/onboarding',
-        (route) => false,
-      );
+      navigator.pushNamedAndRemoveUntil('/onboarding', (route) => false);
     }
   }
 
@@ -237,7 +234,7 @@ class _HomeDashboard extends StatefulWidget {
   State<_HomeDashboard> createState() => _HomeDashboardState();
 }
 
-class _HomeDashboardState extends State<_HomeDashboard> {
+class _HomeDashboardState extends State<_HomeDashboard> with RefreshBusState {
   static const _bgTop = Color(0xFFEAF4FF);
   static const _bgBottom = Color(0xFFF3FFF4);
   static const _primary = Color(0xFF1E6BE3);
@@ -279,12 +276,12 @@ class _HomeDashboardState extends State<_HomeDashboard> {
       });
     }
     unawaited(_refreshCaptiveStatus());
-    RefreshBus.instance.addListener(_onRefreshSignal);
+    bindRefreshBus(_onRefreshSignal);
   }
 
   @override
   void dispose() {
-    RefreshBus.instance.removeListener(_onRefreshSignal);
+    unbindRefreshBus(_onRefreshSignal);
     _networkStatusSubscription?.cancel();
     _captiveAutoTimer?.cancel();
     super.dispose();
@@ -292,15 +289,15 @@ class _HomeDashboardState extends State<_HomeDashboard> {
 
   void _onRefreshSignal() {
     if (!mounted) return;
-    if (RefreshBus.instance.isReason('home_dashboard')) {
+    if (isRefreshingFrom('home_dashboard')) {
       return;
     }
-    if (RefreshBus.instance.isReason('home_card_settings_changed')) {
+    if (isRefreshingFrom('home_card_settings_changed')) {
       unawaited(_reloadCardVisibilityOnly());
       unawaited(_refreshCaptiveStatus());
       return;
     }
-    if (RefreshBus.instance.isReason('auth')) {
+    if (isRefreshingFrom('auth')) {
       unawaited(_handleRefresh(notify: false));
     }
   }
@@ -762,6 +759,7 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                       );
                       return BracuRefreshScroll(
                         onRefresh: _handleRefresh,
+                        showScrollTopButton: false,
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -769,6 +767,8 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                             _TopBar(
                               name: profile['fullName'] ?? 'BRACU Student',
                               photoUrl: photoUrl,
+                              onOpenNotifications: () =>
+                                  widget.onNavigate(HomeTab.notifications),
                               onProfileTap: () =>
                                   widget.onNavigate(HomeTab.profile),
                             ),
@@ -788,8 +788,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                               currentSemester: profile['currentSemester'] ?? '',
                               currentSessionSemesterId:
                                   profile['currentSessionSemesterId'] ?? '',
-                              onOpenNotifications: () =>
-                                  widget.onNavigate(HomeTab.notifications),
                               onOpenSettings: () =>
                                   widget.onNavigate(HomeTab.settings),
                               onLogout: widget.onLogout,
@@ -1104,9 +1102,8 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                           title: 'Alarm',
                                           subtitle: 'Reminders',
                                           color: const Color(0xFFFF8A34),
-                                          onTap: () => widget.onNavigate(
-                                            HomeTab.alarms,
-                                          ),
+                                          onTap: () =>
+                                              widget.onNavigate(HomeTab.alarms),
                                         ),
                                         QuickAccessCard(
                                           width: width,
@@ -1170,7 +1167,8 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                               title: 'Support PreConnect',
                               subtitle: 'Open QR and funding instructions',
                               iconColor: const Color(0xFF00A8E8),
-                              onTap: () => showBracuFundingSupportSheet(context),
+                              onTap: () =>
+                                  showBracuFundingSupportSheet(context),
                             ),
                             const SizedBox(height: 12),
                           ],
@@ -1255,11 +1253,13 @@ class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.name,
     required this.photoUrl,
+    required this.onOpenNotifications,
     required this.onProfileTap,
   });
 
   final String name;
   final String? photoUrl;
+  final VoidCallback onOpenNotifications;
   final VoidCallback onProfileTap;
 
   @override
@@ -1346,25 +1346,10 @@ class _TopBar extends StatelessWidget {
             ),
           ),
         ),
-        ValueListenableBuilder<ThemeMode>(
-          valueListenable: ThemeController.of(context),
-          builder: (context, mode, _) {
-            final isDark = Theme.of(context).brightness == Brightness.dark;
-            return IconButton(
-              tooltip: isDark ? 'Light mode' : 'Dark mode',
-              onPressed: () => ThemeController.setTheme(
-                context,
-                isDark ? ThemeMode.light : ThemeMode.dark,
-              ),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              visualDensity: VisualDensity.compact,
-              icon: Icon(
-                isDark ? Icons.wb_sunny_outlined : Icons.dark_mode_outlined,
-                color: BracuPalette.primary,
-              ),
-            );
-          },
+        BracuNotificationsIconButton(
+          onTap: onOpenNotifications,
+          iconSize: 22,
+          padding: 8,
         ),
       ],
     );
@@ -1417,8 +1402,10 @@ class _ScheduleTile extends StatelessWidget {
       highlightColor: BracuPalette.primary,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final rightColumnWidth =
-              (constraints.maxWidth * 0.30).clamp(96.0, 128.0);
+          final rightColumnWidth = (constraints.maxWidth * 0.30).clamp(
+            96.0,
+            128.0,
+          );
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1478,10 +1465,7 @@ class _ScheduleTile extends StatelessWidget {
                           textAlign: TextAlign.right,
                           maxLines: 4,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: textSecondary,
-                          ),
+                          style: TextStyle(fontSize: 11, color: textSecondary),
                         ),
                       ],
                     ],

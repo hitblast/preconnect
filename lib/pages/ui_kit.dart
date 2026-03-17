@@ -70,8 +70,7 @@ String formatRelativeDayLabel(
   final today = DateTime(now.year, now.month, now.day);
   final target = DateTime(date.year, date.month, date.day);
   if (target == today) return 'Today';
-  if (includeYesterday &&
-      target == today.subtract(const Duration(days: 1))) {
+  if (includeYesterday && target == today.subtract(const Duration(days: 1))) {
     return 'Yesterday';
   }
   if (includeTomorrow && target == today.add(const Duration(days: 1))) {
@@ -196,7 +195,9 @@ void showAppSnackBar(
 Future<void> openGradeSheet(BuildContext context) async {
   try {
     if (kIsWeb) {
-      final bytes = await GradeSheetService().fetchGradeSheetBytes(fromGet: true);
+      final bytes = await GradeSheetService().fetchGradeSheetBytes(
+        fromGet: true,
+      );
       if (!context.mounted) return;
       if (bytes == null || bytes.isEmpty) {
         showAppSnackBar(context, 'Could not fetch the latest grade sheet');
@@ -263,10 +264,7 @@ Future<void> openCgpaCalculatorPage(BuildContext context) async {
   messenger.clearSnackBars();
   messenger.showSnackBar(
     SnackBar(
-      content: const Text(
-        'Loading...',
-        style: TextStyle(color: Colors.white),
-      ),
+      content: const Text('Loading...', style: TextStyle(color: Colors.white)),
       backgroundColor: BracuPalette.primary,
       duration: const Duration(seconds: 20),
       behavior: SnackBarBehavior.floating,
@@ -383,11 +381,7 @@ class BracuActionBannerCard extends StatelessWidget {
                   color: iconColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  icon,
-                  color: iconColor,
-                  size: 18,
-                ),
+                child: Icon(icon, color: iconColor, size: 18),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -438,9 +432,7 @@ class BracuFundingSupportContent extends StatelessWidget {
             ? const Color(0xFF0B0B0B)
             : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: BracuPalette.primary.withValues(alpha: 0.12),
-        ),
+        border: Border.all(color: BracuPalette.primary.withValues(alpha: 0.12)),
       ),
       child: Column(
         children: [
@@ -500,7 +492,8 @@ class BracuFundingSupportContent extends StatelessWidget {
               _BracuSponsorActionChip(
                 icon: Icons.call_outlined,
                 label: _kPreconnectSupportNumber,
-                onTap: () => copyToClipboard(context, _kPreconnectSupportNumber),
+                onTap: () =>
+                    copyToClipboard(context, _kPreconnectSupportNumber),
               ),
               _BracuSponsorActionChip(
                 icon: Icons.chat_bubble_outline_rounded,
@@ -538,9 +531,7 @@ class _BracuSponsorActionChip extends StatelessWidget {
       label: Text(label),
       style: OutlinedButton.styleFrom(
         foregroundColor: BracuPalette.textPrimary(context),
-        side: BorderSide(
-          color: BracuPalette.primary.withValues(alpha: 0.18),
-        ),
+        side: BorderSide(color: BracuPalette.primary.withValues(alpha: 0.18)),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
       ),
@@ -620,7 +611,9 @@ class BracuSupportNumberRow extends StatelessWidget {
                       InkWell(
                         onTap: () async {
                           await Clipboard.setData(
-                            const ClipboardData(text: _kPreconnectSupportReference),
+                            const ClipboardData(
+                              text: _kPreconnectSupportReference,
+                            ),
                           );
                           if (context.mounted) {
                             showAppSnackBar(context, 'Reference copied');
@@ -1048,11 +1041,11 @@ Future<T?> showBracuSelectSheet<T>(
                       alignment: Alignment.center,
                       child: Icon(
                         option.icon ??
-                            (selected ? Icons.check_rounded : Icons.tune_rounded),
+                            (selected
+                                ? Icons.check_rounded
+                                : Icons.tune_rounded),
                         size: 18,
-                        color: selected
-                            ? BracuPalette.primary
-                            : textSecondary,
+                        color: selected ? BracuPalette.primary : textSecondary,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1112,8 +1105,7 @@ Future<T?> showBracuSelectDropdown<T>(
   T? selectedValue,
 }) async {
   final renderBox = context.findRenderObject() as RenderBox?;
-  final overlay =
-      Overlay.of(context).context.findRenderObject() as RenderBox?;
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
   if (renderBox == null || overlay == null) {
     return showBracuSelectSheet<T>(
       context,
@@ -1176,7 +1168,8 @@ Future<T?> showBracuSelectDropdown<T>(
                     children: options.map((option) {
                       final selected = option.value == selectedValue;
                       return InkWell(
-                        onTap: () => Navigator.of(dialogContext).pop(option.value),
+                        onTap: () =>
+                            Navigator.of(dialogContext).pop(option.value),
                         borderRadius: BorderRadius.circular(14),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
@@ -1410,24 +1403,25 @@ class BracuNotificationsIconButton extends StatefulWidget {
 }
 
 class _BracuNotificationsIconButtonState
-    extends State<BracuNotificationsIconButton> {
+    extends State<BracuNotificationsIconButton>
+    with RefreshBusState {
   late Future<NotificationsFeed?> _future;
 
   @override
   void initState() {
     super.initState();
     _future = NotificationService().getRecentNotifications();
-    RefreshBus.instance.addListener(_onRefreshSignal);
+    bindRefreshBus(_onRefreshSignal);
   }
 
   @override
   void dispose() {
-    RefreshBus.instance.removeListener(_onRefreshSignal);
+    unbindRefreshBus(_onRefreshSignal);
     super.dispose();
   }
 
   void _onRefreshSignal() {
-    if (!mounted || !RefreshBus.instance.isReason('notifications')) return;
+    if (!mounted || !isRefreshingFrom('notifications')) return;
     setState(() {
       _future = NotificationService().getRecentNotifications();
     });
@@ -1445,12 +1439,8 @@ class _BracuNotificationsIconButtonState
             InkWell(
               onTap: widget.onTap,
               borderRadius: BorderRadius.circular(12),
-              child: Container(
+              child: Padding(
                 padding: EdgeInsets.all(widget.padding),
-                decoration: BoxDecoration(
-                  color: BracuPalette.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
                 child: Icon(
                   Icons.notifications_outlined,
                   size: widget.iconSize,
@@ -1580,12 +1570,14 @@ class BracuRefreshList extends StatefulWidget {
     required this.children,
     this.controller,
     this.padding = kBracuPageListPadding,
+    this.showScrollTopButton = true,
   });
 
   final RefreshCallback onRefresh;
   final List<Widget> children;
   final ScrollController? controller;
   final EdgeInsets padding;
+  final bool showScrollTopButton;
 
   @override
   State<BracuRefreshList> createState() => _BracuRefreshListState();
@@ -1657,7 +1649,8 @@ class _BracuRefreshListState extends State<BracuRefreshList> {
             children: widget.children,
           ),
         ),
-        _BracuScrollTopButton(visible: _showScrollTop, onTap: _scrollToTop),
+        if (widget.showScrollTopButton)
+          _BracuScrollTopButton(visible: _showScrollTop, onTap: _scrollToTop),
       ],
     );
   }
@@ -1823,11 +1816,13 @@ class BracuRefreshScroll extends StatefulWidget {
     required this.onRefresh,
     required this.child,
     this.padding = kBracuPageListPadding,
+    this.showScrollTopButton = true,
   });
 
   final RefreshCallback onRefresh;
   final Widget child;
   final EdgeInsets padding;
+  final bool showScrollTopButton;
 
   @override
   State<BracuRefreshScroll> createState() => _BracuRefreshScrollState();
@@ -1881,7 +1876,8 @@ class _BracuRefreshScrollState extends State<BracuRefreshScroll> {
             child: widget.child,
           ),
         ),
-        _BracuScrollTopButton(visible: _showScrollTop, onTap: _scrollToTop),
+        if (widget.showScrollTopButton)
+          _BracuScrollTopButton(visible: _showScrollTop, onTap: _scrollToTop),
       ],
     );
   }

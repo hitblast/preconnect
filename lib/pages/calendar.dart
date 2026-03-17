@@ -12,7 +12,7 @@ class CalendarPage extends StatefulWidget {
   State<CalendarPage> createState() => _CalendarPageState();
 }
 
-class _CalendarPageState extends State<CalendarPage> {
+class _CalendarPageState extends State<CalendarPage> with RefreshBusState {
   late Future<CalendarFeed?> _future;
   CalendarFeed? _lastFeed;
   GlobalKey? _highlightKey;
@@ -24,18 +24,18 @@ class _CalendarPageState extends State<CalendarPage> {
   void initState() {
     super.initState();
     _future = CalendarService().getCalendar();
-    RefreshBus.instance.addListener(_onRefreshSignal);
+    bindRefreshBus(_onRefreshSignal);
   }
 
   @override
   void dispose() {
-    RefreshBus.instance.removeListener(_onRefreshSignal);
+    unbindRefreshBus(_onRefreshSignal);
     super.dispose();
   }
 
   void _onRefreshSignal() {
     if (!mounted) return;
-    if (RefreshBus.instance.reason == 'calendar') return;
+    if (isRefreshingFrom('calendar')) return;
     _refresh(notify: false);
   }
 
@@ -115,29 +115,28 @@ class _CalendarPageState extends State<CalendarPage> {
             children.add(
               Padding(
                 padding: const EdgeInsets.only(bottom: 18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: BracuSectionTitle(
-                                title: _dayLabel(entry.key),
-                              ),
-                            ),
-                            Text(
-                              formatLongDate(entry.key),
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: BracuPalette.textPrimary(context),
-                              ),
-                            ),
-                          ],
+                        Expanded(
+                          child: BracuSectionTitle(title: _dayLabel(entry.key)),
                         ),
-                        const SizedBox(height: 10),
-                        ...entry.value.asMap().entries.map((itemEntry) {
-                      final isTargetCard = isTargetSection && itemEntry.key == 0;
+                        Text(
+                          formatLongDate(entry.key),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: BracuPalette.textPrimary(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    ...entry.value.asMap().entries.map((itemEntry) {
+                      final isTargetCard =
+                          isTargetSection && itemEntry.key == 0;
                       if (isTargetCard) {
                         _highlightKey ??= GlobalKey();
                       }
@@ -200,7 +199,6 @@ class _CalendarPageState extends State<CalendarPage> {
   String _dayLabel(DateTime date) {
     return formatRelativeDayLabel(date, includeTomorrow: true);
   }
-
 }
 
 class _CalendarCard extends StatelessWidget {
@@ -223,7 +221,9 @@ class _CalendarCard extends StatelessWidget {
         ? item.roomNumber
         : item.roomName;
     final trailing = roomLabel.isNotEmpty ? roomLabel : item.place;
-    final trailingSub = item.building.isNotEmpty ? item.building : item.sessionLabel;
+    final trailingSub = item.building.isNotEmpty
+        ? item.building
+        : item.sessionLabel;
 
     return BracuCard(
       key: key,
@@ -270,10 +270,7 @@ class _CalendarCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   RichText(
                     text: TextSpan(
-                      style: TextStyle(
-                        color: textSecondary,
-                        fontSize: 11,
-                      ),
+                      style: TextStyle(color: textSecondary, fontSize: 11),
                       children: [
                         if (item.faculty.isNotEmpty)
                           TextSpan(
@@ -415,7 +412,9 @@ class _CalendarCard extends StatelessWidget {
   Color _badgeColor(String key) {
     final upper = key.toUpperCase();
     if (upper.contains('HOLIDAY')) return BracuPalette.danger;
-    if (upper.contains('MID') || upper.contains('FINAL') || upper.contains('EXAM')) {
+    if (upper.contains('MID') ||
+        upper.contains('FINAL') ||
+        upper.contains('EXAM')) {
       return BracuPalette.accent;
     }
     if (upper.contains('CLASS')) return BracuPalette.primary;

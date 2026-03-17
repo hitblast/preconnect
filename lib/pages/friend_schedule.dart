@@ -29,7 +29,8 @@ class FriendSchedulePage extends StatefulWidget {
   State<FriendSchedulePage> createState() => _FriendSchedulePageState();
 }
 
-class _FriendSchedulePageState extends State<FriendSchedulePage> {
+class _FriendSchedulePageState extends State<FriendSchedulePage>
+    with RefreshBusState {
   List<FriendScheduleItem> decodedSchedules = [];
   Map<String, FriendMetadata> _metadata = {};
   final FriendScheduleStore _store = FriendScheduleStore();
@@ -44,7 +45,7 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
   void initState() {
     super.initState();
     _loadSchedules();
-    RefreshBus.instance.addListener(_onRefreshSignal);
+    bindRefreshBus(_onRefreshSignal);
     _searchController.addListener(() {
       final next = _searchController.text.toLowerCase();
       if (next == _searchQuery) return;
@@ -56,7 +57,7 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
 
   @override
   void dispose() {
-    RefreshBus.instance.removeListener(_onRefreshSignal);
+    unbindRefreshBus(_onRefreshSignal);
     _galleryScanner.dispose();
     _searchController.dispose();
     super.dispose();
@@ -64,7 +65,7 @@ class _FriendSchedulePageState extends State<FriendSchedulePage> {
 
   void _onRefreshSignal() {
     if (!mounted) return;
-    final reason = RefreshBus.instance.reason;
+    final reason = refreshBusReason;
     if (reason == 'friend_schedule') {
       return;
     }

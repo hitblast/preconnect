@@ -8,6 +8,7 @@ import 'package:flutter_alarmkit/flutter_alarmkit.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/model/section_info.dart';
+import 'package:preconnect/pages/shared_widgets/schedule_entry_card.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/ramadan_timing.dart';
@@ -21,7 +22,7 @@ class AlarmPage extends StatefulWidget {
   State<AlarmPage> createState() => _AlarmPageState();
 }
 
-class _AlarmPageState extends State<AlarmPage> {
+class _AlarmPageState extends State<AlarmPage> with RefreshBusState {
   late Future<_AlarmData> _futureData;
   final Map<String, int> _minutesBefore = {};
 
@@ -30,18 +31,18 @@ class _AlarmPageState extends State<AlarmPage> {
     super.initState();
     unawaited(ScheduleService().fetchStudentSchedule());
     _futureData = _fetchSchedule();
-    RefreshBus.instance.addListener(_onRefreshSignal);
+    bindRefreshBus(_onRefreshSignal);
   }
 
   @override
   void dispose() {
-    RefreshBus.instance.removeListener(_onRefreshSignal);
+    unbindRefreshBus(_onRefreshSignal);
     super.dispose();
   }
 
   void _onRefreshSignal() {
     if (!mounted) return;
-    if (RefreshBus.instance.reason == 'alarms') {
+    if (isRefreshingFrom('alarms')) {
       return;
     }
     unawaited(_handleRefresh(notify: false));
@@ -219,8 +220,6 @@ class _AlarmPageState extends State<AlarmPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = BracuPalette.textPrimary(context);
-    final textSecondary = BracuPalette.textSecondary(context);
     final chipBg = isDark
         ? const Color(0xFF0F3B6D)
         : BracuPalette.primary.withValues(alpha: 0.10);
@@ -268,6 +267,7 @@ class _AlarmPageState extends State<AlarmPage> {
 
               final courseCode = section.courseCode;
               _minutesBefore.putIfAbsent(courseCode, () => 5);
+              final schedule = schedules.first;
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -275,82 +275,49 @@ class _AlarmPageState extends State<AlarmPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: BracuPalette.primary.withValues(
-                                alpha: 0.12,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              formatSectionBadge(section.sectionName),
-                              style: const TextStyle(
-                                color: BracuPalette.primary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  courseCode,
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Class alarms',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                      ScheduleEntryCard(
+                        sectionName: section.sectionName,
+                        courseCode: courseCode,
+                        schedule: schedule,
+                        isRamadan: isRamadan,
+                        roomNumber: section.roomNumber,
+                        faculties: section.faculties,
+                        consumedSeat: section.consumedSeat,
+                        courseType: section.courseType,
+                        wrapInCard: false,
                       ),
                       const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: schedules.map((s) {
-                          final adjusted = RamadanTiming.adjustRange(
-                            s.startTime,
-                            s.endTime,
-                            isRamadan: isRamadan,
-                          );
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: chipBg,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '${s.day} • ${formatTimeRange(adjusted.startTime, adjusted.endTime)}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: textPrimary,
-                                fontWeight: FontWeight.w600,
+                      SizedBox(
+                        width: double.infinity,
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: schedules.map((s) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
                               ),
-                            ),
-                          );
-                        }).toList(),
+                              decoration: BoxDecoration(
+                                color: chipBg,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                s.day.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: BracuPalette.textPrimary(context),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                            );
+                          }).toList(),
+                        ),
                       ),
                       const SizedBox(height: 14),
                       Container(
@@ -398,7 +365,7 @@ class _AlarmPageState extends State<AlarmPage> {
                                   '${_minutesBefore[courseCode]} min before',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
-                                    color: textPrimary,
+                                    color: BracuPalette.textPrimary(context),
                                   ),
                                 ),
                               ),
