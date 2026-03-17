@@ -6,6 +6,7 @@ import 'package:in_app_update/in_app_update.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/auth_service.dart';
 import 'package:preconnect/api/seat_alert_push_service.dart';
+import 'package:preconnect/api/sembast_cache.dart';
 import 'package:preconnect/pages/home.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/pages/login.dart';
@@ -16,7 +17,6 @@ import 'package:preconnect/tools/play_integrity.dart';
 import 'package:preconnect/tools/app_lock_service.dart';
 import 'package:preconnect/tools/push_notifications_service.dart';
 import 'package:preconnect/tools/token_storage.dart';
-import 'package:preconnect/tools/web_login_session_store.dart';
 
 class AppBootstrapState {
   const AppBootstrapState({
@@ -38,16 +38,16 @@ class MyApp extends StatefulWidget {
   static Future<AppBootstrapState> bootstrap() async {
     final prefs = await SharedPreferences.getInstance();
     final savedTheme = prefs.getString('themeMode') ?? 'system';
-    final token = await TokenStorage.instance.read(key: 'access_token');
-    var hasToken = token != null && token.isNotEmpty;
-    if (kIsWeb && hasToken) {
-      hasToken = await WebLoginSessionStore.hasValidSession();
-      if (!hasToken) {
-        await TokenStorage.instance.deleteAll();
-        await WebLoginSessionStore.clear();
-      }
+    var hasToken = await TokenStorage.instance.readCachedHasSession();
+    if (hasToken == null) {
+      final token = await TokenStorage.instance.read(key: 'access_token');
+      hasToken = token != null && token.isNotEmpty;
+      await TokenStorage.instance.write(
+        key: 'access_token',
+        value: hasToken ? token : null,
+      );
     }
-    final canOpenOffline = !hasToken && _hasOfflineSnapshot(prefs);
+    final canOpenOffline = !hasToken && await _hasOfflineSnapshot(prefs);
     return AppBootstrapState(
       themeMode: _decodeTheme(savedTheme),
       isLoggedIn: hasToken,
@@ -55,10 +55,19 @@ class MyApp extends StatefulWidget {
     );
   }
 
-  static bool _hasOfflineSnapshot(SharedPreferences prefs) {
-    final studentId = (prefs.getString('studentId') ?? '').trim();
-    final fullName = (prefs.getString('fullName') ?? '').trim();
-    final schedule = (prefs.getString('StudentSchedule') ?? '').trim();
+  static Future<bool> _hasOfflineSnapshot(SharedPreferences prefs) async {
+    final cache = SembastCache();
+    final studentId =
+        ((await cache.getString('studentId')) ?? prefs.getString('studentId') ?? '')
+            .trim();
+    final fullName =
+        ((await cache.getString('fullName')) ?? prefs.getString('fullName') ?? '')
+            .trim();
+    final schedule =
+        ((await cache.getString('StudentSchedule')) ??
+                prefs.getString('StudentSchedule') ??
+                '')
+            .trim();
     if (schedule.isNotEmpty) return true;
     return studentId.isNotEmpty && fullName.isNotEmpty;
   }

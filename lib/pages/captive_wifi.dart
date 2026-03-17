@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:preconnect/pages/ui_kit.dart';
+import 'package:preconnect/api/profile_service.dart';
+import 'package:preconnect/api/sembast_cache.dart';
 import 'package:preconnect/tools/android_network_assist.dart';
 import 'package:preconnect/tools/captive_wifi_http_service.dart';
 import 'package:preconnect/tools/captive_login_store.dart';
@@ -53,7 +55,14 @@ class _CaptiveWifiPageState extends State<CaptiveWifiPage> {
         .readAutoExtendEnabled();
     final creds = await CaptiveLoginStore.instance.read();
     final prefs = SharedPreferencesAsync();
-    final studentId = (await prefs.getString('studentId') ?? '').trim();
+    var studentId = (await SembastCache().getString('studentId') ?? '').trim();
+    if (studentId.isEmpty) {
+      studentId = (await prefs.getString('studentId') ?? '').trim();
+    }
+    if (studentId.isEmpty) {
+      final profile = await ProfileService().getProfile(fromFetch: true);
+      studentId = (profile?['studentId'] ?? '').trim();
+    }
     if (!mounted) return;
     setState(() {
       _autoExtendEnabled = autoExtendEnabled;

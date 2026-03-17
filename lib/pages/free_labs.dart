@@ -127,7 +127,7 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
   Widget build(BuildContext context) {
     return BracuPageScaffold(
       title: 'Free Labs',
-      subtitle: 'No Schedule',
+      subtitle: _headerDayLabel(),
       icon: Icons.computer_outlined,
       actions: [
         BracuSelectDropdownChip<_RoomFilter>(

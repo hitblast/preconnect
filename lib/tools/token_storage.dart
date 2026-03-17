@@ -9,6 +9,7 @@ class TokenStorage {
   TokenStorage._();
 
   static final TokenStorage instance = TokenStorage._();
+  static const String _cachedHasSessionKey = 'cached_has_auth_session';
 
   final FlutterSecureStorage _secure = const FlutterSecureStorage();
 
@@ -27,12 +28,19 @@ class TokenStorage {
     return prefs.getString(key);
   }
 
+  Future<bool?> readCachedHasSession() async {
+    final prefs = SharedPreferencesAsync();
+    return await prefs.getBool(_cachedHasSessionKey);
+  }
+
   Future<void> write({required String key, String? value}) async {
     if (kIsWeb && webKvSet(key, value)) {
+      await _updateCachedSessionFlagForKey(key, value);
       return;
     }
     if (_useSecure) {
       await _secure.write(key: key, value: value);
+      await _updateCachedSessionFlagForKey(key, value);
       return;
     }
     final prefs = SharedPreferencesAsync();
@@ -41,6 +49,7 @@ class TokenStorage {
     } else {
       await prefs.setString(key, value);
     }
+    await _updateCachedSessionFlagForKey(key, value);
   }
 
   Future<void> deleteAll() async {
@@ -49,13 +58,23 @@ class TokenStorage {
       final prefs = SharedPreferencesAsync();
       await prefs.remove('access_token');
       await prefs.remove('refresh_token');
+      await prefs.setBool(_cachedHasSessionKey, false);
       return;
     }
     if (_useSecure) {
       await _secure.deleteAll();
+      final prefs = SharedPreferencesAsync();
+      await prefs.setBool(_cachedHasSessionKey, false);
       return;
     }
     final prefs = SharedPreferencesAsync();
     await prefs.clear();
+  }
+
+  Future<void> _updateCachedSessionFlagForKey(String key, String? value) async {
+    if (key != 'access_token') return;
+    final prefs = SharedPreferencesAsync();
+    final hasValue = value != null && value.isNotEmpty;
+    await prefs.setBool(_cachedHasSessionKey, hasValue);
   }
 }

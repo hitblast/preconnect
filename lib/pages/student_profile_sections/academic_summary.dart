@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:preconnect/model/progress_info.dart';
 import 'package:preconnect/pages/shared_widgets/progress_bar.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 
@@ -7,10 +8,12 @@ class AcademicSummaryCard extends StatelessWidget {
     super.key,
     required this.profile,
     required this.advising,
+    this.progressSummary,
   });
 
   final Map<String, String?> profile;
   final Map<String, String?> advising;
+  final ProgressSummary? progressSummary;
 
   @override
   Widget build(BuildContext context) {
@@ -34,24 +37,39 @@ class AcademicSummaryCard extends StatelessWidget {
                 ),
               ],
       ),
-      child: _AcademicSummary(profile: profile, advising: advising),
+      child: _AcademicSummary(
+        profile: profile,
+        advising: advising,
+        progressSummary: progressSummary,
+      ),
     );
   }
 }
 
 class _AcademicSummary extends StatelessWidget {
-  const _AcademicSummary({required this.profile, required this.advising});
+  const _AcademicSummary({
+    required this.profile,
+    required this.advising,
+    this.progressSummary,
+  });
 
   final Map<String, String?> profile;
   final Map<String, String?> advising;
+  final ProgressSummary? progressSummary;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textPrimary = BracuPalette.textPrimary(context);
     final textSecondary = BracuPalette.textSecondary(context);
-    final totalNum = _parseDouble(advising['totalCredit']);
-    final earnedNum = _parseDouble(advising['earnedCredit']);
+    final totalNum =
+        _parseDouble(advising['totalCredit']) > 0
+            ? _parseDouble(advising['totalCredit'])
+            : (progressSummary?.totalCredit ?? 0);
+    final earnedNum =
+        _parseDouble(advising['earnedCredit']) > 0
+            ? _parseDouble(advising['earnedCredit'])
+            : (progressSummary?.completedCredit ?? 0);
     final completionRatio = totalNum == 0
         ? 0.0
         : (earnedNum / totalNum).clamp(0.0, 1.0);

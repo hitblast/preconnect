@@ -19,7 +19,6 @@ import 'package:preconnect/pages/scan_schedule.dart';
 import 'package:preconnect/pages/friend_schedule.dart';
 import 'package:preconnect/pages/devs.dart';
 import 'package:preconnect/pages/calendar.dart';
-import 'package:preconnect/pages/ai_chat.dart';
 import 'package:preconnect/pages/free_labs.dart';
 import 'package:preconnect/pages/more_quick_access.dart';
 import 'package:preconnect/pages/notifications.dart';
@@ -1161,8 +1160,6 @@ class _HomeDashboardState extends State<_HomeDashboard> {
                                 },
                               ),
                             ],
-                            const SizedBox(height: 12),
-                            const AiChatEntryCard(),
                             const SizedBox(height: 12),
                             BracuActionBannerCard(
                               icon: Icons.favorite_outline_rounded,

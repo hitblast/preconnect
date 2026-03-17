@@ -776,7 +776,7 @@ class SeatAlertConfig {
     this.thresholdSeats,
     this.thresholdOneTime = true,
     this.notifyOnAnyChange = false,
-    this.changeCooldownMinutes = 5,
+    this.changeCooldownMinutes = 0,
     this.lastChangeNotifiedAtMs,
   });
 
@@ -801,7 +801,7 @@ class SeatAlertConfig {
       thresholdOneTime: json['thresholdOneTime'] != false,
       notifyOnAnyChange: json['notifyOnAnyChange'] == true,
       changeCooldownMinutes:
-          int.tryParse('${json['changeCooldownMinutes'] ?? ''}') ?? 5,
+          int.tryParse('${json['changeCooldownMinutes'] ?? ''}') ?? 0,
       lastChangeNotifiedAtMs: int.tryParse(
         '${json['lastChangeNotifiedAtMs'] ?? ''}',
       ),

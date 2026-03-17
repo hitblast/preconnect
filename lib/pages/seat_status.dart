@@ -180,11 +180,10 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       await _pushService.syncAllSeatAlertConfigs(loaded);
     } catch (_) {}
     if (!mounted) return;
-    setState(() {
-      _seatAlerts
-        ..clear()
-        ..addAll(loaded);
-    });
+    _seatAlerts
+      ..clear()
+      ..addAll(loaded);
+    _refreshVisibleCards();
   }
 
   List<_SeatStatusCardData> _buildCardsFromDetailsMap(
@@ -305,7 +304,7 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     }
 
     if (changedConfig && mounted) {
-      setState(() {});
+      _refreshVisibleCards();
     }
     if (triggeredMessages.isEmpty || !mounted) return;
     final first = triggeredMessages.first;
@@ -384,7 +383,10 @@ class _SeatStatusPageState extends State<SeatStatusPage>
                   value: temp.notifyOnAnyChange,
                   onChanged: (value) {
                     setSheetState(() {
-                      temp = temp.copyWith(notifyOnAnyChange: value);
+                      temp = temp.copyWith(
+                        notifyOnAnyChange: value,
+                        changeCooldownMinutes: value ? 0 : temp.changeCooldownMinutes,
+                      );
                     });
                   },
                 ),
@@ -413,15 +415,17 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       },
     );
     if (!mounted || updated == null) return;
-    if (!updated.hasAnyRule) {
+    final normalizedUpdated = updated.notifyOnAnyChange
+        ? updated.copyWith(changeCooldownMinutes: 0)
+        : updated;
+    if (!normalizedUpdated.hasAnyRule) {
       await _service.removeSeatAlertConfig(item.sectionId);
       try {
         await _pushService.removeSeatAlertConfig(item.sectionId);
       } catch (_) {}
       if (!mounted) return;
-      setState(() {
-        _seatAlerts.remove(item.sectionId);
-      });
+      _seatAlerts.remove(item.sectionId);
+      _refreshVisibleCards();
       showAppSnackBar(context, 'Seat alert removed');
       return;
     }
@@ -432,31 +436,17 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       _showSeatAlertPermissionSnackBar();
       return;
     }
-    await _service.saveSeatAlertConfig(updated);
+    await _service.saveSeatAlertConfig(normalizedUpdated);
     try {
-      await _pushService.syncSeatAlertConfig(updated);
+      await _pushService.syncSeatAlertConfig(normalizedUpdated);
     } catch (_) {}
     if (!mounted) return;
-    setState(() {
-      _seatAlerts[item.sectionId] = updated;
-    });
+    _seatAlerts[item.sectionId] = normalizedUpdated;
+    _refreshVisibleCards();
     showAppSnackBar(context, 'Seat alert saved');
   }
 
   Future<void> _handleSeatAlertTap(_SeatStatusCardData item) async {
-    final existing = _seatAlerts[item.sectionId];
-    if (existing?.hasAnyRule == true) {
-      await _openSeatAlertSheet(item);
-      return;
-    }
-
-    final permissionGranted = await PushNotificationsService()
-        .ensureNotificationPermission();
-    if (!mounted) return;
-    if (!permissionGranted) {
-      _showSeatAlertPermissionSnackBar();
-      return;
-    }
     await _openSeatAlertSheet(item);
   }
 

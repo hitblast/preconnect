@@ -10,6 +10,7 @@ import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/api/progress_service.dart';
 import 'package:preconnect/model/payment_info.dart';
 import 'package:preconnect/model/attendance_info.dart';
+import 'package:preconnect/model/progress_info.dart';
 import 'package:preconnect/pages/card_section.dart';
 import 'package:preconnect/pages/shared_widgets/grade_sheet_card.dart';
 import 'package:preconnect/pages/student_profile_sections/academic_summary.dart';
@@ -37,6 +38,7 @@ class _StudentProfileState extends State<StudentProfile>
   List<PaymentInfo> _payments = [];
   List<AttendanceInfo> _attendances = [];
   Map<String, String?> _advising = {};
+  ProgressSummary? _progressSummary;
   bool _isRefreshing = false;
   late final AnimationController _refreshController;
 
@@ -112,6 +114,7 @@ class _StudentProfileState extends State<StudentProfile>
     List<PaymentInfo> payments = _payments;
     List<AttendanceInfo> attendances = _attendances;
     Map<String, String?> advising = _advising;
+    ProgressSummary? progressSummary = _progressSummary;
 
     try {
       profile = await ProfileService().getProfile();
@@ -157,6 +160,12 @@ class _StudentProfileState extends State<StudentProfile>
       advising = await AdvisingService().getAdvisingInfo() ?? advising;
     } catch (_) {}
 
+    try {
+      progressSummary =
+          await ProgressService().getProgressSummary(fromFetch: true) ??
+          progressSummary;
+    } catch (_) {}
+
     if (!mounted) return;
     setState(() {
       _profile = profile;
@@ -165,6 +174,7 @@ class _StudentProfileState extends State<StudentProfile>
       _payments = payments;
       _attendances = attendances;
       _advising = advising;
+      _progressSummary = progressSummary;
     });
   }
 
@@ -184,6 +194,7 @@ class _StudentProfileState extends State<StudentProfile>
     List<PaymentInfo> payments = _payments;
     List<AttendanceInfo> attendances = _attendances;
     Map<String, String?> advising = _advising;
+    ProgressSummary? progressSummary = _progressSummary;
 
     try {
       profile = await ProfileService().fetchProfile();
@@ -230,6 +241,12 @@ class _StudentProfileState extends State<StudentProfile>
       advising = await AdvisingService().fetchAdvisingInfo() ?? advising;
     } catch (_) {}
 
+    try {
+      progressSummary =
+          await ProgressService().getProgressSummary(fromFetch: true) ??
+          progressSummary;
+    } catch (_) {}
+
     if (!mounted) return;
     setState(() {
       _profile = profile;
@@ -238,6 +255,7 @@ class _StudentProfileState extends State<StudentProfile>
       _payments = payments;
       _attendances = attendances;
       _advising = advising;
+      _progressSummary = progressSummary;
     });
     if (mounted) {
       setState(() {
@@ -275,6 +293,7 @@ class _StudentProfileState extends State<StudentProfile>
           AcademicSummaryCard(
             profile: _profile ?? const {},
             advising: _advising,
+            progressSummary: _progressSummary,
           ),
           const SizedBox(height: 18),
           const BracuSectionTitle(title: 'Documents'),

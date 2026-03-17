@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
+import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/api/sembast_cache.dart';
 
 class AdvisingService {
@@ -25,7 +26,12 @@ class AdvisingService {
     bool fromGet = false,
   }) async {
     final asyncPrefs = SharedPreferencesAsync();
-    final String? studentId = await asyncPrefs.getString('studentId');
+    String? studentId = await SembastCache().getString('studentId');
+    studentId ??= await asyncPrefs.getString('studentId');
+    if (studentId == null || studentId.isEmpty) {
+      final profile = await ProfileService().getProfile(fromFetch: true);
+      studentId = profile?['studentId'];
+    }
     if (studentId == null || studentId.isEmpty) {
       if (fromGet) return null;
       return getAdvisingInfo(fromFetch: true);

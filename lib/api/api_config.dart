@@ -16,12 +16,6 @@ class ApiConfig {
   static const String seatStatusProxyBase = 'https://api.preconnect.app';
   static const String webLoginBrokerBase = seatStatusProxyBase;
   static const String pushAlertsBase = seatStatusProxyBase;
-  static const String geminiApiKey = 'AIzaSyCH69QLG71ZKqwCJ5RwiPm0NCt16Vr0Fdg';
-  static const String geminiModel = 'gemini-2.5-flash';
-
-  static String get geminiGenerateContentUrl =>
-      'https://generativelanguage.googleapis.com/v1beta/models/'
-      '$geminiModel:generateContent?key=$geminiApiKey';
 
   static const String clientId = 'slm';
   static const String redirectUri = 'https://connect.bracu.ac.bd/';

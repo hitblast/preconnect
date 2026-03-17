@@ -1784,7 +1784,7 @@ class BracuRefreshPlaceholder extends StatelessWidget {
 Widget buildRefreshLoadingState({
   required RefreshCallback onRefresh,
   String label = 'Loading...',
-  double topSpacing = 0,
+  double topSpacing = 160,
 }) {
   return BracuRefreshPlaceholder(
     onRefresh: onRefresh,
@@ -1796,7 +1796,7 @@ Widget buildRefreshLoadingState({
 Widget buildRefreshErrorState({
   required RefreshCallback onRefresh,
   required Object? error,
-  double topSpacing = 0,
+  double topSpacing = 160,
 }) {
   return BracuRefreshPlaceholder(
     onRefresh: onRefresh,
@@ -1808,7 +1808,7 @@ Widget buildRefreshErrorState({
 Widget buildRefreshEmptyState({
   required RefreshCallback onRefresh,
   required String message,
-  double topSpacing = 0,
+  double topSpacing = 160,
 }) {
   return BracuRefreshPlaceholder(
     onRefresh: onRefresh,
