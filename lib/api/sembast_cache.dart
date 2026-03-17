@@ -111,6 +111,13 @@ class SembastCache {
       await _store.record(key).delete(db);
     } catch (_) {}
   }
+
+  Future<void> clearAll() async {
+    try {
+      final db = await _openDb();
+      await _store.delete(db);
+    } catch (_) {}
+  }
 }
 
 Future<String?> readCachedSembastStringWithFallback({

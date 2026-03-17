@@ -57,6 +57,16 @@ class LoginPage extends StatefulWidget {
     }
   }
 
+  static Future<void> clearSessionArtifacts() async {
+    _preloadedWebViewController = null;
+    _isPreloadingWebView = false;
+    if (kIsWeb) return;
+    try {
+      final manager = WebViewCookieManager();
+      await manager.clearCookies();
+    } catch (_) {}
+  }
+
   @override
   State<LoginPage> createState() => _LoginPageState();
 }

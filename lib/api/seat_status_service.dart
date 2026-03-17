@@ -330,6 +330,23 @@ class SeatStatusService {
     } catch (_) {}
   }
 
+  Future<void> clearAll() async {
+    try {
+      final db = await _openDb();
+      await db.transaction((txn) async {
+        await _metaStore.delete(txn);
+        await _detailsStore.delete(txn);
+        await _alertsStore.delete(txn);
+        await _staffStore.delete(txn);
+      });
+    } catch (_) {}
+    _detailsSnapshot = null;
+    _detailsSnapshotTs = null;
+    _staffSnapshot = null;
+    _staffInfoByInitialCache.clear();
+    _staffInfoInFlight.clear();
+  }
+
   Future<Database> _openDb() async {
     final existing = _db;
     if (existing != null) return existing;

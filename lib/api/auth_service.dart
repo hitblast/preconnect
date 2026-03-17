@@ -8,6 +8,9 @@ import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/friend_schedule_store.dart';
 import 'package:preconnect/api/seat_alert_push_service.dart';
+import 'package:preconnect/api/sembast_cache.dart';
+import 'package:preconnect/api/seat_status_service.dart';
+import 'package:preconnect/pages/login.dart';
 import 'package:preconnect/tools/cached_image.dart';
 import 'package:preconnect/tools/profile_image_cache.dart';
 import 'package:preconnect/tools/token_storage.dart';
@@ -60,9 +63,9 @@ class AuthService {
   }
 
   Future<void> _clearAuthSessionData() async {
-    await _storage.write(key: 'access_token', value: null);
-    await _storage.write(key: 'refresh_token', value: null);
+    await _storage.deleteAll();
     await WebLoginSessionStore.clear();
+    await LoginPage.clearSessionArtifacts();
   }
 
   Future<void> _clearLocalCaches() async {
@@ -73,7 +76,9 @@ class AuthService {
     await asyncPrefs.clear();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+    await SembastCache().clearAll();
     await FriendScheduleStore().clearAll();
+    await SeatStatusService().clearAll();
     await ProfileImageCache.instance.clear();
     CachedImage.clearMemoryCache();
   }

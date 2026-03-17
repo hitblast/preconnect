@@ -366,6 +366,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       onTimeout: () => true,
     );
     if (!signedIn && mounted) {
+      _themeMode.value = ThemeMode.system;
       _navigatorKey.currentState?.pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const OnboardingPage()),
         (route) => false,

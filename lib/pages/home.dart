@@ -128,7 +128,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _onRegistryTabChanged() {
-    if (!mounted) return;
+    if (!context.mounted) return;
     final requestedTab = HomeTabRegistry.activeTab.value;
     if (requestedTab == selectedTab) return;
     _setTab(requestedTab);
@@ -168,6 +168,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
+    final navigator = Navigator.of(context);
+    final themeNotifier = ThemeController.of(context);
     final shouldLogout = await showBracuConfirmationDialog(
       context,
       icon: Icons.logout,
@@ -176,13 +178,15 @@ class _HomePageState extends State<HomePage> {
           'Sign out will clear cached data. You can sign in again for fresh data.',
       confirmLabel: 'Sign Out',
     );
+    if (!mounted) return;
 
     if (shouldLogout) {
-      if (!context.mounted) return;
       await AuthService().logout(instant: true);
+      if (!mounted) return;
+      themeNotifier.value = ThemeMode.system;
       RefreshBus.instance.notify(reason: 'auth');
-      if (!context.mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil(
+      if (!mounted) return;
+      navigator.pushNamedAndRemoveUntil(
         '/onboarding',
         (route) => false,
       );
