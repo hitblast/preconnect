@@ -180,10 +180,13 @@ class _HomePageState extends State<HomePage> {
 
     if (shouldLogout) {
       if (!context.mounted) return;
-      await AuthService().logout();
+      await AuthService().logout(instant: true);
       RefreshBus.instance.notify(reason: 'auth');
       if (!context.mounted) return;
-      Navigator.pushReplacementNamed(context, '/onboarding');
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/onboarding',
+        (route) => false,
+      );
     }
   }
 

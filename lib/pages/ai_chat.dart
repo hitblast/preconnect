@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -16,7 +17,7 @@ Future<void> showAiChatBottomSheet(
   return showBracuBottomSheet<void>(
     context,
     title: 'Ask PreConnect',
-    subtitle: 'Get help from Hosted AI',
+    subtitle: 'Powered by Gemini AI',
     maxHeightFactor: 0.84,
     actions: [
       ValueListenableBuilder<int>(
@@ -65,6 +66,8 @@ class _AiChatLocalStore {
         .toList();
   }
 
+  static Future<void> clear() => SembastCache().remove(_cacheKey);
+
   static Future<void> save(List<_ChatMessage> messages) async {
     await SembastCache().setJson(
       _cacheKey,
@@ -78,8 +81,6 @@ class _AiChatLocalStore {
           .toList(),
     );
   }
-
-  static Future<void> clear() => SembastCache().remove(_cacheKey);
 }
 
 class AiChatEntryCard extends StatefulWidget {
@@ -227,6 +228,12 @@ class AiChatPanel extends StatefulWidget {
 }
 
 class _AiChatPanelState extends State<AiChatPanel> {
+  static const Duration _requestTimeout = Duration(seconds: 20);
+  static const String _systemInstruction =
+      'You are PreConnect AI, a concise academic assistant for BRAC University students. '
+      'Answer clearly, accurately, and helpfully. Keep answers practical and easy to read. '
+      'Use prior chat context when it helps.';
+
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
@@ -273,10 +280,6 @@ class _AiChatPanelState extends State<AiChatPanel> {
     _scrollToBottom();
   }
 
-  Future<void> _persistMessages() async {
-    await _AiChatLocalStore.save(_messages);
-  }
-
   void _handleResetRequested() {
     if (!mounted) return;
     setState(() {
@@ -288,15 +291,7 @@ class _AiChatPanelState extends State<AiChatPanel> {
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _controller.text).trim();
     if (text.isEmpty || _isSending) return;
-    final history = _messages
-        .where((message) => message.role != _ChatRole.system)
-        .map((message) => {
-              'role': message.role == _ChatRole.assistant
-                  ? 'assistant'
-                  : 'user',
-              'content': message.text,
-            })
-        .toList();
+
     FocusScope.of(context).unfocus();
     _controller.clear();
     setState(() {
@@ -304,50 +299,37 @@ class _AiChatPanelState extends State<AiChatPanel> {
       _isSending = true;
       _selectedMessageIndex = null;
     });
-    await _persistMessages();
+    await _AiChatLocalStore.save(_messages);
     _scrollToBottom();
 
     try {
-      final response = await http
-          .post(
-            Uri.parse('${ApiConfig.aiChatBase}${ApiConfig.aiChatPath}'),
-            headers: const {'content-type': 'application/json'},
-            body: jsonEncode({
-              'message': text,
-              'history': history,
-            }),
+      final history = _messages
+          .where((message) => message.role != _ChatRole.system)
+          .take(_messages.length - 1)
+          .map(
+            (message) => <String, String>{
+              'role': message.role == _ChatRole.assistant
+                  ? 'assistant'
+                  : 'user',
+              'content': message.text,
+            },
           )
-          .timeout(const Duration(seconds: 25));
-
+          .toList();
+      final reply = await _generateGeminiReply(text, history);
       if (!mounted) return;
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('AI service returned ${response.statusCode}');
+      if (reply.trim().isEmpty) {
+        throw Exception('Gemini returned an empty reply.');
       }
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final reply = '${data['reply'] ?? ''}'.trim();
-      if (reply.isEmpty) {
-        throw Exception('Empty AI reply');
-      }
-      setState(() {
-        _messages.add(_ChatMessage(role: _ChatRole.assistant, text: reply));
-        _selectedMessageIndex = null;
-      });
-      await _persistMessages();
-    } catch (_) {
-      if (!mounted) return;
       setState(() {
         _messages.add(
-          const _ChatMessage(
-            role: _ChatRole.assistant,
-            text: 'Sorry, AI chat is unavailable right now. Please try again.',
-          ),
+          _ChatMessage(role: _ChatRole.assistant, text: reply),
         );
         _selectedMessageIndex = null;
       });
-      await _persistMessages();
-      if (mounted) {
-        showAppSnackBar(context, 'Unable to get AI response');
-      }
+      await _AiChatLocalStore.save(_messages);
+    } catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, '$error');
     } finally {
       if (mounted) {
         setState(() {
@@ -356,6 +338,85 @@ class _AiChatPanelState extends State<AiChatPanel> {
         _scrollToBottom();
       }
     }
+  }
+
+  Future<String> _generateGeminiReply(
+    String message,
+    List<Map<String, String>> history,
+  ) async {
+    final contents = <Map<String, dynamic>>[
+      for (final item in history)
+        <String, dynamic>{
+          'role': item['role'] == 'assistant' ? 'model' : 'user',
+          'parts': [
+            <String, String>{'text': item['content'] ?? ''},
+          ],
+        },
+      <String, dynamic>{
+        'role': 'user',
+        'parts': [
+          <String, String>{'text': message},
+        ],
+      },
+    ];
+
+    final response = await http
+        .post(
+          Uri.parse(ApiConfig.geminiGenerateContentUrl),
+          headers: const <String, String>{
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode(<String, dynamic>{
+            'system_instruction': <String, dynamic>{
+              'parts': [
+                <String, String>{'text': _systemInstruction},
+              ],
+            },
+            'contents': contents,
+            'generationConfig': <String, dynamic>{
+              'temperature': 0.7,
+              'topK': 40,
+              'maxOutputTokens': 512,
+            },
+          }),
+        )
+        .timeout(_requestTimeout);
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final error = payload['error'];
+      final message = error is Map<String, dynamic>
+          ? '${error['message'] ?? 'Gemini request failed.'}'
+          : 'Gemini request failed.';
+      throw Exception(message);
+    }
+
+    final candidates = payload['candidates'];
+    if (candidates is! List || candidates.isEmpty) {
+      throw Exception('Gemini returned no reply.');
+    }
+    final first = candidates.first;
+    if (first is! Map<String, dynamic>) {
+      throw Exception('Gemini returned an invalid reply.');
+    }
+    final content = first['content'];
+    if (content is! Map<String, dynamic>) {
+      throw Exception('Gemini returned empty content.');
+    }
+    final parts = content['parts'];
+    if (parts is! List || parts.isEmpty) {
+      throw Exception('Gemini returned empty text.');
+    }
+    final text = parts
+        .whereType<Map>()
+        .map((part) => '${part['text'] ?? ''}')
+        .where((value) => value.trim().isNotEmpty)
+        .join('\n')
+        .trim();
+    if (text.isEmpty) {
+      throw Exception('Gemini returned empty text.');
+    }
+    return text;
   }
 
   void _scrollToBottom() {
@@ -381,12 +442,9 @@ class _AiChatPanelState extends State<AiChatPanel> {
                 padding: const EdgeInsets.all(2),
                 child: ListView.separated(
                   controller: _scrollController,
-                  itemCount: _messages.length + (_isSending ? 1 : 0),
+                  itemCount: _messages.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
-                    if (_isSending && index == _messages.length) {
-                      return const _TypingBubble();
-                    }
                     final message = _messages[index];
                     return _MessageBubble(
                       message: message,
@@ -413,7 +471,6 @@ class _AiChatPanelState extends State<AiChatPanel> {
                   Expanded(
                     child: TextField(
                       controller: _controller,
-                      enabled: !_isSending,
                       maxLines: 1,
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _send(),
@@ -435,18 +492,16 @@ class _AiChatPanelState extends State<AiChatPanel> {
                   ),
                   const SizedBox(width: 4),
                   InkWell(
-                    onTap: _isSending ? null : _send,
+                    onTap: _send,
                     borderRadius: BorderRadius.circular(999),
                     child: Padding(
                       padding: const EdgeInsets.all(4),
                       child: Icon(
-                        _isSending
-                            ? Icons.hourglass_top_rounded
-                            : Icons.send_rounded,
+                        Icons.send_rounded,
                         size: 18,
                         color: BracuPalette.textPrimary(
                           context,
-                        ).withValues(alpha: _isSending ? 0.4 : 0.92),
+                        ).withValues(alpha: 0.92),
                       ),
                     ),
                   ),
@@ -463,9 +518,9 @@ class _AiChatPanelState extends State<AiChatPanel> {
                 fontWeight: FontWeight.w500,
               ),
               children: [
-                const TextSpan(text: 'Chats stay on this device. '),
+                const TextSpan(text: 'Chats stay on this device.'),
                 TextSpan(
-                  text: 'Support PreConnect AI.',
+                  text: 'Support PreConnect.',
                   style: const TextStyle(
                     color: BracuPalette.primary,
                     fontWeight: FontWeight.w700,

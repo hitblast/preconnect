@@ -11,7 +11,6 @@ import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/api/payment_service.dart';
 import 'package:preconnect/api/attendance_service.dart';
 import 'package:preconnect/api/advising_service.dart';
-import 'home.dart';
 import 'package:preconnect/tools/token_storage.dart';
 import 'package:preconnect/tools/user_agent.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
@@ -188,9 +187,9 @@ class _LoginPageState extends State<LoginPage> {
 
       RefreshBus.instance.notify(reason: 'auth');
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const HomePage()),
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/home',
+          (route) => false,
         );
       }
       return true;

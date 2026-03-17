@@ -126,6 +126,22 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             color: BracuPalette.accent,
                           ),
                           const SizedBox(height: 10),
+                          _InfoCard(
+                            icon: Icons.auto_awesome_rounded,
+                            title: 'Built for Daily Use',
+                            body:
+                                'Quickly check class schedules, seat status, exams, reminders, free labs, and more from one student-friendly app.',
+                            color: const Color(0xFF7C4DFF),
+                          ),
+                          const SizedBox(height: 10),
+                          _InfoCard(
+                            icon: Icons.groups_rounded,
+                            title: 'Student Maintained',
+                            body:
+                                'PreConnect is actively improved by students with open-source contributions, feedback, and community support.',
+                            color: const Color(0xFF0EA5A4),
+                          ),
+                          const SizedBox(height: 10),
                           InkWell(
                             onTap: () =>
                                 _openLink(context, 'https://preconnect.app'),
@@ -232,9 +248,9 @@ class _HeroCard extends StatelessWidget {
       children: [
         Center(
           child: Image.asset(
-            'assets/logo/preconnect-logo-transparent.png',
-            width: 120,
-            height: 120,
+            'web/icons/Icon-512.png',
+            width: 96,
+            height: 96,
             filterQuality: FilterQuality.high,
           ),
         ),

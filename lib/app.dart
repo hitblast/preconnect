@@ -495,13 +495,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               '/onboarding': (context) => const OnboardingPage(),
             },
             home: _resolvedBootstrapState == null
-                ? const _BootPage()
+                ? const _StartupFrame()
                 : (_initialLoggedIn || _canOpenOffline)
                       ? const HomePage()
                       : const OnboardingPage(),
           ),
         );
       },
+    );
+  }
+}
+
+class _StartupFrame extends StatelessWidget {
+  const _StartupFrame();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: const SizedBox.expand(),
     );
   }
 }
@@ -533,24 +545,5 @@ class ThemeController extends InheritedWidget {
   @override
   bool updateShouldNotify(ThemeController oldWidget) {
     return notifier != oldWidget.notifier;
-  }
-}
-
-class _BootPage extends StatelessWidget {
-  const _BootPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Image.asset(
-          'assets/logo/preconnect-logo-transparent.png',
-          width: 108,
-          height: 108,
-          filterQuality: FilterQuality.high,
-        ),
-      ),
-    );
   }
 }

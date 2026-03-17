@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -26,9 +27,23 @@ class AuthService {
     Navigator.pushNamed(context, '/login');
   }
 
-  Future<void> logout() async {
+  Future<void> logout({bool instant = false}) async {
+    final refreshToken = await _storage.read(key: 'refresh_token');
+    await _clearAuthSessionData();
+    if (instant) {
+      unawaited(_finishLogout(refreshToken));
+      return;
+    }
+    await _finishLogout(refreshToken);
+  }
+
+  Future<void> _finishLogout(String? refreshToken) async {
+    await _revokeServerSession(refreshToken);
+    await _clearLocalCaches();
+  }
+
+  Future<void> _revokeServerSession(String? refreshToken) async {
     try {
-      final refreshToken = await _storage.read(key: 'refresh_token');
       if (!kIsWeb && refreshToken != null && refreshToken.isNotEmpty) {
         await http
             .post(
@@ -42,15 +57,18 @@ class AuthService {
             .timeout(_authRequestTimeout);
       }
     } catch (_) {}
-    await _clearLocalSessionData();
   }
 
-  Future<void> _clearLocalSessionData() async {
+  Future<void> _clearAuthSessionData() async {
+    await _storage.write(key: 'access_token', value: null);
+    await _storage.write(key: 'refresh_token', value: null);
+    await WebLoginSessionStore.clear();
+  }
+
+  Future<void> _clearLocalCaches() async {
     try {
       await SeatAlertPushService().clearAll();
     } catch (_) {}
-    await _storage.deleteAll();
-    await WebLoginSessionStore.clear();
     final asyncPrefs = SharedPreferencesAsync();
     await asyncPrefs.clear();
     final prefs = await SharedPreferences.getInstance();

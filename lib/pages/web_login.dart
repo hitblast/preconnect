@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:flutter/material.dart';
-import 'package:preconnect/pages/home.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/web_login_broker_service.dart';
@@ -149,9 +148,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
         );
         RefreshBus.instance.notify(reason: 'auth');
         if (!mounted) return;
-        Navigator.of(
-          context,
-        ).pushReplacement(MaterialPageRoute(builder: (_) => const HomePage()));
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
       } catch (_) {
         _resetToInitial();
         if (!mounted) return;

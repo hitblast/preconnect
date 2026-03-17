@@ -43,24 +43,8 @@ dependencies:
 
 dev_dependencies:
   flutter_lints: ^6.0.0
-  flutter_native_splash: ^2.4.6
-
-flutter_native_splash:
-  color: "#FFFFFF"
-  color_dark: "#FFFFFF"
-  image: "assets/logo/preconnect-logo-transparent.png"
-  image_dark: "assets/logo/preconnect-logo-transparent.png"
-  android: true
-  ios: true
-  web: false
-  android_12:
-    color: "#FFFFFF"
-    color_dark: "#FFFFFF"
-    image: "assets/logo/preconnect-logo-transparent.png"
-    image_dark: "assets/logo/preconnect-logo-transparent.png"
-
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/logo/preconnect-logo-transparent.png
+    - web/icons/Icon-512.png
