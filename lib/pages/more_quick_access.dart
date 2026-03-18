@@ -43,11 +43,11 @@ class _MoreQuickAccessPageState extends State<MoreQuickAccessPage> {
                     ),
                     QuickAccessCard(
                       width: width,
-                      icon: Icons.developer_mode_outlined,
-                      title: 'Devs',
-                      subtitle: 'About Us',
-                      color: const Color(0xFF2C9DFF),
-                      onTap: () => widget.onNavigate(HomeTab.devs),
+                      icon: Icons.calendar_today_outlined,
+                      title: 'Events',
+                      subtitle: 'Calendar',
+                      color: const Color(0xFF00A86B),
+                      onTap: () => widget.onNavigate(HomeTab.calendar),
                     ),
                     QuickAccessCard(
                       width: width,

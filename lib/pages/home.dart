@@ -1127,22 +1127,22 @@ class _HomeDashboardState extends State<_HomeDashboard> with RefreshBusState {
                                         ),
                                         QuickAccessCard(
                                           width: width,
-                                          icon: Icons.calendar_today_outlined,
-                                          title: 'Events',
-                                          subtitle: 'Calendar',
-                                          color: const Color(0xFF00A86B),
-                                          onTap: () => widget.onNavigate(
-                                            HomeTab.calendar,
-                                          ),
-                                        ),
-                                        QuickAccessCard(
-                                          width: width,
                                           icon: Icons.school_outlined,
                                           title: 'Degree',
                                           subtitle: 'Progress',
                                           color: const Color(0xFF2C9DFF),
                                           onTap: () => widget.onNavigate(
                                             HomeTab.degreeProgress,
+                                          ),
+                                        ),
+                                        QuickAccessCard(
+                                          width: width,
+                                          icon: Icons.developer_mode_outlined,
+                                          title: 'Dev',
+                                          subtitle: 'About Us',
+                                          color: const Color(0xFF2C9DFF),
+                                          onTap: () => widget.onNavigate(
+                                            HomeTab.devs,
                                           ),
                                         ),
                                         QuickAccessCard(
