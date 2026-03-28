@@ -623,101 +623,48 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
     required String currentGrade,
     required String resetGrade,
   }) {
-    return showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: BracuPalette.card(context),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            courseCode.isEmpty ? 'Select grade' : courseCode,
-                            style: TextStyle(
-                              color: BracuPalette.textPrimary(sheetContext),
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle,
-                            style: TextStyle(
-                              color: BracuPalette.textSecondary(sheetContext),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    IconButton(
-                      onPressed: () =>
-                          Navigator.of(sheetContext).pop(resetGrade),
-                      icon: Icon(
-                        Icons.refresh_rounded,
-                        color: BracuPalette.textSecondary(sheetContext),
-                      ),
-                      tooltip: 'Reset',
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.of(sheetContext).pop(),
-                      icon: Icon(
-                        Icons.close_rounded,
-                        color: BracuPalette.textSecondary(sheetContext),
-                      ),
-                      tooltip: 'Close',
-                    ),
-                  ],
+    return showBracuBottomSheet<String>(
+      context,
+      title: courseCode.isEmpty ? 'Select grade' : courseCode,
+      subtitle: subtitle,
+      initialChildSize: 0.25,
+      actions: [
+        IconButton(
+          onPressed: () => Navigator.of(context).pop(resetGrade),
+          icon: Icon(
+            Icons.refresh_rounded,
+            color: BracuPalette.textSecondary(context),
+          ),
+          tooltip: 'Reset',
+        ),
+      ],
+      builder: (sheetContext, textPrimary, textSecondary) {
+        return SingleChildScrollView(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _gradeOptions.map((grade) {
+              final selected = currentGrade == grade;
+              return ChoiceChip(
+                label: Text(grade),
+                selected: selected,
+                showCheckmark: false,
+                labelStyle: TextStyle(
+                  color: selected ? BracuPalette.primary : textPrimary,
+                  fontWeight: FontWeight.w700,
                 ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _gradeOptions.map((grade) {
-                    final selected = currentGrade == grade;
-                    return ChoiceChip(
-                      label: Text(grade),
-                      selected: selected,
-                      showCheckmark: false,
-                      labelStyle: TextStyle(
-                        color: selected
-                            ? BracuPalette.primary
-                            : BracuPalette.textPrimary(sheetContext),
-                        fontWeight: FontWeight.w700,
-                      ),
-                      backgroundColor: BracuPalette.card(
-                        sheetContext,
-                      ).withValues(alpha: 0.92),
-                      selectedColor: BracuPalette.primary.withValues(
-                        alpha: 0.14,
-                      ),
-                      side: BorderSide(
-                        color: selected
-                            ? BracuPalette.primary
-                            : BracuPalette.textSecondary(
-                                sheetContext,
-                              ).withValues(alpha: 0.24),
-                      ),
-                      onSelected: (_) => Navigator.of(sheetContext).pop(grade),
-                    );
-                  }).toList(),
+                backgroundColor: BracuPalette.card(
+                  sheetContext,
+                ).withValues(alpha: 0.92),
+                selectedColor: BracuPalette.primary.withValues(alpha: 0.14),
+                side: BorderSide(
+                  color: selected
+                      ? BracuPalette.primary
+                      : textSecondary.withValues(alpha: 0.24),
                 ),
-              ],
-            ),
+                onSelected: (_) => Navigator.of(sheetContext).pop(grade),
+              );
+            }).toList(),
           ),
         );
       },

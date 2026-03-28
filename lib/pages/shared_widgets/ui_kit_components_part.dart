@@ -18,8 +18,8 @@ Future<T?> showBracuBottomSheet<T>(
   BuildContext context, {
   required String title,
   String? subtitle,
-  double maxHeightFactor = 0.72,
   List<Widget> actions = const <Widget>[],
+  double initialChildSize = 0.80,
   required Widget Function(
     BuildContext sheetContext,
     Color textPrimary,
@@ -27,96 +27,205 @@ Future<T?> showBracuBottomSheet<T>(
   )
   builder,
 }) {
-  return showModalBottomSheet<T>(
+  return showBracuCustomBottomSheet<T>(
     context: context,
     backgroundColor: BracuPalette.card(context),
-    isScrollControlled: true,
     clipBehavior: Clip.antiAlias,
+    initialChildSize: initialChildSize,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
+    minChildSize: 0.12,
+    maxChildSize: 0.98,
     builder: (sheetContext) {
       final textPrimary = BracuPalette.textPrimary(sheetContext);
       final textSecondary = BracuPalette.textSecondary(sheetContext);
-      return AnimatedPadding(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
-        ),
-        child: SafeArea(
-          top: false,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight:
-                  MediaQuery.sizeOf(sheetContext).height * maxHeightFactor,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: textSecondary.withValues(alpha: 0.28),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
                 children: [
-                  Center(
-                    child: Container(
-                      width: 42,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: textSecondary.withValues(alpha: 0.28),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (subtitle != null && subtitle.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle.trim(),
+                            style: TextStyle(
+                              color: textSecondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: TextStyle(
-                                color: textPrimary,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            if (subtitle != null &&
-                                subtitle.trim().isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                subtitle.trim(),
-                                style: TextStyle(
-                                  color: textSecondary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      ...actions,
-                      IconButton(
-                        onPressed: () => Navigator.of(sheetContext).pop(),
-                        icon: Icon(Icons.close_rounded, color: textSecondary),
-                        tooltip: 'Close',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Flexible(
-                    child: builder(sheetContext, textPrimary, textSecondary),
+                  ...actions,
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: Icon(Icons.close_rounded, color: textSecondary),
+                    tooltip: 'Close',
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 10),
+              Flexible(
+                fit: FlexFit.loose,
+                child: builder(sheetContext, textPrimary, textSecondary),
+              ),
+            ],
           ),
         ),
       );
     },
   );
+}
+
+Future<T?> showBracuCustomBottomSheet<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  Color? backgroundColor,
+  ShapeBorder? shape,
+  Clip? clipBehavior,
+  bool isScrollControlled = true,
+  bool useSafeArea = false,
+  bool useRootNavigator = false,
+  bool draggable = true,
+  double initialChildSize = 0.80,
+  double minChildSize = 0.12,
+  double maxChildSize = 0.96,
+  bool closeOnMinExtent = true,
+}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    backgroundColor: backgroundColor,
+    isScrollControlled: isScrollControlled,
+    useSafeArea: useSafeArea,
+    useRootNavigator: useRootNavigator,
+    clipBehavior: clipBehavior,
+    shape: shape,
+    builder: (sheetContext) {
+      if (!draggable || !isScrollControlled) {
+        return Builder(builder: (innerContext) => builder(innerContext));
+      }
+
+      final bottomInset = MediaQuery.viewInsetsOf(sheetContext).bottom;
+      return AnimatedPadding(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: Builder(
+          builder: (_) {
+            final maxSize = maxChildSize.clamp(0.40, 0.99);
+            final minSize = minChildSize.clamp(0.10, maxSize);
+            final initialSize = initialChildSize.clamp(minSize, maxSize);
+            var dismissed = false;
+            return NotificationListener<DraggableScrollableNotification>(
+              onNotification: (notification) {
+                if (!closeOnMinExtent || dismissed) return false;
+                if (notification.extent <= minSize + 0.005) {
+                  dismissed = true;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (context.mounted) {
+                      Navigator.of(context).maybePop();
+                    }
+                  });
+                }
+                return false;
+              },
+              child: DraggableScrollableSheet(
+                initialChildSize: initialSize,
+                minChildSize: minSize,
+                maxChildSize: maxSize,
+                expand: false,
+                builder: (context, scrollController) {
+                  return _BracuBottomSheetControllerScope(
+                    controller: scrollController,
+                    child: PrimaryScrollController(
+                      controller: scrollController,
+                      child: Builder(
+                        builder: (innerContext) => builder(innerContext),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      );
+    },
+  );
+}
+
+ScrollController? bracuBottomSheetScrollController(BuildContext context) {
+  final scoped = _BracuBottomSheetControllerScope.maybeOf(context);
+  return scoped ?? PrimaryScrollController.maybeOf(context);
+}
+
+Widget bracuBottomSheetSurface(
+  BuildContext context, {
+  required Widget child,
+  EdgeInsetsGeometry padding = const EdgeInsets.fromLTRB(12, 4, 12, 12),
+  double radius = 26,
+}) {
+  return SafeArea(
+    top: false,
+    child: Padding(
+      padding: padding,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Material(color: BracuPalette.card(context), child: child),
+      ),
+    ),
+  );
+}
+
+class _BracuBottomSheetControllerScope extends InheritedWidget {
+  const _BracuBottomSheetControllerScope({
+    required this.controller,
+    required super.child,
+  });
+
+  final ScrollController controller;
+
+  static ScrollController? maybeOf(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<_BracuBottomSheetControllerScope>()
+        ?.controller;
+  }
+
+  @override
+  bool updateShouldNotify(_BracuBottomSheetControllerScope oldWidget) {
+    return oldWidget.controller != controller;
+  }
 }
 
 Future<bool> showBracuConfirmationDialog(
@@ -231,7 +340,6 @@ Future<T?> showBracuSelectSheet<T>(
     context,
     title: title,
     subtitle: subtitle,
-    maxHeightFactor: 0.72,
     builder: (sheetContext, textPrimary, textSecondary) {
       return ListView.separated(
         shrinkWrap: true,
@@ -1464,31 +1572,38 @@ class BracuLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.4,
-                color: BracuPalette.primary,
-              ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight < 72;
+        return Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: compact ? 6 : 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: BracuPalette.primary,
+                  ),
+                ),
+                if (!compact && label.trim().isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: BracuPalette.textSecondary(context),
+                    ),
+                  ),
+                ],
+              ],
             ),
-            if (label.trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: BracuPalette.textSecondary(context)),
-              ),
-            ],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

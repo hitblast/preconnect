@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -23,7 +24,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   @override
   void initState() {
     super.initState();
-    _future = _loadData();
+    _future = _loadData(forceRefresh: true);
   }
 
   Future<NotificationsViewData> _loadData({bool forceRefresh = false}) async {
@@ -62,20 +63,35 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Future<void> _markAllSeen() async {
+    final currentData = _lastData ?? await _future;
+    if (!mounted) return;
+
     final updated = await NotificationService().markAllSeen();
-    final current = _lastData;
-    final scraperIds = current?.scraped.map((item) => item.id) ?? const [];
+    final scraperIds = currentData.scraped.map((item) => item.id).toSet();
     await NotificationService().markAllScraperNotificationsSeen(scraperIds);
+
+    final optimisticData = NotificationsViewData(
+      connect: updated ?? currentData.connect,
+      scraped: currentData.scraped,
+      seenScraperIds: {...currentData.seenScraperIds, ...scraperIds},
+    );
+
+    final refreshedFuture = _loadData(forceRefresh: true);
     if (!mounted) return;
     setState(() {
-      final current = _lastData;
-      if (current == null) return;
-      _lastData = NotificationsViewData(
-        connect: updated ?? current.connect,
-        scraped: current.scraped,
-        seenScraperIds: {...current.seenScraperIds, ...scraperIds},
-      );
+      _lastData = optimisticData;
+      _future = refreshedFuture;
     });
+
+    unawaited(
+      refreshedFuture.then((value) {
+        if (!mounted) return;
+        setState(() {
+          _lastData = value;
+        });
+      }),
+    );
+
     RefreshBus.instance.notify(reason: 'notifications');
     showAppSnackBar(
       context,
@@ -87,10 +103,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   Future<void> _openConnectNotification(RecentConnectNotification item) async {
     if (!mounted) return;
-    await showModalBottomSheet<void>(
+    await showBracuCustomBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      initialChildSize: 0.80,
       builder: (context) =>
           ConnectNotificationDetailPanel(notificationId: item.id),
     );
@@ -98,10 +114,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   Future<void> _openScraperNotification(NotificationListItem item) async {
     if (!mounted) return;
-    await showModalBottomSheet<void>(
+    await showBracuCustomBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      initialChildSize: 0.80,
       builder: (context) => ScraperNotificationDetailPanel(item: item),
     );
     await NotificationService().markScraperNotificationSeen(item.id);

@@ -5,6 +5,7 @@ import 'package:preconnect/api/exam_map_service.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/model/section_info.dart';
 import 'package:preconnect/pages/ui_kit.dart';
+import 'package:preconnect/tools/exam_sorting.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/time_utils.dart';
 
@@ -326,19 +327,31 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
           midExams.sort((a, b) {
             final aTime = BracuTime.parseDateTime(midDate(a), midStart(a));
             final bTime = BracuTime.parseDateTime(midDate(b), midStart(b));
-            if (aTime == null && bTime == null) return 0;
-            if (aTime == null) return 1;
-            if (bTime == null) return -1;
-            return aTime.compareTo(bTime);
+            return ExamSorting.compareExamEntries(
+              typeA: 'Midterm',
+              typeB: 'Midterm',
+              dateTimeA: aTime,
+              dateTimeB: bTime,
+              courseCodeA: a.courseCode,
+              courseCodeB: b.courseCode,
+              sectionNameA: a.sectionName,
+              sectionNameB: b.sectionName,
+            );
           });
 
           finalExams.sort((a, b) {
             final aTime = BracuTime.parseDateTime(finalDate(a), finalStart(a));
             final bTime = BracuTime.parseDateTime(finalDate(b), finalStart(b));
-            if (aTime == null && bTime == null) return 0;
-            if (aTime == null) return 1;
-            if (bTime == null) return -1;
-            return aTime.compareTo(bTime);
+            return ExamSorting.compareExamEntries(
+              typeA: 'Final',
+              typeB: 'Final',
+              dateTimeA: aTime,
+              dateTimeB: bTime,
+              courseCodeA: a.courseCode,
+              courseCodeB: b.courseCode,
+              sectionNameA: a.sectionName,
+              sectionNameB: b.sectionName,
+            );
           });
 
           if (midExams.isEmpty && finalExams.isEmpty) {

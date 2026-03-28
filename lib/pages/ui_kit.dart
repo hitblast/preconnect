@@ -323,10 +323,10 @@ Future<void> showBracuFundingSupportSheet(BuildContext context) async {
     context,
     title: 'Support PreConnect',
     subtitle: 'Help fund the iOS release and future app costs',
-    maxHeightFactor: 0.86,
     builder: (sheetContext, textPrimary, textSecondary) {
+      final sheetScroll = bracuBottomSheetScrollController(sheetContext);
       return ListView(
-        shrinkWrap: true,
+        controller: sheetScroll,
         children: [
           Text(
             'PreConnect is student-built and stays free for everyone. Contributions help cover the Apple Developer membership and future publishing costs.',

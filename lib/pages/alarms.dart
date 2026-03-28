@@ -13,6 +13,7 @@ import 'package:preconnect/model/section_info.dart';
 import 'package:preconnect/pages/shared_widgets/schedule_entry_card.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
+import 'package:preconnect/tools/exam_sorting.dart';
 import 'package:preconnect/tools/ramadan_timing.dart';
 import 'package:preconnect/tools/time_utils.dart';
 
@@ -129,7 +130,18 @@ class _AlarmPageState extends State<AlarmPage> with RefreshBusState {
         );
       }
     }
-    items.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    items.sort((a, b) {
+      return ExamSorting.compareExamEntries(
+        typeA: a.type,
+        typeB: b.type,
+        dateTimeA: a.dateTime,
+        dateTimeB: b.dateTime,
+        courseCodeA: a.courseCode,
+        courseCodeB: b.courseCode,
+        sectionNameA: a.sectionName,
+        sectionNameB: b.sectionName,
+      );
+    });
     return items;
   }
 

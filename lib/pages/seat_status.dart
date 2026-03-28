@@ -322,7 +322,6 @@ class _SeatStatusPageState extends State<SeatStatusPage>
       title: '${item.courseCode} - ${item.sectionName}',
       subtitle:
           '${item.remaining} seat${item.remaining == 1 ? '' : 's'} remaining',
-      maxHeightFactor: 0.82,
       builder: (sheetContext, textPrimary, textSecondary) {
         return StatefulBuilder(
           builder: (context, setSheetState) {

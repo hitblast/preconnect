@@ -623,7 +623,6 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
       context,
       title: '${slot.roomNumber} • ${_roomTypeLabel(slot.roomNumber)}',
       subtitle: _roomHeaderSubtitle(slot),
-      maxHeightFactor: 0.85,
       builder: (sheetContext, textPrimary, textSecondary) {
         return ListView(
           shrinkWrap: true,

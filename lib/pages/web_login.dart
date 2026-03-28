@@ -174,9 +174,10 @@ class _WebLoginPageState extends State<WebLoginPage> {
 
   Future<void> _showPlayStoreQr() async {
     if (!mounted) return;
-    await showModalBottomSheet<void>(
+    await showBracuCustomBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      initialChildSize: 0.80,
       builder: (context) {
         return Container(
           margin: const EdgeInsets.all(12),
