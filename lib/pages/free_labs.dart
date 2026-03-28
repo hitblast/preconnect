@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/model/seat_status_info.dart';
+import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/time_utils.dart';
 
@@ -21,29 +23,88 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
   bool _didScroll = false;
   bool _scrollRetry = false;
   _RoomFilter _selectedFilter = _RoomFilter.labs;
+  bool _showNextDayAfterHours = false;
 
   @override
   void initState() {
     super.initState();
     _future = _loadSlots();
+    HomeTabRegistry.activeTab.addListener(_onActiveTabChanged);
   }
 
   @override
   void dispose() {
+    HomeTabRegistry.activeTab.removeListener(_onActiveTabChanged);
     _scrollController.dispose();
     super.dispose();
   }
 
-  static String _defaultDay() {
-    const byWeekday = <int, String>{
-      DateTime.saturday: 'Saturday',
-      DateTime.sunday: 'Sunday',
-      DateTime.monday: 'Monday',
-      DateTime.tuesday: 'Tuesday',
-      DateTime.wednesday: 'Wednesday',
-      DateTime.thursday: 'Thursday',
-    };
-    return byWeekday[DateTime.now().weekday] ?? 'Saturday';
+  void _onActiveTabChanged() {
+    if (!mounted) return;
+    if (HomeTabRegistry.activeTab.value != HomeTab.freeLabs) return;
+    if (!_showNextDayAfterHours) return;
+    final next = _loadSlots();
+    setState(() {
+      _showNextDayAfterHours = false;
+      _future = next;
+      _didScroll = false;
+      _scrollRetry = false;
+    });
+    next.then((slots) {
+      if (!mounted) return;
+      setState(() {
+        _lastSlots = slots;
+      });
+    });
+  }
+
+  DateTime _nextSupportedDate(DateTime source) {
+    var target = source;
+    while (target.weekday == DateTime.friday) {
+      target = target.add(const Duration(days: 1));
+    }
+    return target;
+  }
+
+  DateTime _displayDate({DateTime? now}) {
+    final current = now ?? DateTime.now();
+    var target = _nextSupportedDate(
+      DateTime(current.year, current.month, current.day),
+    );
+    if (_showNextDayAfterHours && _isAfterHours(now: current)) {
+      target = _nextSupportedDate(target.add(const Duration(days: 1)));
+    }
+    return target;
+  }
+
+  bool _isAfterHours({DateTime? now}) {
+    final current = now ?? DateTime.now();
+    return current.hour * 60 + current.minute >= 20 * 60;
+  }
+
+  DateTime get _activeDate => _displayDate();
+
+  String get _activeDayName => DateFormat('EEEE').format(_activeDate);
+
+  bool _isViewingFutureDate() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final display = _displayDate(now: now);
+    return display.isAfter(today);
+  }
+
+  bool _shouldOfferNextDayLabs() {
+    return !_showNextDayAfterHours && _isAfterHours();
+  }
+
+  DateTime _nextLabsDate() {
+    final now = DateTime.now();
+    final tomorrow = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(const Duration(days: 1));
+    return _nextSupportedDate(tomorrow);
   }
 
   Future<List<_FreeRoomSlot>> _loadSlots({bool forceRefresh = false}) async {
@@ -69,7 +130,7 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
               });
     final allSlots = _buildFreeRoomSlots(
       details.values.toList(),
-      _defaultDay(),
+      _activeDayName,
     );
     await _writeCachedSlots(allSlots);
     return allSlots;
@@ -180,10 +241,13 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
           final slots = snapshot.data ?? _lastSlots;
           final visibleSlots = _visibleRoomSlots(slots);
           if (visibleSlots.isEmpty) {
+            if (_shouldOfferNextDayLabs()) {
+              return _buildAfterHoursPromptState();
+            }
             return buildRefreshEmptyState(
               onRefresh: _refresh,
               message:
-                  'No free labs found for ${formatWeekdayTitle(_defaultDay())}.',
+                  'No free labs found for ${formatWeekdayTitle(_activeDayName)}.',
             );
           }
 
@@ -443,7 +507,7 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
             dominantProgramCode: _dominantProgramCode(room),
             startTime: _formatTimeOfDay(free.start),
             endTime: _formatTimeOfDay(free.end),
-            statusLabel: _statusLabel(free.start, free.end, day),
+            statusLabel: _statusLabel(free.start, free.end),
           ),
         );
       }
@@ -548,7 +612,10 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
         .toList();
   }
 
-  String _statusLabel(TimeOfDay start, TimeOfDay end, String day) {
+  String _statusLabel(TimeOfDay start, TimeOfDay end) {
+    if (_isViewingFutureDate()) {
+      return 'Upcoming';
+    }
     final nowMinutes = _minutesOfDay(TimeOfDay.now());
     final startMinutes = _minutesOfDay(start);
     final endMinutes = _minutesOfDay(end);
@@ -566,8 +633,8 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
   int? _minutesFromString(String value) => BracuTime.toMinutes(value);
 
   String _todayCacheLabel() {
-    final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final display = _activeDate;
+    return '${display.year}-${display.month.toString().padLeft(2, '0')}-${display.day.toString().padLeft(2, '0')}';
   }
 
   Future<List<_FreeRoomSlot>> _readCachedSlots() async {
@@ -591,8 +658,8 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
   }
 
   String _headerDayLabel() {
-    final now = DateTime.now();
-    return '${formatWeekdayTitle(_defaultDay())}, ${now.day} ${_monthLabel(now.month)}';
+    final display = _activeDate;
+    return '${formatWeekdayTitle(_activeDayName)}, ${display.day} ${_monthLabel(display.month)}';
   }
 
   String _monthLabel(int month) {
@@ -614,6 +681,82 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
     return months[month - 1];
   }
 
+  Future<void> _showNextDayLabs() async {
+    final next = _loadSlots();
+    setState(() {
+      _showNextDayAfterHours = true;
+      _future = next;
+      _didScroll = false;
+      _scrollRetry = false;
+    });
+    final slots = await next;
+    if (!mounted) return;
+    setState(() {
+      _lastSlots = slots;
+    });
+  }
+
+  Widget _buildAfterHoursPromptState() {
+    final nextDate = _nextLabsDate();
+    final nextDay = formatWeekdayTitle(DateFormat('EEEE').format(nextDate));
+    final nextDateLabel =
+        '$nextDay, ${nextDate.day} ${_monthLabel(nextDate.month)}';
+    return BracuRefreshList(
+      onRefresh: _refresh,
+      controller: _scrollController,
+      children: [
+        const SizedBox(height: 160),
+        BracuCard(
+          backgroundColor: Colors.transparent,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                'Today\'s lab hours are over.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: BracuPalette.textPrimary(context),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Show next day labs for $nextDateLabel?',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: BracuPalette.textSecondary(context),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: _showNextDayLabs,
+                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                label: const Text('Show Next Day Labs'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: BracuPalette.primary,
+                  side: BorderSide(
+                    color: BracuPalette.primary.withValues(alpha: 0.35),
+                  ),
+                  backgroundColor: Colors.transparent,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _showRoomDetails(
     _FreeRoomSlot slot,
     List<_FreeRoomSlot> roomSlots,
@@ -628,7 +771,7 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
           shrinkWrap: true,
           children: [
             Text(
-              'Today',
+              _roomTimelineLabel(),
               style: TextStyle(
                 color: textPrimary,
                 fontSize: 14,
@@ -675,6 +818,9 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
   }
 
   List<_FreeRoomSlot> _visibleRoomSlots(List<_FreeRoomSlot> roomSlots) {
+    if (_isViewingFutureDate()) {
+      return roomSlots;
+    }
     final nowMinutes = _minutesOfDay(TimeOfDay.now());
     return roomSlots.where((item) {
       final end = _minutesFromString(item.endTime);
@@ -709,6 +855,13 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
       parts.add(courses);
     }
     return parts.join(' • ');
+  }
+
+  String _roomTimelineLabel() {
+    if (_isViewingFutureDate()) {
+      return formatWeekdayTitle(_activeDayName);
+    }
+    return 'Today';
   }
 
   String _roomProgramLabel(_FreeRoomSlot slot) {

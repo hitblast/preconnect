@@ -77,6 +77,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with RefreshBusState {
   HomeTab selectedTab = HomeTab.dashboard;
   StreamSubscription<HomeTab>? _shortcutTabSubscription;
+  final Set<HomeTab> _returnToMoreTabs = <HomeTab>{};
 
   late final Map<HomeTab, WidgetBuilder> pages = {
     HomeTab.settings: (_) => const SettingsPage(),
@@ -139,6 +140,10 @@ class _HomePageState extends State<HomePage> with RefreshBusState {
       HomeTabRegistry.setActive(tab);
       return;
     }
+    if (selectedTab == HomeTab.moreQuickAccess &&
+        tab != HomeTab.moreQuickAccess) {
+      _returnToMoreTabs.add(tab);
+    }
     final shouldJumpClass = tab == HomeTab.studentSchedule;
     final shouldJumpExam = tab == HomeTab.examSchedule;
     setState(() {
@@ -162,6 +167,10 @@ class _HomePageState extends State<HomePage> with RefreshBusState {
     if (selectedTab == HomeTab.scanSchedule ||
         selectedTab == HomeTab.shareSchedule) {
       _setTab(HomeTab.friendSchedule);
+      return;
+    }
+    if (_returnToMoreTabs.remove(selectedTab)) {
+      _setTab(HomeTab.moreQuickAccess);
     } else {
       _setTab(HomeTab.dashboard);
     }
@@ -196,12 +205,7 @@ class _HomePageState extends State<HomePage> with RefreshBusState {
       canPop: selectedTab == HomeTab.dashboard,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && selectedTab != HomeTab.dashboard) {
-          if (selectedTab == HomeTab.scanSchedule ||
-              selectedTab == HomeTab.shareSchedule) {
-            _setTab(HomeTab.friendSchedule);
-          } else {
-            _setTab(HomeTab.dashboard);
-          }
+          _handleBack();
         }
       },
       child: Scaffold(
