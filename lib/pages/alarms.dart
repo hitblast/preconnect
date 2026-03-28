@@ -7,16 +7,13 @@ import 'package:android_intent_plus/flag.dart';
 import 'package:flutter_alarmkit/flutter_alarmkit.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:intl/intl.dart';
-import 'package:preconnect/api/exam_schedule_service.dart';
+import 'package:preconnect/api/exam_map_service.dart';
 import 'package:preconnect/api/schedule_service.dart';
-import 'package:preconnect/model/exam_schedule_info.dart';
 import 'package:preconnect/model/section_info.dart';
 import 'package:preconnect/pages/shared_widgets/schedule_entry_card.dart';
-import 'package:preconnect/pages/shared_widgets/section_badge.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/ramadan_timing.dart';
-import 'package:preconnect/tools/refresh_guard.dart';
 import 'package:preconnect/tools/time_utils.dart';
 
 class AlarmPage extends StatefulWidget {
@@ -383,7 +380,7 @@ class _AlarmPageState extends State<AlarmPage> with RefreshBusState {
 
     return BracuPageScaffold(
       title: 'Set Alarms',
-      subtitle: 'Class & Exam Reminder',
+      subtitle: 'Class & Exam',
       icon: Icons.alarm_outlined,
       body: FutureBuilder<_AlarmData>(
         future: _futureData,
@@ -446,32 +443,13 @@ class _AlarmPageState extends State<AlarmPage> with RefreshBusState {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (showTypeHeader)
+                      if (showTypeHeader && exam.type == 'Final')
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (exam.type == 'Final')
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Divider(
-                                    height: 1,
-                                    thickness: 1,
-                                    color: BracuPalette.accent.withValues(
-                                      alpha: 0.45,
-                                    ),
-                                  ),
-                                ),
-                              Text(
-                                exam.type,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: BracuPalette.textPrimary(context),
-                                ),
-                              ),
-                            ],
+                          child: Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: BracuPalette.accent.withValues(alpha: 0.45),
                           ),
                         ),
                       BracuCard(

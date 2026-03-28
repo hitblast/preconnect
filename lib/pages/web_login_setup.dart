@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/pages/ui_kit.dart';
-import 'package:preconnect/tools/platform_permissions.dart';
 import 'package:preconnect/tools/token_storage.dart';
 import 'package:preconnect/tools/web_login_broker_service.dart';
 import 'package:preconnect/tools/web_login_models.dart';

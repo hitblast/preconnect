@@ -344,6 +344,7 @@ class _CalendarCard extends StatelessWidget {
     if (key.contains('FINAL')) return 'FIN';
     if (key.contains('CLASS')) return 'CLS';
     if (key.contains('HOLIDAY')) return 'OFF';
+    if (key.contains('ACADEMIC')) return 'ACD';
     if (key.contains('EXAM')) return 'EXM';
     return key.isEmpty ? 'EVT' : key.substring(0, key.length.clamp(0, 3));
   }
@@ -412,6 +413,7 @@ class _CalendarCard extends StatelessWidget {
   Color _badgeColor(String key) {
     final upper = key.toUpperCase();
     if (upper.contains('HOLIDAY')) return BracuPalette.danger;
+    if (upper.contains('ACADEMIC')) return BracuPalette.primary;
     if (upper.contains('MID') ||
         upper.contains('FINAL') ||
         upper.contains('EXAM')) {
@@ -424,6 +426,11 @@ class _CalendarCard extends StatelessWidget {
   String _timeLabel(CalendarEntry item) {
     if (item.startTime.isNotEmpty && item.endTime.isNotEmpty) {
       return '${formatTime(item.startTime)} - ${formatTime(item.endTime)}';
+    }
+    if (item.startDate.isNotEmpty &&
+        item.endDate.isNotEmpty &&
+        item.startDate == item.endDate) {
+      return 'All day';
     }
     if (item.startDate.isNotEmpty &&
         item.endDate.isNotEmpty &&

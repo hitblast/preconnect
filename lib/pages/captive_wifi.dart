@@ -8,7 +8,7 @@ import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/api/sembast_cache.dart';
 import 'package:preconnect/tools/android_network_assist.dart';
 import 'package:preconnect/tools/captive_wifi_http_service.dart';
-import 'package:preconnect/tools/captive_login_store.dart';
+import 'package:preconnect/tools/token_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CaptiveWifiPage extends StatefulWidget {

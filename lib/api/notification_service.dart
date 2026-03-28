@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:intl/intl.dart';
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/sembast_cache.dart';
@@ -33,6 +34,84 @@ class RecentConnectNotification {
       expireAt: DateTime.tryParse((json['expireAt'] as String? ?? '').trim()),
       seen: json['seen'] == true,
     );
+  }
+}
+
+class ScraperDataService {
+  ScraperDataService._internal();
+  static final ScraperDataService _instance = ScraperDataService._internal();
+  factory ScraperDataService() => _instance;
+
+  final ApiClient _client = ApiClient();
+  final SembastCache _cache = SembastCache();
+
+  Future<List<Map<String, dynamic>>> fetchList({
+    required String path,
+    required String cacheKey,
+    required Duration ttl,
+    bool forceRefresh = false,
+  }) async {
+    final data = await _fetchJson(
+      path: path,
+      cacheKey: cacheKey,
+      ttl: ttl,
+      forceRefresh: forceRefresh,
+    );
+    if (data is! List) return const <Map<String, dynamic>>[];
+    return data
+        .whereType<Map>()
+        .map((item) => item.cast<String, dynamic>())
+        .toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>?> fetchMap({
+    required String path,
+    required String cacheKey,
+    required Duration ttl,
+    bool forceRefresh = false,
+  }) async {
+    final data = await _fetchJson(
+      path: path,
+      cacheKey: cacheKey,
+      ttl: ttl,
+      forceRefresh: forceRefresh,
+    );
+    if (data is! Map) return null;
+    return data.cast<String, dynamic>();
+  }
+
+  Future<dynamic> _fetchJson({
+    required String path,
+    required String cacheKey,
+    required Duration ttl,
+    required bool forceRefresh,
+  }) async {
+    if (!forceRefresh) {
+      final cached = await _cache.getJsonMap(cacheKey);
+      final ts = cached?['ts'];
+      final data = cached?['data'];
+      if (ts is int && data != null) {
+        final age = DateTime.now().difference(
+          DateTime.fromMillisecondsSinceEpoch(ts),
+        );
+        if (age <= ttl) return data;
+      }
+    }
+
+    final url =
+        '${ApiConfig.seatStatusProxyBase}${path.startsWith('/') ? path : '/$path'}';
+    try {
+      final response = await _client.publicGet(url);
+      final decoded = jsonDecode(response.body);
+      await _cache.setJson(cacheKey, <String, dynamic>{
+        'ts': DateTime.now().millisecondsSinceEpoch,
+        'data': decoded,
+      });
+      return decoded;
+    } catch (_) {
+      final cached = await _cache.getJsonMap(cacheKey);
+      return cached?['data'];
+    }
   }
 }
 
@@ -103,14 +182,116 @@ class ConnectNotificationDetail {
   }
 }
 
+class ScraperContentItem {
+  const ScraperContentItem({
+    required this.id,
+    required this.source,
+    required this.title,
+    required this.message,
+    required this.url,
+    required this.publishedAt,
+    this.imageUrl,
+  });
+
+  final String id;
+  final String source;
+  final String title;
+  final String message;
+  final String url;
+  final DateTime? publishedAt;
+  final String? imageUrl;
+}
+
 class NotificationService {
   NotificationService._internal();
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
 
   final ApiClient _client = ApiClient();
+  final ScraperDataService _scraper = ScraperDataService();
 
   static const String _cacheKey = 'RecentNotificationsFeed';
+  static const String _scraperFeedCacheKey = 'scraper_notifications_feed_v1';
+  static const String _scraperSeenIdsCacheKey = 'scraper_notifications_seen_v1';
+
+  Future<List<ScraperContentItem>> getScraperContentFeed({
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh) {
+      final cached = await _readCachedScraperFeed();
+      if (cached != null) return cached;
+    }
+
+    final results = await Future.wait<List<ScraperContentItem>>(
+      <Future<List<ScraperContentItem>>>[
+        _fetchScraperItems(
+          path: '/data/announcements',
+          source: 'Announcement',
+          cacheKey: 'scraper_announcements_v1',
+          forceRefresh: forceRefresh,
+        ),
+        _fetchScraperItems(
+          path: '/data/news',
+          source: 'News',
+          cacheKey: 'scraper_news_v1',
+          forceRefresh: forceRefresh,
+        ),
+      ],
+    );
+    final merged = <ScraperContentItem>[...results[0], ...results[1]];
+    merged.sort((a, b) {
+      final aTime = a.publishedAt;
+      final bTime = b.publishedAt;
+      if (aTime == null && bTime == null) return 0;
+      if (aTime == null) return 1;
+      if (bTime == null) return -1;
+      return bTime.compareTo(aTime);
+    });
+    await _writeCachedScraperFeed(merged);
+    return merged;
+  }
+
+  Future<Set<String>> getSeenScraperNotificationIds() async {
+    final cached = await SembastCache().getJsonMap(_scraperSeenIdsCacheKey);
+    final raw = cached?['ids'];
+    if (raw is! List) return <String>{};
+    return raw
+        .map((value) => '$value'.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+  }
+
+  Future<void> markScraperNotificationSeen(String id) async {
+    final cleaned = id.trim();
+    if (cleaned.isEmpty) return;
+    final seen = await getSeenScraperNotificationIds();
+    if (seen.contains(cleaned)) return;
+    seen.add(cleaned);
+    await _writeSeenScraperNotificationIds(seen);
+  }
+
+  Future<void> markAllScraperNotificationsSeen(Iterable<String> ids) async {
+    final normalized = ids
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    if (normalized.isEmpty) return;
+    final seen = await getSeenScraperNotificationIds();
+    seen.addAll(normalized);
+    await _writeSeenScraperNotificationIds(seen);
+  }
+
+  Future<int> getTotalUnreadCount({bool forceRefresh = false}) async {
+    final connect = forceRefresh
+        ? await fetchRecentNotifications()
+        : await getRecentNotifications();
+    final scraper = await getScraperContentFeed(forceRefresh: forceRefresh);
+    final seenScraperIds = await getSeenScraperNotificationIds();
+    final scraperUnread = scraper
+        .where((item) => !seenScraperIds.contains(item.id))
+        .length;
+    return (connect?.newCount ?? 0) + scraperUnread;
+  }
 
   Future<NotificationsFeed?> fetchRecentNotifications({bool fromGet = false}) {
     return _client.fetchWithFallback<NotificationsFeed>(
@@ -178,6 +359,192 @@ class NotificationService {
       decoder: NotificationsFeed.fromJson,
       onCacheMiss: () async => null,
     );
+  }
+
+  Future<List<ScraperContentItem>> _fetchScraperItems({
+    required String path,
+    required String source,
+    required String cacheKey,
+    required bool forceRefresh,
+  }) async {
+    final rows = await _scraper.fetchList(
+      path: path,
+      cacheKey: cacheKey,
+      ttl: const Duration(hours: 3),
+      forceRefresh: forceRefresh,
+    );
+    return rows
+        .map((row) {
+          final title = '${row['title'] ?? ''}'.trim();
+          final message = '${row['message'] ?? ''}'.trim();
+          final url = '${row['url'] ?? ''}'.trim();
+          final imageUrl = _normalizeScraperImageUrl(
+            '${row['image_url'] ?? ''}',
+          );
+          final publishedRaw = '${row['published_date'] ?? ''}'.trim();
+          if (title.isEmpty && message.isEmpty) return null;
+          return ScraperContentItem(
+            id: _scraperContentId(
+              source: source,
+              title: title,
+              url: url,
+              publishedAt: _parseScraperPublishedDate(publishedRaw),
+            ),
+            source: source,
+            title: title,
+            message: message,
+            url: url,
+            publishedAt: _parseScraperPublishedDate(publishedRaw),
+            imageUrl: imageUrl.isEmpty ? null : imageUrl,
+          );
+        })
+        .whereType<ScraperContentItem>()
+        .toList(growable: false);
+  }
+
+  Future<List<ScraperContentItem>?> _readCachedScraperFeed() async {
+    final cached = await SembastCache().getJsonMap(_scraperFeedCacheKey);
+    if (cached == null) return null;
+    final rawItems = cached['items'];
+    if (rawItems is! List) return null;
+    return rawItems
+        .whereType<Map>()
+        .map((item) => item.cast<String, dynamic>())
+        .map((item) {
+          final normalizedImageUrl = _normalizeScraperImageUrl(
+            (item['imageUrl'] ?? '').toString(),
+          );
+          return ScraperContentItem(
+            id: (item['id'] ?? '').toString().trim().isEmpty
+                ? _scraperContentId(
+                    source: (item['source'] ?? '').toString().trim(),
+                    title: (item['title'] ?? '').toString().trim(),
+                    url: (item['url'] ?? '').toString().trim(),
+                    publishedAt: DateTime.tryParse(
+                      (item['publishedAt'] ?? '').toString().trim(),
+                    ),
+                  )
+                : (item['id'] ?? '').toString().trim(),
+            source: (item['source'] ?? '').toString().trim(),
+            title: (item['title'] ?? '').toString().trim(),
+            message: (item['message'] ?? '').toString().trim(),
+            url: (item['url'] ?? '').toString().trim(),
+            publishedAt: DateTime.tryParse(
+              (item['publishedAt'] ?? '').toString().trim(),
+            ),
+            imageUrl: normalizedImageUrl.isEmpty ? null : normalizedImageUrl,
+          );
+        })
+        .toList(growable: false);
+  }
+
+  Future<void> _writeCachedScraperFeed(List<ScraperContentItem> items) async {
+    await SembastCache().setJson(_scraperFeedCacheKey, <String, dynamic>{
+      'ts': DateTime.now().millisecondsSinceEpoch,
+      'items': items
+          .map(
+            (item) => <String, dynamic>{
+              'source': item.source,
+              'title': item.title,
+              'message': item.message,
+              'url': item.url,
+              'publishedAt': item.publishedAt?.toIso8601String() ?? '',
+              'imageUrl': item.imageUrl ?? '',
+              'id': item.id,
+            },
+          )
+          .toList(),
+    });
+  }
+
+  Future<void> _writeSeenScraperNotificationIds(Set<String> ids) async {
+    await SembastCache().setJson(_scraperSeenIdsCacheKey, <String, dynamic>{
+      'ids': ids.toList()..sort(),
+    });
+  }
+
+  DateTime? _parseScraperPublishedDate(String raw) {
+    if (raw.trim().isEmpty) return null;
+    var normalized = raw
+        .replaceAll('\n', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    normalized = normalized.replaceAllMapped(
+      RegExp(r'\b(\d{1,2})(st|nd|rd|th)\b', caseSensitive: false),
+      (m) => m.group(1) ?? '',
+    );
+
+    final formats = <String>[
+      'EEEE, MMMM d, yyyy - HH:mm',
+      'EEEE, MMMM d, yyyy - H:mm',
+      'MMMM d, yyyy - HH:mm',
+      'MMMM d, yyyy - H:mm',
+      'MMMM d, yyyy',
+      'MMM d, yyyy',
+    ];
+    for (final pattern in formats) {
+      try {
+        return DateFormat(pattern).parseLoose(normalized);
+      } catch (_) {}
+    }
+    return DateTime.tryParse(normalized);
+  }
+
+  String _normalizeScraperImageUrl(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return '';
+
+    String pickFirstFromJsonArray(String value) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is List) {
+          for (final item in decoded) {
+            final candidate = '$item'.trim();
+            if (candidate.startsWith('http://') ||
+                candidate.startsWith('https://') ||
+                candidate.startsWith('//')) {
+              return candidate;
+            }
+          }
+        }
+      } catch (_) {}
+      return value;
+    }
+
+    var resolved = trimmed;
+    if (resolved.startsWith('[') && resolved.endsWith(']')) {
+      resolved = pickFirstFromJsonArray(resolved);
+    }
+
+    if (resolved.startsWith('//')) {
+      resolved = 'https:$resolved';
+    } else if (!resolved.startsWith('http://') &&
+        !resolved.startsWith('https://')) {
+      return '';
+    }
+
+    try {
+      final uri = Uri.parse(resolved);
+      return uri.toString();
+    } catch (_) {
+      return Uri.encodeFull(resolved);
+    }
+  }
+
+  String _scraperContentId({
+    required String source,
+    required String title,
+    required String url,
+    required DateTime? publishedAt,
+  }) {
+    final token =
+        '${source.trim().toLowerCase()}|${title.trim().toLowerCase()}|${url.trim().toLowerCase()}|${publishedAt?.toIso8601String() ?? ''}';
+    var hash = 2166136261;
+    for (final codeUnit in token.codeUnits) {
+      hash ^= codeUnit;
+      hash = (hash * 16777619) & 0xFFFFFFFF;
+    }
+    return 'scr_${hash.toUnsigned(32).toRadixString(16)}';
   }
 
   Map<String, dynamic> _feedToJson(NotificationsFeed feed) {

@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/sembast_cache.dart';
-import 'package:preconnect/model/exam_schedule_info.dart';
 import 'package:preconnect/model/section_info.dart';
 
 class ExamMapService {
@@ -216,5 +215,150 @@ class ExamMapService {
     final parsed = int.tryParse(match.group(0)!);
     if (parsed == null) return match.group(0)!;
     return parsed.toString();
+  }
+}
+
+class ExamScheduleOverride {
+  const ExamScheduleOverride({
+    this.midDate,
+    this.midStartTime,
+    this.midEndTime,
+    this.midRoomNumber,
+    this.finalDate,
+    this.finalStartTime,
+    this.finalEndTime,
+    this.finalRoomNumber,
+  });
+
+  final String? midDate;
+  final String? midStartTime;
+  final String? midEndTime;
+  final String? midRoomNumber;
+
+  final String? finalDate;
+  final String? finalStartTime;
+  final String? finalEndTime;
+  final String? finalRoomNumber;
+
+  ExamScheduleOverride copyWith({
+    String? midDate,
+    String? midStartTime,
+    String? midEndTime,
+    String? midRoomNumber,
+    String? finalDate,
+    String? finalStartTime,
+    String? finalEndTime,
+    String? finalRoomNumber,
+  }) {
+    return ExamScheduleOverride(
+      midDate: midDate ?? this.midDate,
+      midStartTime: midStartTime ?? this.midStartTime,
+      midEndTime: midEndTime ?? this.midEndTime,
+      midRoomNumber: midRoomNumber ?? this.midRoomNumber,
+      finalDate: finalDate ?? this.finalDate,
+      finalStartTime: finalStartTime ?? this.finalStartTime,
+      finalEndTime: finalEndTime ?? this.finalEndTime,
+      finalRoomNumber: finalRoomNumber ?? this.finalRoomNumber,
+    );
+  }
+}
+
+class ExamSectionResolved {
+  const ExamSectionResolved({
+    required this.midDate,
+    required this.midStartTime,
+    required this.midEndTime,
+    required this.midRoomNumber,
+    required this.finalDate,
+    required this.finalStartTime,
+    required this.finalEndTime,
+    required this.finalRoomNumber,
+  });
+
+  final String? midDate;
+  final String? midStartTime;
+  final String? midEndTime;
+  final String midRoomNumber;
+  final String? finalDate;
+  final String? finalStartTime;
+  final String? finalEndTime;
+  final String finalRoomNumber;
+}
+
+class ExamScheduleService {
+  ExamScheduleService._internal();
+  static final ExamScheduleService _instance = ExamScheduleService._internal();
+  factory ExamScheduleService() => _instance;
+
+  Future<Map<String, ExamScheduleOverride>> getOverridesForSections(
+    List<Section> sections, {
+    bool forceRefresh = false,
+    int? forcedSemesterSessionId,
+  }) async {
+    if (sections.isEmpty) return const <String, ExamScheduleOverride>{};
+    final semesterSessionId =
+        forcedSemesterSessionId ?? resolveSemesterSessionId(sections);
+    if (semesterSessionId == null) {
+      return const <String, ExamScheduleOverride>{};
+    }
+    return ExamMapService().getOverridesForSemester(
+      semesterSessionId: semesterSessionId,
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  int? resolveSemesterSessionId(List<Section> sections) {
+    if (sections.isEmpty) return null;
+    final counts = <int, int>{};
+    for (final section in sections) {
+      counts.update(
+        section.semesterSessionId,
+        (value) => value + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    int? selectedId;
+    var maxCount = -1;
+    for (final entry in counts.entries) {
+      if (entry.value > maxCount) {
+        maxCount = entry.value;
+        selectedId = entry.key;
+      }
+    }
+    return selectedId;
+  }
+
+  ExamSectionResolved resolveSection({
+    required Section section,
+    required Map<String, ExamScheduleOverride> overrides,
+  }) {
+    final override = overrides[ExamMapService.sectionKeyForSection(section)];
+    final fallbackRoom = section.roomNumber.trim();
+    final midRoom = _pickRoom(override?.midRoomNumber, fallbackRoom);
+    final finalRoom = _pickRoom(
+      override?.finalRoomNumber,
+      midRoom.isNotEmpty ? midRoom : fallbackRoom,
+    );
+    return ExamSectionResolved(
+      midDate: override?.midDate ?? section.sectionSchedule.midExamDate,
+      midStartTime:
+          override?.midStartTime ?? section.sectionSchedule.midExamStartTime,
+      midEndTime:
+          override?.midEndTime ?? section.sectionSchedule.midExamEndTime,
+      midRoomNumber: midRoom,
+      finalDate: override?.finalDate ?? section.sectionSchedule.finalExamDate,
+      finalStartTime:
+          override?.finalStartTime ??
+          section.sectionSchedule.finalExamStartTime,
+      finalEndTime:
+          override?.finalEndTime ?? section.sectionSchedule.finalExamEndTime,
+      finalRoomNumber: finalRoom,
+    );
+  }
+
+  String _pickRoom(String? preferred, String fallback) {
+    final selected = (preferred ?? '').trim();
+    if (selected.isNotEmpty) return selected;
+    return fallback.trim();
   }
 }

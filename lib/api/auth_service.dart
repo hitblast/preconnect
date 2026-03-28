@@ -12,9 +12,7 @@ import 'package:preconnect/api/sembast_cache.dart';
 import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/pages/login.dart';
 import 'package:preconnect/tools/cached_image.dart';
-import 'package:preconnect/tools/profile_image_cache.dart';
 import 'package:preconnect/tools/token_storage.dart';
-import 'package:preconnect/tools/web_login_session_store.dart';
 
 enum TokenRefreshStatus { refreshed, invalidSession, retryableFailure }
 

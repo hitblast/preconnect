@@ -8,12 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/api/schedule_service.dart';
-import 'package:preconnect/api/payment_service.dart';
-import 'package:preconnect/api/attendance_service.dart';
-import 'package:preconnect/api/advising_service.dart';
-import 'package:preconnect/tools/token_storage.dart';
-import 'package:preconnect/tools/user_agent.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
+import 'package:preconnect/tools/token_storage.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/pages/web_login.dart';
 

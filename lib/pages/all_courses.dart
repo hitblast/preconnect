@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:preconnect/model/progress_info.dart';
 import 'package:preconnect/pages/ui_kit.dart';
-import 'package:preconnect/tools/course_pin_store.dart';
+import 'package:preconnect/tools/token_storage.dart';
 
 class AllCoursesPage extends StatefulWidget {
   const AllCoursesPage({super.key, required this.info});

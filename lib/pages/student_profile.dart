@@ -3,13 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:preconnect/api/api_config.dart';
-import 'package:preconnect/api/advising_service.dart';
-import 'package:preconnect/api/attendance_service.dart';
-import 'package:preconnect/api/payment_service.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/api/progress_service.dart';
-import 'package:preconnect/model/payment_info.dart';
-import 'package:preconnect/model/attendance_info.dart';
 import 'package:preconnect/model/progress_info.dart';
 import 'package:preconnect/pages/card_section.dart';
 import 'package:preconnect/pages/shared_widgets/grade_sheet_card.dart';
@@ -19,9 +14,8 @@ import 'package:preconnect/pages/student_profile_sections/payment_graph.dart';
 import 'package:preconnect/pages/student_profile_sections/payment_list.dart';
 import 'package:preconnect/pages/student_profile_sections/personal_info_card.dart';
 import 'package:preconnect/pages/ui_kit.dart';
-import 'package:preconnect/tools/profile_image_cache.dart';
+import 'package:preconnect/tools/token_storage.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
-import 'package:preconnect/tools/refresh_guard.dart';
 
 class StudentProfile extends StatefulWidget {
   const StudentProfile({super.key});

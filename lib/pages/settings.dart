@@ -3,8 +3,7 @@ import 'package:preconnect/app.dart';
 import 'package:preconnect/pages/captive_wifi.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/pages/web_login_setup.dart';
-import 'package:preconnect/tools/app_lock_service.dart';
-import 'package:preconnect/tools/home_card_preferences.dart';
+import 'package:preconnect/tools/token_storage.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 
 class SettingsPage extends StatefulWidget {

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:preconnect/tools/user_agent.dart';
+import 'package:preconnect/tools/token_storage.dart';
 
 class CaptiveWifiHttpResult {
   const CaptiveWifiHttpResult({

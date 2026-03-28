@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/api_config.dart';
+import 'package:preconnect/api/notification_service.dart';
 import 'package:preconnect/api/sembast_cache.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/model/calendar_info.dart';
@@ -13,6 +14,7 @@ class CalendarService {
   factory CalendarService() => _instance;
 
   final ApiClient _client = ApiClient();
+  final ScraperDataService _scraper = ScraperDataService();
 
   static const String _cacheKey = 'calendar_feed_json';
   static const String _rangeStartKey = 'calendar_range_start';
@@ -39,11 +41,24 @@ class CalendarService {
     try {
       final response = await _client.authenticatedGet(url);
       final decoded = jsonDecode(response.body);
+      var items = _parseEntries(decoded);
+      List<({String eventName, String startDate, String endDate})>
+      academicDates =
+          const <({String eventName, String startDate, String endDate})>[];
+      try {
+        academicDates = await _fetchAcademicDates(
+          forceRefresh: rangeOverride != null,
+        );
+      } catch (_) {
+        academicDates =
+            const <({String eventName, String startDate, String endDate})>[];
+      }
+      items = _mergeAcademicDates(items, academicDates);
       final feed = CalendarFeed(
         rangeStart: range.startDate,
         rangeEnd: range.endDate,
         sourceFingerprint: range.sourceFingerprint,
-        items: _parseEntries(decoded),
+        items: items,
       );
       await _writeCache(feed);
       return feed;
@@ -265,5 +280,78 @@ class CalendarService {
       if (insideWindow(date, finalWindow)) return false;
       return true;
     }).toList();
+  }
+
+  List<CalendarEntry> _mergeAcademicDates(
+    List<CalendarEntry> base,
+    List<({String eventName, String startDate, String endDate})> academicDates,
+  ) {
+    if (academicDates.isEmpty) return base;
+    final output = <CalendarEntry>[...base];
+    final seen = base
+        .map(
+          (item) =>
+              '${item.typeKey}|${item.label}|${item.startDate}|${item.endDate}',
+        )
+        .toSet();
+    for (final item in academicDates) {
+      final key =
+          'ACADEMIC_DATE|${item.eventName}|${item.startDate}|${item.endDate}';
+      if (seen.contains(key)) continue;
+      seen.add(key);
+      output.add(
+        CalendarEntry(
+          id: 'academic_${item.startDate}_${item.eventName.hashCode.toUnsigned(32)}',
+          label: item.eventName,
+          typeKey: 'ACADEMIC_DATE',
+          date: item.startDate,
+          startDate: item.startDate,
+          endDate: item.endDate,
+          startTime: '',
+          endTime: '',
+          place: '',
+          isRepeatable: false,
+          isCancelled: false,
+          ref: '',
+          roomName: '',
+          roomNumber: '',
+          sessionLabel: '',
+          building: '',
+          faculty: '',
+          department: '',
+          actor: 'Academic Dates',
+        ),
+      );
+    }
+    output.sort((a, b) {
+      final dateCmp = a.primaryDate.compareTo(b.primaryDate);
+      if (dateCmp != 0) return dateCmp;
+      final timeCmp = a.startTime.compareTo(b.startTime);
+      if (timeCmp != 0) return timeCmp;
+      return a.label.compareTo(b.label);
+    });
+    return output;
+  }
+
+  Future<List<({String eventName, String startDate, String endDate})>>
+  _fetchAcademicDates({required bool forceRefresh}) async {
+    final rows = await _scraper.fetchList(
+      path: '/data/academic-dates',
+      cacheKey: 'scraper_academic_dates_v1',
+      ttl: const Duration(hours: 6),
+      forceRefresh: forceRefresh,
+    );
+    return rows
+        .map((row) {
+          final eventName = '${row['event_name'] ?? ''}'.trim();
+          final startDate = '${row['start_date'] ?? ''}'.trim();
+          final endDate = '${row['end_date'] ?? ''}'.trim();
+          if (eventName.isEmpty || startDate.isEmpty || endDate.isEmpty) {
+            return null;
+          }
+          return (eventName: eventName, startDate: startDate, endDate: endDate);
+        })
+        .whereType<({String eventName, String startDate, String endDate})>()
+        .toList(growable: false);
   }
 }

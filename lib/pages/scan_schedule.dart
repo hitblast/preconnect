@@ -4,7 +4,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:preconnect/api/friend_schedule_store.dart';
 import 'package:preconnect/pages/ui_kit.dart';
-import 'package:preconnect/tools/platform_permissions.dart';
+import 'package:preconnect/tools/token_storage.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 
 class ScanSchedulePage extends StatefulWidget {

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/sembast_cache.dart';
@@ -261,5 +262,223 @@ class ProfileService {
       }
     }
     return profileData;
+  }
+}
+
+class AttendanceInfo {
+  final int courseSectionId;
+  final int studentPortfolioId;
+  final String courseName;
+  final String courseCode;
+  final int attend;
+  final int missed;
+  final int remaining;
+  final int totalClasses;
+
+  AttendanceInfo({
+    required this.courseSectionId,
+    required this.studentPortfolioId,
+    required this.courseName,
+    required this.courseCode,
+    required this.attend,
+    required this.missed,
+    required this.remaining,
+    required this.totalClasses,
+  });
+
+  factory AttendanceInfo.fromJson(Map<String, dynamic> json) {
+    return AttendanceInfo(
+      courseSectionId: json['courseSectionId'] ?? 0,
+      studentPortfolioId: json['studentPortfolioId'] ?? 0,
+      courseName: json['courseName'] ?? '',
+      courseCode: json['courseCode'] ?? '',
+      attend: json['attend'] ?? 0,
+      missed: json['missed'] ?? 0,
+      remaining: json['remaining'] ?? 0,
+      totalClasses: json['totalClasses'] ?? 0,
+    );
+  }
+}
+
+class PaymentInfo {
+  final String paymentStatus;
+  final String payslipNumber;
+  final String paymentType;
+  final DateTime requestDate;
+  final DateTime dueDate;
+  final double totalAmount;
+  final int semesterSessionId;
+
+  PaymentInfo({
+    required this.paymentStatus,
+    required this.payslipNumber,
+    required this.paymentType,
+    required this.requestDate,
+    required this.dueDate,
+    required this.totalAmount,
+    required this.semesterSessionId,
+  });
+
+  factory PaymentInfo.fromJson(Map<String, dynamic> json) {
+    return PaymentInfo(
+      paymentStatus: json['paymentStatus'],
+      payslipNumber: json['payslipNumber'],
+      paymentType: json['paymentType'],
+      requestDate: DateTime.parse(json['requestDate']),
+      dueDate: DateTime.parse(json['dueDate']),
+      totalAmount: json['totalAmount'].toDouble(),
+      semesterSessionId: json['semesterSessionId'],
+    );
+  }
+}
+
+class AdvisingService {
+  static final AdvisingService _instance = AdvisingService._internal();
+  factory AdvisingService() => _instance;
+  AdvisingService._internal();
+
+  final ApiClient _client = ApiClient();
+
+  static const List<String> cacheKeys = [
+    'advisingStartDate',
+    'advisingEndDate',
+    'activeSemesterSessionId',
+    'advisingPhase',
+    'totalCredit',
+    'earnedCredit',
+    'noOfSemester',
+  ];
+
+  Future<Map<String, String?>?> fetchAdvisingInfo({
+    bool fromGet = false,
+  }) async {
+    final asyncPrefs = SharedPreferencesAsync();
+    String? studentId = await SembastCache().getString('studentId');
+    studentId ??= await asyncPrefs.getString('studentId');
+    if (studentId == null || studentId.isEmpty) {
+      final profile = await ProfileService().getProfile(fromFetch: true);
+      studentId = profile?['studentId'];
+    }
+    if (studentId == null || studentId.isEmpty) {
+      if (fromGet) return null;
+      return getAdvisingInfo(fromFetch: true);
+    }
+
+    final url = ApiConfig.advisingUrl(studentId);
+
+    return _client.fetchWithFallback<Map<String, String?>>(
+      url: url,
+      fromGet: fromGet,
+      cacheResponse: (response) async {
+        final data = jsonDecode(response.body)[0];
+        await SembastCache().setStringMap(<String, String>{
+          'advisingStartDate': '${data['startDate'] ?? ''}',
+          'advisingEndDate': '${data['endDate'] ?? ''}',
+          'activeSemesterSessionId': '${data['activeSemesterSessionId'] ?? ''}',
+          'advisingPhase': '${data['advisingPhase'] ?? ''}',
+          'totalCredit': '${data['totalCredit'] ?? ''}',
+          'earnedCredit': '${data['earnedCredit'] ?? ''}',
+          'noOfSemester': '${data['noOfSemester'] ?? ''}',
+        });
+      },
+      readCache: ({required bool fromFetch}) =>
+          getAdvisingInfo(fromFetch: fromFetch),
+    );
+  }
+
+  Future<Map<String, String?>?> getAdvisingInfo({
+    bool fromFetch = false,
+  }) async {
+    final data = await SembastCache().getStringMap(cacheKeys.toSet());
+    final isIncomplete = data.values.any(
+      (value) => value == null || value == '',
+    );
+    if (isIncomplete) {
+      if (fromFetch) return null;
+      return fetchAdvisingInfo(fromGet: true);
+    }
+    return data;
+  }
+}
+
+class AttendanceService {
+  static final AttendanceService _instance = AttendanceService._internal();
+  factory AttendanceService() => _instance;
+  AttendanceService._internal();
+
+  final ApiClient _client = ApiClient();
+
+  static const String _cacheKey = 'attendance';
+
+  Future<String?> fetchAttendanceInfo({bool fromGet = false}) async {
+    final asyncPrefs = SharedPreferencesAsync();
+    final id = await resolvePortfolioId(
+      prefs: asyncPrefs,
+      refreshProfile: () => ProfileService().fetchProfile(fromGet: true),
+    );
+    if (id == null || id.isEmpty) {
+      if (fromGet) return null;
+      return getAttendanceInfo(fromFetch: true);
+    }
+
+    final url = '${ApiConfig.connectApiBase}${ApiConfig.attendancePath(id)}';
+
+    return _client.fetchWithFallback<String>(
+      url: url,
+      fromGet: fromGet,
+      cacheResponse: (response) async {
+        await SembastCache().setString(_cacheKey, response.body);
+      },
+      readCache: ({required bool fromFetch}) =>
+          getAttendanceInfo(fromFetch: fromFetch),
+    );
+  }
+
+  Future<String?> getAttendanceInfo({bool fromFetch = false}) async {
+    final value = await SembastCache().getString(_cacheKey);
+    if (value != null && value.isNotEmpty) return value;
+    if (fromFetch) return null;
+    return fetchAttendanceInfo(fromGet: true);
+  }
+}
+
+class PaymentService {
+  static final PaymentService _instance = PaymentService._internal();
+  factory PaymentService() => _instance;
+  PaymentService._internal();
+
+  final ApiClient _client = ApiClient();
+
+  static const String _cacheKey = 'SemesterPaymentInfo';
+
+  Future<String?> fetchPaymentInfo({bool fromGet = false}) async {
+    final asyncPrefs = SharedPreferencesAsync();
+    final id = await resolvePortfolioId(
+      prefs: asyncPrefs,
+      refreshProfile: () => ProfileService().fetchProfile(fromGet: true),
+    );
+    if (id == null || id.isEmpty) {
+      if (fromGet) return null;
+      return getPaymentInfo(fromFetch: true);
+    }
+
+    final url = ApiConfig.paymentUrl(id);
+
+    return _client.fetchWithFallback<String>(
+      url: url,
+      fromGet: fromGet,
+      cacheResponse: (response) async {
+        await SembastCache().setString(_cacheKey, response.body);
+      },
+      readCache: ({required bool fromFetch}) =>
+          getPaymentInfo(fromFetch: fromFetch),
+    );
+  }
+
+  Future<String?> getPaymentInfo({bool fromFetch = false}) async {
+    final value = await SembastCache().getString(_cacheKey);
+    if (value != null && value.isNotEmpty) return value;
+    if (fromFetch) return null;
+    return fetchPaymentInfo(fromGet: true);
   }
 }

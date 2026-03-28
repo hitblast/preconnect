@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:in_app_update/in_app_update.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/api/auth_service.dart';
+import 'package:preconnect/api/api_client.dart';
 import 'package:preconnect/api/seat_alert_push_service.dart';
 import 'package:preconnect/api/sembast_cache.dart';
 import 'package:preconnect/pages/home.dart';
@@ -13,11 +14,9 @@ import 'package:preconnect/pages/login.dart';
 import 'package:preconnect/pages/onboarding.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/play_install_referrer.dart';
-import 'package:preconnect/tools/play_integrity.dart';
-import 'package:preconnect/tools/app_lock_service.dart';
+import 'package:preconnect/tools/token_storage.dart';
 import 'package:preconnect/tools/push_notifications_service.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
-import 'package:preconnect/tools/token_storage.dart';
 
 class AppBootstrapState {
   const AppBootstrapState({

@@ -8,7 +8,7 @@ import 'package:preconnect/tools/web_login_broker_service.dart';
 import 'package:preconnect/tools/web_login_models.dart';
 import 'package:preconnect/tools/web_page_title_stub.dart'
     if (dart.library.html) 'package:preconnect/tools/web_page_title_web.dart';
-import 'package:preconnect/tools/web_login_session_store.dart';
+import 'package:preconnect/tools/token_storage.dart';
 import 'package:share_plus/share_plus.dart';
 
 class WebLoginPage extends StatefulWidget {
