@@ -197,10 +197,9 @@ class _LoginPageState extends State<LoginPage> {
 
       RefreshBus.instance.notify(reason: 'auth');
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          '/home',
-          (route) => false,
-        );
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/home', (route) => false);
       }
       return true;
     } catch (_) {

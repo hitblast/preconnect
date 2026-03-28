@@ -63,7 +63,9 @@ class AdvisingService {
     bool fromFetch = false,
   }) async {
     final data = await SembastCache().getStringMap(cacheKeys.toSet());
-    final isIncomplete = data.values.any((value) => value == null || value == '');
+    final isIncomplete = data.values.any(
+      (value) => value == null || value == '',
+    );
     if (isIncomplete) {
       if (fromFetch) return null;
       return fetchAdvisingInfo(fromGet: true);

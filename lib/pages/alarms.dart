@@ -6,9 +6,13 @@ import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import 'package:flutter_alarmkit/flutter_alarmkit.dart';
 import 'package:flutter/services.dart' show PlatformException;
+import 'package:intl/intl.dart';
+import 'package:preconnect/api/exam_schedule_service.dart';
 import 'package:preconnect/api/schedule_service.dart';
+import 'package:preconnect/model/exam_schedule_info.dart';
 import 'package:preconnect/model/section_info.dart';
 import 'package:preconnect/pages/shared_widgets/schedule_entry_card.dart';
+import 'package:preconnect/pages/shared_widgets/section_badge.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
 import 'package:preconnect/tools/ramadan_timing.dart';
@@ -53,13 +57,83 @@ class _AlarmPageState extends State<AlarmPage> with RefreshBusState {
     final sections = await ScheduleService().getStudentSections(
       forceRefresh: forceRefresh,
     );
+    final overrides = await ExamScheduleService().getOverridesForSections(
+      sections,
+      forceRefresh: forceRefresh,
+    );
+    final examEntries = _buildExamEntries(sections, overrides);
     if (sections.isEmpty) {
       final isRamadan = await ramadanFuture;
-      return _AlarmData(sections: const [], isRamadan: isRamadan);
+      return _AlarmData(
+        sections: const [],
+        examEntries: examEntries,
+        isRamadan: isRamadan,
+      );
     }
 
     final isRamadan = await ramadanFuture;
-    return _AlarmData(sections: sections, isRamadan: isRamadan);
+    return _AlarmData(
+      sections: sections,
+      examEntries: examEntries,
+      isRamadan: isRamadan,
+    );
+  }
+
+  List<_ExamAlarmEntry> _buildExamEntries(
+    List<Section> sections,
+    Map<String, ExamScheduleOverride> overrides,
+  ) {
+    final service = ExamScheduleService();
+    final now = DateTime.now();
+    final items = <_ExamAlarmEntry>[];
+    for (final section in sections) {
+      final resolved = service.resolveSection(
+        section: section,
+        overrides: overrides,
+      );
+      final midAt = BracuTime.parseDateTime(
+        resolved.midDate,
+        resolved.midStartTime,
+      );
+      if (midAt != null && !midAt.isBefore(now)) {
+        items.add(
+          _ExamAlarmEntry(
+            id: '${section.sectionId}-mid',
+            type: 'Midterm',
+            courseCode: section.courseCode,
+            sectionName: section.sectionName,
+            roomNumber: resolved.midRoomNumber,
+            faculties: section.faculties,
+            consumedSeat: section.consumedSeat,
+            startTime: resolved.midStartTime,
+            endTime: resolved.midEndTime,
+            dateTime: midAt,
+          ),
+        );
+      }
+      final finalAt = BracuTime.parseDateTime(
+        resolved.finalDate,
+        resolved.finalStartTime,
+      );
+      if (finalAt != null && !finalAt.isBefore(now)) {
+        items.add(
+          _ExamAlarmEntry(
+            id: '${section.sectionId}-final',
+            type: 'Final',
+            courseCode: section.courseCode,
+            sectionName: section.sectionName,
+            roomNumber: resolved.finalRoomNumber,
+            faculties: section.faculties,
+            consumedSeat: section.consumedSeat,
+            startTime: resolved.finalStartTime,
+            endTime: resolved.finalEndTime,
+            dateTime: finalAt,
+          ),
+        );
+      }
+    }
+    items.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    return items;
   }
 
   Future<void> _handleRefresh({bool notify = true}) async {
@@ -217,6 +291,88 @@ class _AlarmPageState extends State<AlarmPage> with RefreshBusState {
     return mapped.map((d) => shiftWeekday(d, shift)).toSet();
   }
 
+  Future<void> _setExamAlarm(
+    BuildContext context,
+    _ExamAlarmEntry entry,
+    int minutesBefore,
+  ) async {
+    if (kIsWeb) {
+      if (!context.mounted) return;
+      showAppSnackBar(context, 'Alarm setup is not available on web.');
+      return;
+    }
+
+    final fireAt = entry.dateTime.subtract(Duration(minutes: minutesBefore));
+    if (fireAt.isBefore(DateTime.now())) {
+      if (!context.mounted) return;
+      showAppSnackBar(context, 'This exam is already over.');
+      return;
+    }
+
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      try {
+        final alarmkit = FlutterAlarmkit();
+        await alarmkit.getPlatformVersion();
+        final authorized = await alarmkit.requestAuthorization();
+        if (!authorized) {
+          if (!context.mounted) return;
+          showAppSnackBar(context, 'Alarm permission denied.');
+          return;
+        }
+        await alarmkit.scheduleOneShotAlarm(
+          timestamp: fireAt.millisecondsSinceEpoch.toDouble(),
+          label:
+              '${entry.courseCode} ${entry.type} Reminder ($minutesBefore min before)',
+          tintColor: '#1E6BE3',
+        );
+        if (!context.mounted) return;
+        showAppSnackBar(context, 'Exam alarm scheduled on iOS.');
+        RefreshBus.instance.notify(reason: 'alarms');
+      } on PlatformException catch (e) {
+        if (!context.mounted) return;
+        showAppSnackBar(
+          context,
+          e.code == 'UNSUPPORTED'
+              ? 'AlarmKit requires iOS 26+.'
+              : 'Unable to schedule exam alarm on this iOS.',
+        );
+      } catch (_) {
+        if (!context.mounted) return;
+        showAppSnackBar(context, 'Unable to schedule exam alarm on this iOS.');
+      }
+      return;
+    }
+
+    final intent = AndroidIntent(
+      action: 'android.intent.action.SET_ALARM',
+      arguments: {
+        'android.intent.extra.alarm.HOUR': fireAt.hour,
+        'android.intent.extra.alarm.MINUTES': fireAt.minute,
+        'android.intent.extra.alarm.MESSAGE':
+            '${entry.courseCode} ${entry.type} Reminder ($minutesBefore min before)',
+        'android.intent.extra.alarm.SKIP_UI': false,
+      },
+      flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
+    );
+
+    try {
+      await intent.launch();
+      if (!context.mounted) return;
+      showAppSnackBar(
+        context,
+        'Alarm opened in Clock app. Please verify the date and time.',
+      );
+      RefreshBus.instance.notify(reason: 'alarms');
+    } catch (_) {
+      if (!context.mounted) return;
+      showAppSnackBar(context, 'Unable to open alarm on Android.');
+    }
+  }
+
+  String _formatExamDateOnly(DateTime dt) {
+    return DateFormat('d MMMM, yyyy').format(dt);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -227,7 +383,7 @@ class _AlarmPageState extends State<AlarmPage> with RefreshBusState {
 
     return BracuPageScaffold(
       title: 'Set Alarms',
-      subtitle: 'Class Reminder',
+      subtitle: 'Class & Exam Reminder',
       icon: Icons.alarm_outlined,
       body: FutureBuilder<_AlarmData>(
         future: _futureData,
@@ -246,21 +402,358 @@ class _AlarmPageState extends State<AlarmPage> with RefreshBusState {
           }
 
           final sections = snapshot.data?.sections ?? const <Section>[];
+          final exams = snapshot.data?.examEntries ?? const <_ExamAlarmEntry>[];
           final isRamadan = snapshot.data?.isRamadan ?? false;
-          if (sections.isEmpty) {
+          if (sections.isEmpty && exams.isEmpty) {
             return buildRefreshEmptyState(
               onRefresh: _handleRefresh,
-              message: 'No class found',
+              message: 'No class or exam found',
             );
           }
 
           return BracuRefreshListBuilder(
             onRefresh: _handleRefresh,
-            itemCount: sections.length + 1,
+            itemCount: sections.length + exams.length + 2,
             itemBuilder: (context, index) {
-              if (index == sections.length) {
+              if (index == sections.length + exams.length + 1) {
                 return const Padding(padding: EdgeInsets.only(top: 12));
               }
+              if (index == sections.length && exams.isNotEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12, top: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: BracuPalette.primary.withValues(alpha: 0.38),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              if (index > sections.length && exams.isNotEmpty) {
+                final examIndex = index - sections.length - 1;
+                final exam = exams[examIndex];
+                final showTypeHeader =
+                    examIndex == 0 || exams[examIndex - 1].type != exam.type;
+                final alarmKey = 'exam_${exam.id}';
+                _minutesBefore.putIfAbsent(alarmKey, () => 15);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (showTypeHeader)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (exam.type == 'Final')
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Divider(
+                                    height: 1,
+                                    thickness: 1,
+                                    color: BracuPalette.accent.withValues(
+                                      alpha: 0.45,
+                                    ),
+                                  ),
+                                ),
+                              Text(
+                                exam.type,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: BracuPalette.textPrimary(context),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      BracuCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                SectionBadge(
+                                  label: formatSectionBadge(exam.sectionName),
+                                  color: exam.type == 'Final'
+                                      ? BracuPalette.accent
+                                      : BracuPalette.primary,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text.rich(
+                                        TextSpan(
+                                          children: [
+                                            TextSpan(
+                                              text: exam.courseCode.trim(),
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            TextSpan(
+                                              text: ' ${exam.type}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                color:
+                                                    BracuPalette.textSecondary(
+                                                      context,
+                                                    ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        formatTimeRange(
+                                          exam.startTime,
+                                          exam.endTime,
+                                        ),
+                                        style: TextStyle(
+                                          color: BracuPalette.textPrimary(
+                                            context,
+                                          ),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      exam.roomNumber.trim().isEmpty
+                                          ? 'TBA'
+                                          : exam.roomNumber,
+                                      style: TextStyle(
+                                        color: BracuPalette.textPrimary(
+                                          context,
+                                        ),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    if (exam.faculties.trim().isNotEmpty ||
+                                        exam.consumedSeat > 0) ...[
+                                      const SizedBox(height: 2),
+                                      Text.rich(
+                                        TextSpan(
+                                          children: [
+                                            if (exam.faculties
+                                                .trim()
+                                                .isNotEmpty)
+                                              TextSpan(
+                                                text: exam.faculties.trim(),
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700,
+                                                  color:
+                                                      BracuPalette.textPrimary(
+                                                        context,
+                                                      ),
+                                                ),
+                                              ),
+                                            if (exam.consumedSeat > 0)
+                                              TextSpan(
+                                                text:
+                                                    '${exam.faculties.trim().isEmpty ? '' : ' '}(${exam.consumedSeat})',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color:
+                                                      BracuPalette.textSecondary(
+                                                        context,
+                                                      ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                        textAlign: TextAlign.right,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: chipBg,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      _formatExamDateOnly(exam.dateTime),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: BracuPalette.textPrimary(
+                                          context,
+                                        ),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: chipBg,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      DateFormat(
+                                        'EEEE',
+                                      ).format(exam.dateTime).toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: BracuPalette.textPrimary(
+                                          context,
+                                        ),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: controlBg,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: BracuPalette.primary.withValues(
+                                    alpha: 0.2,
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        if (_minutesBefore[alarmKey]! > 5) {
+                                          _minutesBefore[alarmKey] =
+                                              _minutesBefore[alarmKey]! - 5;
+                                        }
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: BracuPalette.primary.withValues(
+                                          alpha: 0.12,
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(
+                                        Icons.remove,
+                                        size: 18,
+                                        color: BracuPalette.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Center(
+                                      child: Text(
+                                        '${_minutesBefore[alarmKey]} min before',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: BracuPalette.textPrimary(
+                                            context,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        _minutesBefore[alarmKey] =
+                                            _minutesBefore[alarmKey]! + 5;
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: BracuPalette.primary.withValues(
+                                          alpha: 0.12,
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(
+                                        Icons.add,
+                                        size: 18,
+                                        color: BracuPalette.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: BracuPalette.primary,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                onPressed: () async {
+                                  await _setExamAlarm(
+                                    context,
+                                    exam,
+                                    _minutesBefore[alarmKey]!,
+                                  );
+                                },
+                                icon: const Icon(Icons.notifications_active),
+                                label: const Text('Set Alarm'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
               final section = sections[index];
               final schedules = section.sectionSchedule.classSchedules;
               if (schedules.isEmpty) return const SizedBox.shrink();
@@ -453,8 +946,39 @@ class _AlarmPageState extends State<AlarmPage> with RefreshBusState {
 }
 
 class _AlarmData {
-  const _AlarmData({required this.sections, required this.isRamadan});
+  const _AlarmData({
+    required this.sections,
+    required this.examEntries,
+    required this.isRamadan,
+  });
 
   final List<Section> sections;
+  final List<_ExamAlarmEntry> examEntries;
   final bool isRamadan;
+}
+
+class _ExamAlarmEntry {
+  const _ExamAlarmEntry({
+    required this.id,
+    required this.type,
+    required this.courseCode,
+    required this.sectionName,
+    required this.roomNumber,
+    required this.faculties,
+    required this.consumedSeat,
+    required this.startTime,
+    required this.endTime,
+    required this.dateTime,
+  });
+
+  final String id;
+  final String type;
+  final String courseCode;
+  final String sectionName;
+  final String roomNumber;
+  final String faculties;
+  final int consumedSeat;
+  final String? startTime;
+  final String? endTime;
+  final DateTime dateTime;
 }

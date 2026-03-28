@@ -61,13 +61,16 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
     final service = SeatStatusService();
     final details = forceRefresh
         ? await service.fetchAllSectionsDetailsFromApi()
-        : await service.loadCachedDetails(
-            maxAge: const Duration(days: 30),
-          ).then((cached) async {
-            if (cached.isNotEmpty) return cached;
-            return service.fetchAllSectionsDetailsFromApi();
-          });
-    final allSlots = _buildFreeRoomSlots(details.values.toList(), _defaultDay());
+        : await service
+              .loadCachedDetails(maxAge: const Duration(days: 30))
+              .then((cached) async {
+                if (cached.isNotEmpty) return cached;
+                return service.fetchAllSectionsDetailsFromApi();
+              });
+    final allSlots = _buildFreeRoomSlots(
+      details.values.toList(),
+      _defaultDay(),
+    );
     await _writeCachedSlots(allSlots);
     return allSlots;
   }
@@ -179,7 +182,8 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
           if (visibleSlots.isEmpty) {
             return buildRefreshEmptyState(
               onRefresh: _refresh,
-              message: 'No free labs found for ${formatWeekdayTitle(_defaultDay())}.',
+              message:
+                  'No free labs found for ${formatWeekdayTitle(_defaultDay())}.',
             );
           }
 
@@ -290,7 +294,9 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
                                         slot.endTime,
                                       ),
                                       style: TextStyle(
-                                        color: BracuPalette.textPrimary(context),
+                                        color: BracuPalette.textPrimary(
+                                          context,
+                                        ),
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
@@ -356,7 +362,10 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
       final slot = slots[i];
       final start = _minutesFromString(slot.startTime);
       final end = _minutesFromString(slot.endTime);
-      if (start != null && end != null && nowMinutes >= start && nowMinutes < end) {
+      if (start != null &&
+          end != null &&
+          nowMinutes >= start &&
+          nowMinutes < end) {
         return i;
       }
     }
@@ -389,7 +398,8 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
         if (courseCode.isNotEmpty) {
           final program = _courseProgramCode(courseCode);
           if (program.isNotEmpty) {
-            room.programCounts[program] = (room.programCounts[program] ?? 0) + 1;
+            room.programCounts[program] =
+                (room.programCounts[program] ?? 0) + 1;
           }
         }
         final courseTitle = section.name.trim();
@@ -408,7 +418,8 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
         }
         for (final slot in section.sectionSchedule.classSchedules) {
           if (_normalizeDay(slot.day) != day) continue;
-          final key = '$roomNumber|${slot.day}|${slot.startTime}|${slot.endTime}';
+          final key =
+              '$roomNumber|${slot.day}|${slot.startTime}|${slot.endTime}';
           if (!seenBusyKeys.add(key)) continue;
           room.busySlots.add(
             _TimeSlot.fromStrings(
@@ -456,10 +467,14 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
     List<_FreeRoomSlot> slots,
     _RoomFilter filter,
   ) {
-    return slots.where((slot) => _matchesFilter(slot.roomNumber, filter)).toList();
+    return slots
+        .where((slot) => _matchesFilter(slot.roomNumber, filter))
+        .toList();
   }
 
-  List<SeatStatusSection> _extractRoomSections(SeatStatusDetailsResponse details) {
+  List<SeatStatusSection> _extractRoomSections(
+    SeatStatusDetailsResponse details,
+  ) {
     final sections = <SeatStatusSection>[];
     final child = details.childSection;
     if (child != null && _looksLikeRoomSection(child)) {
@@ -473,7 +488,8 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
   }
 
   bool _looksLikeRoomSection(SeatStatusSection section) {
-    return section.roomNumber.trim().isNotEmpty || section.roomName.trim().isNotEmpty;
+    return section.roomNumber.trim().isNotEmpty ||
+        section.roomName.trim().isNotEmpty;
   }
 
   String _normalizeDay(String value) {
@@ -484,8 +500,9 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
 
   List<_TimeSlot> _mergeSlots(List<_TimeSlot> slots) {
     if (slots.isEmpty) return const <_TimeSlot>[];
-    final sorted = [...slots]
-      ..sort((a, b) => _minutesOfDay(a.start).compareTo(_minutesOfDay(b.start)));
+    final sorted = [
+      ...slots,
+    ]..sort((a, b) => _minutesOfDay(a.start).compareTo(_minutesOfDay(b.start)));
     final merged = <_TimeSlot>[];
     for (final slot in sorted) {
       if (merged.isEmpty) {
@@ -495,7 +512,10 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
       final last = merged.last;
       if (_minutesOfDay(slot.start) <= _minutesOfDay(last.end)) {
         if (_minutesOfDay(slot.end) > _minutesOfDay(last.end)) {
-          merged[merged.length - 1] = _TimeSlot(start: last.start, end: slot.end);
+          merged[merged.length - 1] = _TimeSlot(
+            start: last.start,
+            end: slot.end,
+          );
         }
       } else {
         merged.add(slot);
@@ -755,7 +775,9 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
   }
 
   String _courseProgramCode(String courseCode) {
-    final match = RegExp(r'^[A-Z]+').firstMatch(courseCode.trim().toUpperCase());
+    final match = RegExp(
+      r'^[A-Z]+',
+    ).firstMatch(courseCode.trim().toUpperCase());
     return match?.group(0) ?? '';
   }
 
@@ -774,7 +796,6 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
     if (suffix.endsWith('C')) return 'Class';
     return '';
   }
-
 }
 
 class _FreeRoomSlot {
@@ -823,10 +844,7 @@ class _FreeRoomSlot {
 }
 
 class _RoomSeed {
-  _RoomSeed({
-    required this.roomNumber,
-    required this.roomName,
-  });
+  _RoomSeed({required this.roomNumber, required this.roomName});
 
   final String roomNumber;
   final String roomName;
@@ -836,16 +854,11 @@ class _RoomSeed {
 }
 
 class _TimeSlot {
-  const _TimeSlot({
-    required this.start,
-    required this.end,
-  });
+  const _TimeSlot({required this.start, required this.end});
 
-  _TimeSlot.fromStrings({
-    required String startTime,
-    required String endTime,
-  }) : start = _FreeRoomTime.parse(startTime),
-       end = _FreeRoomTime.parse(endTime);
+  _TimeSlot.fromStrings({required String startTime, required String endTime})
+    : start = _FreeRoomTime.parse(startTime),
+      end = _FreeRoomTime.parse(endTime);
 
   final TimeOfDay start;
   final TimeOfDay end;

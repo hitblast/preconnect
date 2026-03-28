@@ -10,8 +10,9 @@ class ApiConfig {
   static const String logoutEndpoint = '$ssoBase/logout';
   static const String authEndpoint = '$ssoBase/auth';
 
-  static String get connectApiBase =>
-      kIsWeb ? '$seatStatusProxyBase/connect' : 'https://connect.bracu.ac.bd/api';
+  static String get connectApiBase => kIsWeb
+      ? '$seatStatusProxyBase/connect'
+      : 'https://connect.bracu.ac.bd/api';
   static const String cdnBase = 'https://connect.bracu.ac.bd/cdn';
   static const String seatStatusProxyBase = 'https://api.preconnect.app';
   static const String webLoginBrokerBase = seatStatusProxyBase;
@@ -58,8 +59,7 @@ class ApiConfig {
     int calendarId, {
     required String startDate,
     required String endDate,
-  }) =>
-      '/reg/v1/calendar/$calendarId?startDate=$startDate&endDate=$endDate';
+  }) => '/reg/v1/calendar/$calendarId?startDate=$startDate&endDate=$endDate';
 
   static String notificationViewPath(int id) => '/ns/notifications/view/$id';
 

@@ -62,14 +62,12 @@ class _AcademicSummary extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textPrimary = BracuPalette.textPrimary(context);
     final textSecondary = BracuPalette.textSecondary(context);
-    final totalNum =
-        _parseDouble(advising['totalCredit']) > 0
-            ? _parseDouble(advising['totalCredit'])
-            : (progressSummary?.totalCredit ?? 0);
-    final earnedNum =
-        _parseDouble(advising['earnedCredit']) > 0
-            ? _parseDouble(advising['earnedCredit'])
-            : (progressSummary?.completedCredit ?? 0);
+    final totalNum = _parseDouble(advising['totalCredit']) > 0
+        ? _parseDouble(advising['totalCredit'])
+        : (progressSummary?.totalCredit ?? 0);
+    final earnedNum = _parseDouble(advising['earnedCredit']) > 0
+        ? _parseDouble(advising['earnedCredit'])
+        : (progressSummary?.completedCredit ?? 0);
     final completionRatio = totalNum == 0
         ? 0.0
         : (earnedNum / totalNum).clamp(0.0, 1.0);

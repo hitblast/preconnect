@@ -194,8 +194,7 @@ class SeatStatusService {
                 .toList()
           : const <Map<String, dynamic>>[];
       final hasSameDate = currentDate == dateKey;
-      final hasSameSlots =
-          jsonEncode(currentSlots) == jsonEncode(slots);
+      final hasSameSlots = jsonEncode(currentSlots) == jsonEncode(slots);
       if (hasSameDate && hasSameSlots) return;
       await db.transaction((txn) async {
         await _metaStore.record(_freeLabsSlotsKey).put(txn, slots);
@@ -519,10 +518,7 @@ class SeatStatusService {
   _fetchAllSectionsDetailsBundle() async {
     try {
       final body = await _fetchText(_allSectionsDetailsUrl);
-      final parsed = await compute(
-        _parseDetailsBundleResponseFromBody,
-        body,
-      );
+      final parsed = await compute(_parseDetailsBundleResponseFromBody, body);
       await _saveDetailsIfAny(parsed);
       return parsed;
     } catch (_) {

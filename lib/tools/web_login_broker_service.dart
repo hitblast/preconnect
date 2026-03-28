@@ -196,7 +196,9 @@ class WebLoginBrokerService {
         )
         .timeout(_timeout);
     if (response.statusCode == 404) {
-      throw Exception('Session logout is not available on current server build');
+      throw Exception(
+        'Session logout is not available on current server build',
+      );
     }
     if (response.statusCode != 200) {
       throw Exception('Unable to revoke web session');
@@ -215,7 +217,9 @@ class WebLoginBrokerService {
         )
         .timeout(_timeout);
     if (response.statusCode == 404) {
-      throw Exception('Session logout is not available on current server build');
+      throw Exception(
+        'Session logout is not available on current server build',
+      );
     }
     if (response.statusCode != 200) {
       throw Exception('Unable to revoke all web sessions');

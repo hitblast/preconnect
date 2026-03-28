@@ -181,7 +181,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 borderRadius: BorderRadius.circular(14),
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const WebLoginSetupPage()),
+                    MaterialPageRoute(
+                      builder: (_) => const WebLoginSetupPage(),
+                    ),
                   );
                 },
                 child: Ink(

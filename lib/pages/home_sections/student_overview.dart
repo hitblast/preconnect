@@ -81,10 +81,7 @@ class StudentOverviewCard extends StatelessWidget {
 }
 
 class _IconButton extends StatelessWidget {
-  const _IconButton({
-    required this.icon,
-    required this.onTap,
-  });
+  const _IconButton({required this.icon, required this.onTap});
 
   final IconData icon;
   final VoidCallback onTap;

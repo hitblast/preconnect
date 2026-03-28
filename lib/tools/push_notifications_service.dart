@@ -35,7 +35,9 @@ class PushNotificationsService {
 
   Future<void> initialize() async {
     if (_initialized || !_isSupportedPlatform) return;
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
     final messaging = FirebaseMessaging.instance;
@@ -139,7 +141,8 @@ class PushNotificationsService {
   Future<void> _syncToken(String? token) async {
     final normalized = (token ?? '').trim();
     if (normalized.isEmpty) return;
-    final locale = WidgetsBinding.instance.platformDispatcher.locale.toLanguageTag();
+    final locale = WidgetsBinding.instance.platformDispatcher.locale
+        .toLanguageTag();
     final packageInfo = await PackageInfo.fromPlatform();
     await SeatAlertPushService().configureDeviceToken(normalized);
     try {

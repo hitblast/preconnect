@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:preconnect/api/exam_schedule_service.dart';
+import 'package:preconnect/model/exam_schedule_info.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/model/section_info.dart';
 import 'package:preconnect/pages/shared_widgets/section_badge.dart';
@@ -23,7 +25,7 @@ class ExamSchedule extends StatefulWidget {
 }
 
 class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
-  late Future<List<Section>> _future;
+  late Future<_ExamScheduleData> _future;
   final ScrollController _scrollController = ScrollController();
   List<int> _semesterSessionOptions = const <int>[];
   int? _selectedSemesterSessionId;
@@ -36,7 +38,7 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
   void initState() {
     super.initState();
     unawaited(_loadSemesterOptions());
-    _future = _fetchExamSections();
+    _future = _fetchExamData();
     ExamSchedule.jumpSignal.addListener(_onJumpRequested);
     bindRefreshBus(_onRefreshSignal);
   }
@@ -65,22 +67,53 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
     }
   }
 
-  Future<List<Section>> _fetchExamSections({bool forceRefresh = false}) async {
+  Future<_ExamScheduleData> _fetchExamData({bool forceRefresh = false}) async {
     final service = ScheduleService();
+    List<Section> sections;
     if (_selectedSemesterSessionId == null) {
-      return service.getStudentSections(forceRefresh: forceRefresh);
+      sections = await service.getStudentSections(forceRefresh: forceRefresh);
+      return _buildExamDataFromSections(
+        sections,
+        forceRefresh: forceRefresh,
+        forcedSemesterSessionId: null,
+      );
     }
     if (forceRefresh) {
       await service.fetchStudentScheduleForSemester(
         semesterSessionId: _selectedSemesterSessionId,
       );
     }
-    return service.parseStudentSections(
+    sections = service.parseStudentSections(
       await service.getStudentScheduleForSemester(
         semesterSessionId: _selectedSemesterSessionId,
         fromFetch: true,
       ),
     );
+    return _buildExamDataFromSections(
+      sections,
+      forceRefresh: forceRefresh,
+      forcedSemesterSessionId: _selectedSemesterSessionId,
+    );
+  }
+
+  Future<_ExamScheduleData> _buildExamDataFromSections(
+    List<Section> sections, {
+    required bool forceRefresh,
+    int? forcedSemesterSessionId,
+  }) async {
+    if (sections.isEmpty) {
+      return const _ExamScheduleData(
+        sections: <Section>[],
+        overrides: <String, ExamScheduleOverride>{},
+      );
+    }
+
+    final overrides = await ExamScheduleService().getOverridesForSections(
+      sections,
+      forceRefresh: forceRefresh,
+      forcedSemesterSessionId: forcedSemesterSessionId,
+    );
+    return _ExamScheduleData(sections: sections, overrides: overrides);
   }
 
   bool _sameIntList(List<int> a, List<int> b) {
@@ -135,7 +168,7 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
       _selectedSemesterSessionId = sessionId;
       _didScroll = false;
       _scrollRetry = false;
-      _future = _fetchExamSections(forceRefresh: true);
+      _future = _fetchExamData(forceRefresh: true);
     });
     await _future;
   }
@@ -192,8 +225,12 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
       _didScroll = false;
       _scrollRetry = false;
       _future = _selectedSemesterSessionId == null
-          ? Future.value(service.parseStudentSections(currentScheduleJson))
-          : _fetchExamSections(forceRefresh: true);
+          ? _buildExamDataFromSections(
+              service.parseStudentSections(currentScheduleJson),
+              forceRefresh: true,
+              forcedSemesterSessionId: null,
+            )
+          : _fetchExamData(forceRefresh: true);
     });
     await _future;
     if (notify) {
@@ -202,31 +239,23 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
   }
 
   String _formatExamDateLabel(String? input) {
-    if (input == null || input.trim().isEmpty) return '';
+    if (input == null || input.trim().isEmpty) return 'Not published yet';
     final raw = input.trim();
-    const patterns = <String>[
-      'yyyy-MM-dd',
-      'yyyy/MM/dd',
-      'yyyy.MM.dd',
-      'dd-MM-yyyy',
-      'dd/MM/yyyy',
-      'd/M/yyyy',
-      'd MMM yyyy',
-      'd MMM, yyyy',
-      'd-MMM-yyyy',
-      'MMM d, yyyy',
-    ];
-
-    DateTime? dt;
-    for (final pattern in patterns) {
-      try {
-        dt = DateFormat(pattern).parseStrict(raw);
-        break;
-      } catch (_) {}
-    }
-    dt ??= DateTime.tryParse(raw);
+    final dt = BracuTime.parseDate(raw) ?? DateTime.tryParse(raw);
     if (dt == null) return raw;
-    return DateFormat('EEEE, d MMMM, yyyy').format(dt);
+    return DateFormat('d MMMM, yyyy').format(dt);
+  }
+
+  String _formatExamTimeLabel(String? start, String? end) {
+    final value = formatTimeRange(start, end).trim();
+    if (value.isEmpty) return 'Not published yet';
+    return value;
+  }
+
+  String _formatExamRoomLabel(String? room) {
+    final value = (room ?? '').trim();
+    if (value.isEmpty) return 'TBA';
+    return value;
   }
 
   @override
@@ -236,7 +265,7 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
       subtitle: 'Mid & Final',
       icon: Icons.event_note_outlined,
       actions: [_buildSemesterDropdownAction()],
-      body: FutureBuilder<List<Section>>(
+      body: FutureBuilder<_ExamScheduleData>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -249,38 +278,57 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
               onRefresh: _handleRefresh,
               error: snapshot.error,
             );
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          } else if (!snapshot.hasData || snapshot.data!.sections.isEmpty) {
             return buildRefreshEmptyState(
               onRefresh: _handleRefresh,
               message: 'No exam data available',
             );
           }
 
-          final sections = snapshot.data!;
+          final examData = snapshot.data!;
+          final sections = examData.sections;
+          final overrides = examData.overrides;
+          final examService = ExamScheduleService();
+          final resolvedBySectionId = <int, ExamSectionResolved>{
+            for (final section in sections)
+              section.sectionId: examService.resolveSection(
+                section: section,
+                overrides: overrides,
+              ),
+          };
+          ExamSectionResolved resolved(Section section) =>
+              resolvedBySectionId[section.sectionId]!;
+          String? midDate(Section section) => resolved(section).midDate;
+          String? midStart(Section section) => resolved(section).midStartTime;
+          String? midEnd(Section section) => resolved(section).midEndTime;
+          String midRoom(Section section) => resolved(section).midRoomNumber;
+          String? finalDate(Section section) => resolved(section).finalDate;
+          String? finalStart(Section section) =>
+              resolved(section).finalStartTime;
+          String? finalEnd(Section section) => resolved(section).finalEndTime;
+          String finalRoom(Section section) =>
+              resolved(section).finalRoomNumber;
+
           final midExams = sections
               .where(
                 (s) =>
-                    s.sectionSchedule.midExamDate != null &&
-                    s.sectionSchedule.midExamStartTime != null,
+                    midDate(s) != null ||
+                    midStart(s) != null ||
+                    midEnd(s) != null,
               )
               .toList();
           final finalExams = sections
               .where(
                 (s) =>
-                    s.sectionSchedule.finalExamDate != null &&
-                    s.sectionSchedule.finalExamStartTime != null,
+                    finalDate(s) != null ||
+                    finalStart(s) != null ||
+                    finalEnd(s) != null,
               )
               .toList();
 
           midExams.sort((a, b) {
-            final aTime = BracuTime.parseDateTime(
-              a.sectionSchedule.midExamDate,
-              a.sectionSchedule.midExamStartTime,
-            );
-            final bTime = BracuTime.parseDateTime(
-              b.sectionSchedule.midExamDate,
-              b.sectionSchedule.midExamStartTime,
-            );
+            final aTime = BracuTime.parseDateTime(midDate(a), midStart(a));
+            final bTime = BracuTime.parseDateTime(midDate(b), midStart(b));
             if (aTime == null && bTime == null) return 0;
             if (aTime == null) return 1;
             if (bTime == null) return -1;
@@ -288,14 +336,8 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
           });
 
           finalExams.sort((a, b) {
-            final aTime = BracuTime.parseDateTime(
-              a.sectionSchedule.finalExamDate,
-              a.sectionSchedule.finalExamStartTime,
-            );
-            final bTime = BracuTime.parseDateTime(
-              b.sectionSchedule.finalExamDate,
-              b.sectionSchedule.finalExamStartTime,
-            );
+            final aTime = BracuTime.parseDateTime(finalDate(a), finalStart(a));
+            final bTime = BracuTime.parseDateTime(finalDate(b), finalStart(b));
             if (aTime == null && bTime == null) return 0;
             if (aTime == null) return 1;
             if (bTime == null) return -1;
@@ -305,7 +347,7 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
           if (midExams.isEmpty && finalExams.isEmpty) {
             return buildRefreshEmptyState(
               onRefresh: _handleRefresh,
-              message: 'No exams found',
+              message: 'Exam schedule not published yet',
             );
           }
 
@@ -318,14 +360,8 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
           String? ongoingExamKey;
           if (shouldHighlightCurrentSemester) {
             for (final s in sections) {
-              final midTime = BracuTime.parseDateTime(
-                s.sectionSchedule.midExamDate,
-                s.sectionSchedule.midExamStartTime,
-              );
-              final midEndTime = BracuTime.parseDateTime(
-                s.sectionSchedule.midExamDate,
-                s.sectionSchedule.midExamEndTime,
-              );
+              final midTime = BracuTime.parseDateTime(midDate(s), midStart(s));
+              final midEndTime = BracuTime.parseDateTime(midDate(s), midEnd(s));
               if (midTime != null) {
                 if (midEndTime != null &&
                     now.isAfter(midTime) &&
@@ -343,12 +379,12 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
                 }
               }
               final finalTime = BracuTime.parseDateTime(
-                s.sectionSchedule.finalExamDate,
-                s.sectionSchedule.finalExamStartTime,
+                finalDate(s),
+                finalStart(s),
               );
               final finalEndTime = BracuTime.parseDateTime(
-                s.sectionSchedule.finalExamDate,
-                s.sectionSchedule.finalExamEndTime,
+                finalDate(s),
+                finalEnd(s),
               );
               if (finalTime != null) {
                 if (finalEndTime != null &&
@@ -380,7 +416,6 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
           if (midExams.isNotEmpty) {
             children.addAll(
               midExams.map((section) {
-                final schedule = section.sectionSchedule;
                 final isHighlighted =
                     highlightedKey == '${section.sectionId}-mid';
                 if (isHighlighted) {
@@ -395,7 +430,7 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
                         children: [
                           Expanded(
                             child: Text(
-                              _formatExamDateLabel(schedule.midExamDate),
+                              _formatExamDateLabel(midDate(section)),
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
@@ -440,9 +475,9 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    formatTimeRange(
-                                      schedule.midExamStartTime,
-                                      schedule.midExamEndTime,
+                                    _formatExamTimeLabel(
+                                      midStart(section),
+                                      midEnd(section),
                                     ),
                                     style: TextStyle(
                                       color: BracuPalette.textPrimary(context),
@@ -459,9 +494,7 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    section.roomNumber.isNotEmpty
-                                        ? section.roomNumber
-                                        : '--',
+                                    _formatExamRoomLabel(midRoom(section)),
                                     textAlign: TextAlign.right,
                                     style: TextStyle(
                                       color: BracuPalette.textPrimary(context),
@@ -469,19 +502,40 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  if (section.faculties.trim().isNotEmpty &&
-                                      section.faculties.trim().toUpperCase() !=
-                                          'OTHER') ...[
+                                  if (section.faculties.trim().isNotEmpty ||
+                                      section.consumedSeat > 0) ...[
                                     const SizedBox(height: 2),
-                                    Text(
-                                      section.faculties,
-                                      textAlign: TextAlign.right,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: BracuPalette.textSecondary(
-                                          context,
-                                        ),
+                                    Text.rich(
+                                      TextSpan(
+                                        children: [
+                                          if (section.faculties
+                                              .trim()
+                                              .isNotEmpty)
+                                            TextSpan(
+                                              text: section.faculties.trim(),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: BracuPalette.textPrimary(
+                                                  context,
+                                                ),
+                                              ),
+                                            ),
+                                          if (section.consumedSeat > 0)
+                                            TextSpan(
+                                              text:
+                                                  '${section.faculties.trim().isEmpty ? '' : ' '}(${section.consumedSeat})',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color:
+                                                    BracuPalette.textSecondary(
+                                                      context,
+                                                    ),
+                                              ),
+                                            ),
+                                        ],
                                       ),
+                                      textAlign: TextAlign.right,
                                     ),
                                   ],
                                 ],
@@ -495,13 +549,25 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
                 );
               }),
             );
-            children.add(const SizedBox(height: 6));
+            if (finalExams.isNotEmpty) {
+              children.add(
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, bottom: 12),
+                  child: Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: BracuPalette.accent.withValues(alpha: 0.45),
+                  ),
+                ),
+              );
+            } else {
+              children.add(const SizedBox(height: 6));
+            }
           }
 
           if (finalExams.isNotEmpty) {
             children.addAll(
               finalExams.map((section) {
-                final schedule = section.sectionSchedule;
                 final isHighlighted =
                     highlightedKey == '${section.sectionId}-final';
                 if (isHighlighted) {
@@ -516,7 +582,7 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
                         children: [
                           Expanded(
                             child: Text(
-                              _formatExamDateLabel(schedule.finalExamDate),
+                              _formatExamDateLabel(finalDate(section)),
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
@@ -561,9 +627,9 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    formatTimeRange(
-                                      schedule.finalExamStartTime,
-                                      schedule.finalExamEndTime,
+                                    _formatExamTimeLabel(
+                                      finalStart(section),
+                                      finalEnd(section),
                                     ),
                                     style: TextStyle(
                                       color: BracuPalette.textPrimary(context),
@@ -580,9 +646,7 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    section.roomNumber.isNotEmpty
-                                        ? section.roomNumber
-                                        : '--',
+                                    _formatExamRoomLabel(finalRoom(section)),
                                     textAlign: TextAlign.right,
                                     style: TextStyle(
                                       color: BracuPalette.textPrimary(context),
@@ -590,19 +654,40 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  if (section.faculties.trim().isNotEmpty &&
-                                      section.faculties.trim().toUpperCase() !=
-                                          'OTHER') ...[
+                                  if (section.faculties.trim().isNotEmpty ||
+                                      section.consumedSeat > 0) ...[
                                     const SizedBox(height: 2),
-                                    Text(
-                                      section.faculties,
-                                      textAlign: TextAlign.right,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: BracuPalette.textSecondary(
-                                          context,
-                                        ),
+                                    Text.rich(
+                                      TextSpan(
+                                        children: [
+                                          if (section.faculties
+                                              .trim()
+                                              .isNotEmpty)
+                                            TextSpan(
+                                              text: section.faculties.trim(),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: BracuPalette.textPrimary(
+                                                  context,
+                                                ),
+                                              ),
+                                            ),
+                                          if (section.consumedSeat > 0)
+                                            TextSpan(
+                                              text:
+                                                  '${section.faculties.trim().isEmpty ? '' : ' '}(${section.consumedSeat})',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color:
+                                                    BracuPalette.textSecondary(
+                                                      context,
+                                                    ),
+                                              ),
+                                            ),
+                                        ],
                                       ),
+                                      textAlign: TextAlign.right,
                                     ),
                                   ],
                                 ],
@@ -650,4 +735,11 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
       ),
     );
   }
+}
+
+class _ExamScheduleData {
+  const _ExamScheduleData({required this.sections, required this.overrides});
+
+  final List<Section> sections;
+  final Map<String, ExamScheduleOverride> overrides;
 }

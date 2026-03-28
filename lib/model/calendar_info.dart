@@ -27,7 +27,10 @@ class CalendarFeed {
       items: rawItems is List
           ? rawItems
                 .whereType<Map>()
-                .map((item) => CalendarEntry.fromJson(item.cast<String, dynamic>()))
+                .map(
+                  (item) =>
+                      CalendarEntry.fromJson(item.cast<String, dynamic>()),
+                )
                 .toList()
           : const <CalendarEntry>[],
     );

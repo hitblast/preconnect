@@ -136,10 +136,12 @@ class SeatAlertPushService {
     if (token == null || token.isEmpty) return;
     final subscriptions = configs.values
         .where((config) => config.hasAnyRule)
-        .map((config) => <String, dynamic>{
-              'sectionId': config.sectionId,
-              'rules': _rulesPayload(config),
-            })
+        .map(
+          (config) => <String, dynamic>{
+            'sectionId': config.sectionId,
+            'rules': _rulesPayload(config),
+          },
+        )
         .toList();
     await _client.authenticatedRequest(
       'PUT',

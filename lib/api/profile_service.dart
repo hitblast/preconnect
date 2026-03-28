@@ -204,19 +204,18 @@ class ProfileService {
                 'permanentAddress':
                     miscData['permanentAddress']?.toString() ?? '',
                 'presentAddress': miscData['presentAddress']?.toString() ?? '',
-                'isBothAddressSame':
-                    _boolToYesNo(miscData['isBothAddressSame']),
+                'isBothAddressSame': _boolToYesNo(
+                  miscData['isBothAddressSame'],
+                ),
                 'permanentUpazilaName':
                     miscData['permanentUpazilaName']?.toString() ?? '',
                 'presentUpazilaName':
                     miscData['presentUpazilaName']?.toString() ?? '',
                 'fatherName': miscData['fatherName']?.toString() ?? '',
-                'fatherMobileNo':
-                    miscData['fatherMobileNo']?.toString() ?? '',
+                'fatherMobileNo': miscData['fatherMobileNo']?.toString() ?? '',
                 'fatherEmail': miscData['fatherEmail']?.toString() ?? '',
                 'motherName': miscData['motherName']?.toString() ?? '',
-                'motherMobileNo':
-                    miscData['motherMobileNo']?.toString() ?? '',
+                'motherMobileNo': miscData['motherMobileNo']?.toString() ?? '',
                 'motherEmail': miscData['motherEmail']?.toString() ?? '',
                 'localGuardianName':
                     miscData['localGuardianName']?.toString() ?? '',

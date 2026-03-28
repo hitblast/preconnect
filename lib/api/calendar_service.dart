@@ -30,7 +30,8 @@ class CalendarService {
 
   Future<CalendarFeed?> fetchCalendar({
     CalendarFeed? fallback,
-    ({String startDate, String endDate, String sourceFingerprint})? rangeOverride,
+    ({String startDate, String endDate, String sourceFingerprint})?
+    rangeOverride,
   }) async {
     final range = rangeOverride ?? await _resolveRange();
     final url =
@@ -60,8 +61,12 @@ class CalendarService {
 
     final dates = <DateTime>[];
     for (final section in sections) {
-      final start = DateTime.tryParse(section.sectionSchedule.classStartDate.trim());
-      final end = DateTime.tryParse(section.sectionSchedule.classEndDate.trim());
+      final start = DateTime.tryParse(
+        section.sectionSchedule.classStartDate.trim(),
+      );
+      final end = DateTime.tryParse(
+        section.sectionSchedule.classEndDate.trim(),
+      );
       final midExamDate = DateTime.tryParse(
         (section.sectionSchedule.midExamDate ?? '').trim(),
       );
@@ -77,7 +82,11 @@ class CalendarService {
     dates.sort();
     final now = DateTime.now();
     final start = dates.isEmpty
-        ? DateTime(now.year, now.month, now.day).subtract(const Duration(days: 14))
+        ? DateTime(
+            now.year,
+            now.month,
+            now.day,
+          ).subtract(const Duration(days: 14))
         : dates.first;
     final end = dates.isEmpty
         ? DateTime(now.year, now.month, now.day).add(const Duration(days: 60))
@@ -228,12 +237,13 @@ class CalendarService {
     List<CalendarEntry> entries,
   ) {
     ({String start, String end})? buildWindow(String token) {
-      final dates = entries
-          .where((item) => item.typeKey.toUpperCase().contains(token))
-          .map((item) => item.primaryDate)
-          .where((date) => date.trim().isNotEmpty)
-          .toList()
-        ..sort();
+      final dates =
+          entries
+              .where((item) => item.typeKey.toUpperCase().contains(token))
+              .map((item) => item.primaryDate)
+              .where((date) => date.trim().isNotEmpty)
+              .toList()
+            ..sort();
       if (dates.isEmpty) return null;
       return (start: dates.first, end: dates.last);
     }
@@ -243,7 +253,8 @@ class CalendarService {
 
     bool insideWindow(String date, ({String start, String end})? window) {
       if (window == null || date.trim().isEmpty) return false;
-      return date.compareTo(window.start) >= 0 && date.compareTo(window.end) <= 0;
+      return date.compareTo(window.start) >= 0 &&
+          date.compareTo(window.end) <= 0;
     }
 
     return entries.where((item) {

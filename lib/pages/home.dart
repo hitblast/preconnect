@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/auth_service.dart';
+import 'package:preconnect/api/exam_schedule_service.dart';
+import 'package:preconnect/model/exam_schedule_info.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/app.dart';
@@ -366,6 +368,8 @@ class _HomeDashboardState extends State<_HomeDashboard> with RefreshBusState {
     final photoUrl = ApiConfig.photoUrl(profile?['photoFilePath']);
     final List<_ScheduleEntry> entries = [];
     final List<section.Section> sections = [];
+    Map<String, ExamScheduleOverride> examOverrides =
+        const <String, ExamScheduleOverride>{};
     if (scheduleJson != null && scheduleJson.trim().isNotEmpty) {
       final decoded = (jsonDecode(scheduleJson) as List<dynamic>)
           .map((e) => section.Section.fromJson(e))
@@ -391,12 +395,20 @@ class _HomeDashboardState extends State<_HomeDashboard> with RefreshBusState {
           );
         }
       }
+
+      if (cardVisibility.showExamCountdownCard && sections.isNotEmpty) {
+        examOverrides = await ExamScheduleService().getOverridesForSections(
+          sections,
+          forceRefresh: forceRefresh,
+        );
+      }
     }
     return _HomeData(
       profile: profile,
       entries: entries,
       photoUrl: photoUrl,
       sections: sections,
+      examOverrides: examOverrides,
       isRamadan: isRamadan,
       ramadan: ramadan,
       holiday: holidayStatus,
@@ -592,14 +604,21 @@ class _HomeDashboardState extends State<_HomeDashboard> with RefreshBusState {
     }
   }
 
-  _ExamCountdownData? _nextExamCountdown(List<section.Section> sections) {
+  _ExamCountdownData? _nextExamCountdown(
+    List<section.Section> sections,
+    Map<String, ExamScheduleOverride> overrides,
+  ) {
+    final examService = ExamScheduleService();
     final now = DateTime.now();
     final exams = <_ExamCountdownData>[];
     for (final s in sections) {
-      final schedule = s.sectionSchedule;
+      final resolved = examService.resolveSection(
+        section: s,
+        overrides: overrides,
+      );
       final mid = BracuTime.parseDateTime(
-        schedule.midExamDate,
-        schedule.midExamStartTime,
+        resolved.midDate,
+        resolved.midStartTime,
       );
       if (mid != null) {
         exams.add(
@@ -607,8 +626,8 @@ class _HomeDashboardState extends State<_HomeDashboard> with RefreshBusState {
         );
       }
       final fin = BracuTime.parseDateTime(
-        schedule.finalExamDate,
-        schedule.finalExamStartTime,
+        resolved.finalDate,
+        resolved.finalStartTime,
       );
       if (fin != null) {
         exams.add(
@@ -756,6 +775,8 @@ class _HomeDashboardState extends State<_HomeDashboard> with RefreshBusState {
                       }
                       final nextExam = _nextExamCountdown(
                         data?.sections ?? const <section.Section>[],
+                        data?.examOverrides ??
+                            const <String, ExamScheduleOverride>{},
                       );
                       return BracuRefreshScroll(
                         onRefresh: _handleRefresh,
@@ -1141,9 +1162,8 @@ class _HomeDashboardState extends State<_HomeDashboard> with RefreshBusState {
                                           title: 'Dev',
                                           subtitle: 'About Us',
                                           color: const Color(0xFF2C9DFF),
-                                          onTap: () => widget.onNavigate(
-                                            HomeTab.devs,
-                                          ),
+                                          onTap: () =>
+                                              widget.onNavigate(HomeTab.devs),
                                         ),
                                         QuickAccessCard(
                                           width: width,
@@ -1679,6 +1699,7 @@ class _HomeData {
     required this.entries,
     required this.photoUrl,
     required this.sections,
+    required this.examOverrides,
     required this.isRamadan,
     required this.ramadan,
     required this.holiday,
@@ -1689,6 +1710,7 @@ class _HomeData {
   final List<_ScheduleEntry> entries;
   final String? photoUrl;
   final List<section.Section> sections;
+  final Map<String, ExamScheduleOverride> examOverrides;
   final bool isRamadan;
   final RamadanStatus ramadan;
   final HolidayStatus holiday;
@@ -1700,6 +1722,7 @@ class _HomeData {
       entries: entries,
       photoUrl: photoUrl,
       sections: sections,
+      examOverrides: examOverrides,
       isRamadan: isRamadan,
       ramadan: ramadan,
       holiday: holiday,

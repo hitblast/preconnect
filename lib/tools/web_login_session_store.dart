@@ -17,7 +17,10 @@ class WebLoginSessionStore {
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await TokenStorage.instance.write(key: 'access_token', value: accessToken);
-    await TokenStorage.instance.write(key: 'refresh_token', value: refreshToken);
+    await TokenStorage.instance.write(
+      key: 'refresh_token',
+      value: refreshToken,
+    );
     await prefs.setString(_studentEmailKey, studentEmail.trim());
     final normalizedSessionId = (webSessionId ?? '').trim();
     final normalizedSessionToken = (webSessionToken ?? '').trim();

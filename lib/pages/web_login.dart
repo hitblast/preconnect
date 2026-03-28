@@ -34,9 +34,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
   bool _consumeInFlight = false;
 
   bool get _hasActiveQr =>
-      _request != null &&
-      _secondsLeft > 0 &&
-      !(_request?.isExpired ?? true);
+      _request != null && _secondsLeft > 0 && !(_request?.isExpired ?? true);
 
   @override
   void initState() {
@@ -148,7 +146,9 @@ class _WebLoginPageState extends State<WebLoginPage> {
         );
         RefreshBus.instance.notify(reason: 'auth');
         if (!mounted) return;
-        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/home', (route) => false);
       } catch (_) {
         _resetToInitial();
         if (!mounted) return;
@@ -164,9 +164,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
   Future<void> _sharePlayStoreLink() async {
     try {
       await SharePlus.instance.share(
-        ShareParams(
-          text: 'Install PreConnect App: $_playStoreUrl',
-        ),
+        ShareParams(text: 'Install PreConnect App: $_playStoreUrl'),
       );
     } catch (_) {
       if (!mounted) return;
@@ -255,9 +253,7 @@ class _WebLoginPageState extends State<WebLoginPage> {
                     label: Text(
                       _signingIn
                           ? 'Generating...'
-                          : (_hasActiveQr
-                                ? 'QR Active'
-                                : 'Generate QR Code'),
+                          : (_hasActiveQr ? 'QR Active' : 'Generate QR Code'),
                     ),
                   ),
                 ),
@@ -289,7 +285,9 @@ class _WebLoginPageState extends State<WebLoginPage> {
                   const SizedBox(height: 12),
                   Text(
                     'Waiting for phone approval. QR expires in ${_secondsLeft}s',
-                    style: TextStyle(color: BracuPalette.textSecondary(context)),
+                    style: TextStyle(
+                      color: BracuPalette.textSecondary(context),
+                    ),
                   ),
                 ],
               ),
@@ -310,7 +308,10 @@ class _WebLoginPageState extends State<WebLoginPage> {
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.transparent,
                   borderRadius: BorderRadius.circular(16),

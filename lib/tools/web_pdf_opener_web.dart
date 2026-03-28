@@ -17,8 +17,5 @@ Future<void> openPdfInBrowserImpl({
     html.window.location.assign(objectUrl);
     return;
   }
-  Timer(
-    const Duration(seconds: 15),
-    () => html.Url.revokeObjectUrl(objectUrl),
-  );
+  Timer(const Duration(seconds: 15), () => html.Url.revokeObjectUrl(objectUrl));
 }

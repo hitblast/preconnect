@@ -74,9 +74,7 @@ class ProgressService {
       final cache = SembastCache();
 
       final majorEtag = await cache.getString(_majorMinorsEtagKey);
-      final completedEtag = await cache.getString(
-        _completedCoursesEtagKey,
-      );
+      final completedEtag = await cache.getString(_completedCoursesEtagKey);
       final curriculumEtag = await cache.getString(_curriculumEtagKey);
 
       final responses = await Future.wait([
@@ -205,7 +203,9 @@ class ProgressService {
         await fetchProgress(fromGet: true);
         return SembastCache()
             .getJsonMap(_summaryCacheKey)
-            .then((value) => value == null ? null : ProgressSummary.fromJson(value));
+            .then(
+              (value) => value == null ? null : ProgressSummary.fromJson(value),
+            );
       },
     );
   }

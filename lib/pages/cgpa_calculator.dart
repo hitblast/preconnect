@@ -66,9 +66,9 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
   void _seedCompletedCourses() {
     final completed = [...widget.info.completedCourses]
       ..sort(
-        (a, b) => _semesterRank(a.semesterSession).compareTo(
-          _semesterRank(b.semesterSession),
-        ),
+        (a, b) => _semesterRank(
+          a.semesterSession,
+        ).compareTo(_semesterRank(b.semesterSession)),
       );
     for (final course in completed) {
       _completedCourses.add(
@@ -78,7 +78,8 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
           credit: _formatCredit(course.credit),
           grade: _normalizeImportedGrade(course.grade),
           semester: course.semesterSession,
-          isRequired: _mandatoryByCode[course.code.trim().toUpperCase()] ?? false,
+          isRequired:
+              _mandatoryByCode[course.code.trim().toUpperCase()] ?? false,
         ),
       );
     }
@@ -109,10 +110,11 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
         .where((draft) => completedCodes.contains(draft.codeValue))
         .map((draft) => draft.codeValue)
         .toSet();
-    final autoRetakeCurrentCourses = _currentCourses
-        .where((draft) => autoRetakeCodes.contains(draft.codeValue))
-        .toList()
-      ..sort((a, b) => compareNaturalText(a.codeValue, b.codeValue));
+    final autoRetakeCurrentCourses =
+        _currentCourses
+            .where((draft) => autoRetakeCodes.contains(draft.codeValue))
+            .toList()
+          ..sort((a, b) => compareNaturalText(a.codeValue, b.codeValue));
     final manualRetakeCourses = _selectedRetakeCourses
         .where((draft) => !autoRetakeCodes.contains(draft.codeValue))
         .toList();
@@ -124,7 +126,8 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
         padding: kBracuPageListPadding,
         children: [
           _buildSummaryCard(context, expectedResult),
-          if (autoRetakeCurrentCourses.isNotEmpty || manualRetakeCourses.isNotEmpty) ...[
+          if (autoRetakeCurrentCourses.isNotEmpty ||
+              manualRetakeCourses.isNotEmpty) ...[
             const SizedBox(height: 14),
             const BracuSectionTitle(title: 'Retake Courses'),
             const SizedBox(height: 10),
@@ -165,7 +168,9 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
   }
 
   List<_CompletedCourseDraft> get _selectedRetakeCourses {
-    final list = _completedCourses.where((draft) => draft.hasRetakeSelection).toList();
+    final list = _completedCourses
+        .where((draft) => draft.hasRetakeSelection)
+        .toList();
     list.sort((a, b) => compareNaturalText(a.codeValue, b.codeValue));
     return list;
   }
@@ -186,9 +191,7 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
   ) {
     final delta = expectedResult.cgpaDelta;
     final deltaValue = delta.abs().clamp(0.0, 1.0);
-    final deltaColor = delta >= 0
-        ? BracuPalette.accent
-        : BracuPalette.warning;
+    final deltaColor = delta >= 0 ? BracuPalette.accent : BracuPalette.warning;
     final selectedRetakes = _selectedRetakeCourses;
     final stats = <({String title, String value})>[
       (title: 'Current', value: expectedResult.currentCgpaLabel),
@@ -229,10 +232,7 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
                   ),
                   child: SizedBox(
                     width: 96,
-                    child: _Metric(
-                      title: item.title,
-                      value: item.value,
-                    ),
+                    child: _Metric(title: item.title, value: item.value),
                   ),
                 );
               }),
@@ -242,10 +242,7 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
           Row(
             children: [
               Expanded(
-                child: SimpleProgressBar(
-                  value: deltaValue,
-                  color: deltaColor,
-                ),
+                child: SimpleProgressBar(value: deltaValue, color: deltaColor),
               ),
               const SizedBox(width: 8),
               Text(
@@ -360,8 +357,9 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
         if (!mounted || selected == null) return;
         final wasReset = selected == draft.completedGrade;
         setState(() {
-          draft.selectedRetakeGrade =
-              selected == draft.completedGrade ? null : selected;
+          draft.selectedRetakeGrade = selected == draft.completedGrade
+              ? null
+              : selected;
         });
         _showCalculatorSnackBar(
           wasReset
@@ -399,8 +397,9 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
         if (!mounted || selected == null) return;
         final wasReset = selected == draft.completedGrade;
         setState(() {
-          draft.selectedRetakeGrade =
-              selected == draft.completedGrade ? null : selected;
+          draft.selectedRetakeGrade = selected == draft.completedGrade
+              ? null
+              : selected;
         });
         _showCalculatorSnackBar(
           wasReset
@@ -445,7 +444,9 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
     String? trailingNote,
   }) {
     final resolvedCode = codeLine.trim().isEmpty ? '--' : codeLine.trim();
-    final resolvedTitle = titleLine.trim().isEmpty ? resolvedCode : titleLine.trim();
+    final resolvedTitle = titleLine.trim().isEmpty
+        ? resolvedCode
+        : titleLine.trim();
     final resolvedCredit = creditLine.trim().isEmpty ? '--' : creditLine.trim();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -548,7 +549,8 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
         continue;
       }
       final manualDraft = manualRetakeByCode[code];
-      final retakeSnapshot = autoRetakeByCode[code] ?? manualDraft?.toRetakeSnapshot();
+      final retakeSnapshot =
+          autoRetakeByCode[code] ?? manualDraft?.toRetakeSnapshot();
       if (retakeSnapshot == null || !retakeSnapshot.countsToGpa) continue;
 
       selectedCredits += retakeSnapshot.credit;
@@ -568,7 +570,9 @@ class _CgpaCalculatorPageState extends State<CgpaCalculatorPage> {
     }
 
     final currentCgpa = baseline.cgpa;
-    final expectedCgpa = totalCredits <= 0 ? 0.0 : totalQualityPoints / totalCredits;
+    final expectedCgpa = totalCredits <= 0
+        ? 0.0
+        : totalQualityPoints / totalCredits;
     final selectedGpa = selectedCredits <= 0
         ? 0.0
         : selectedQualityPoints / selectedCredits;
@@ -914,9 +918,8 @@ class _ExpectedResult {
 
   String get currentCgpaLabel => currentCgpa.toStringAsFixed(3);
   String get expectedCgpaLabel => expectedCgpa.toStringAsFixed(3);
-  String get selectedGpaLabel => selectedCredits <= 0
-      ? '--'
-      : selectedGpa.toStringAsFixed(3);
+  String get selectedGpaLabel =>
+      selectedCredits <= 0 ? '--' : selectedGpa.toStringAsFixed(3);
 }
 
 const List<String> _gradeOptions = <String>[
@@ -990,10 +993,7 @@ String _formatCredit(double value) {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({
-    required this.title,
-    required this.value,
-  });
+  const _Metric({required this.title, required this.value});
 
   final String title;
   final String value;
