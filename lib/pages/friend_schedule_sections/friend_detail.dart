@@ -363,7 +363,7 @@ class _FriendDetailPageState extends State<FriendDetailPage> {
                   key: entry['entryKey'] == highlightedEntryKey
                       ? (_highlightKey ??= GlobalKey())
                       : null,
-                  isHighlighted: entry['entryKey'] == highlightedEntryKey,
+                  isHighlighted: false,
                   highlightColor: BracuPalette.primary,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,

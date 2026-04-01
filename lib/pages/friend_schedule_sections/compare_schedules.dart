@@ -700,7 +700,7 @@ class _CompareSchedulesPageState extends State<CompareSchedulesPage> {
       padding: const EdgeInsets.only(bottom: 10),
       child: BracuCard(
         key: highlightKey,
-        isHighlighted: isHighlighted,
+        isHighlighted: false,
         highlightColor: BracuPalette.primary,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

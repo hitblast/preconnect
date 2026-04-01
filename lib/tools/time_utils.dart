@@ -11,9 +11,20 @@ class BracuTime {
     DateFormat('dd/MM/yyyy'),
     DateFormat('d/M/yyyy'),
     DateFormat('d MMM yyyy'),
+    DateFormat('d MMMM yyyy'),
     DateFormat('d MMM, yyyy'),
+    DateFormat('d MMMM, yyyy'),
     DateFormat('d-MMM-yyyy'),
     DateFormat('MMM d, yyyy'),
+    DateFormat('MMMM d, yyyy'),
+    DateFormat('EEE, d MMM yyyy'),
+    DateFormat('EEE, d MMMM yyyy'),
+    DateFormat('EEE, d MMM, yyyy'),
+    DateFormat('EEE, d MMMM, yyyy'),
+    DateFormat('EEEE, d MMM yyyy'),
+    DateFormat('EEEE, d MMMM yyyy'),
+    DateFormat('EEEE, d MMM, yyyy'),
+    DateFormat('EEEE, d MMMM, yyyy'),
   ];
 
   static final List<DateFormat> _timeFormats = <DateFormat>[

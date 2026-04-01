@@ -303,7 +303,6 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
                     final slotToken =
                         '${slot.roomNumber}_${slot.startTime}_${slot.endTime}';
                     final isHighlighted = slotToken == highlightToken;
-                    final isGreenProgram = _isGreenProgram(slot);
                     if (isHighlighted) {
                       _highlightKey ??= GlobalKey();
                     }
@@ -317,7 +316,7 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
                         onTap: () => _showRoomDetails(slot, roomSlots),
                         child: BracuCard(
                           key: isHighlighted ? _highlightKey : null,
-                          isHighlighted: isHighlighted || isGreenProgram,
+                          isHighlighted: false,
                           highlightColor: _roomCardHighlightColor(slot),
                           backgroundColor: _roomCardBackgroundColor(slot),
                           child: Row(
@@ -783,7 +782,7 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
               (item) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: BracuCard(
-                  isHighlighted: item.statusLabel == 'Available',
+                  isHighlighted: false,
                   highlightColor: BracuPalette.primary,
                   child: Row(
                     children: [

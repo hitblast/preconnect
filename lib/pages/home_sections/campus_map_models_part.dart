@@ -1,14 +1,35 @@
 part of 'package:preconnect/pages/home.dart';
 
+String _normalizePhoneValue(String raw) {
+  var value = raw.trim();
+  if (value.isEmpty) return '';
+  value = value.replaceAll(
+    RegExp(r'\s*\(\s*press\s*\d+\s*\)\s*$', caseSensitive: false),
+    '',
+  );
+  value = value.replaceAll(
+    RegExp(r'\s*[,;-]?\s*press\s*\d+\s*$', caseSensitive: false),
+    '',
+  );
+  value = value.replaceAll(
+    RegExp(r'\s*(ext|extension)\.?\s*\d+.*$', caseSensitive: false),
+    '',
+  );
+  value = value.replaceAll(RegExp(r'[^\d+]'), '');
+  return value;
+}
+
 class _CampusMapData {
   const _CampusMapData({
     required this.campusName,
     required this.address,
     required this.googleMapsUrl,
     required this.sourceUrl,
+    required this.transportScheduleUrl,
     required this.highlights,
     required this.primaryEmail,
     required this.primaryPhone,
+    required this.primaryPhoneRaw,
     required this.offices,
     required this.emergencyContacts,
   });
@@ -17,9 +38,11 @@ class _CampusMapData {
   final String address;
   final String googleMapsUrl;
   final String sourceUrl;
+  final String transportScheduleUrl;
   final List<String> highlights;
   final String primaryEmail;
   final String primaryPhone;
+  final String primaryPhoneRaw;
   final List<_CampusOfficeContact> offices;
   final List<_CampusEmergencyContact> emergencyContacts;
 
@@ -49,6 +72,10 @@ class _CampusMapData {
               .where((item) => item.isNotEmpty)
               .toList(growable: false)
         : const <String>[];
+    final transportRaw = json['transport'];
+    final transportMap = transportRaw is Map
+        ? transportRaw.cast<String, dynamic>()
+        : null;
 
     String firstValueFromList(dynamic value) {
       if (value is List) {
@@ -60,21 +87,40 @@ class _CampusMapData {
       return '';
     }
 
+    String firstPhoneFromList(dynamic value) {
+      if (value is List) {
+        for (final item in value) {
+          final normalized = _normalizePhoneValue('$item');
+          if (normalized.isNotEmpty) return normalized;
+        }
+      }
+      return '';
+    }
+
     final primaryEmail = '${contactMap?['email'] ?? ''}'.trim().isNotEmpty
         ? '${contactMap?['email'] ?? ''}'.trim()
         : firstValueFromList(contactMap?['emails']);
-    final primaryPhone = '${contactMap?['telephone'] ?? ''}'.trim().isNotEmpty
+    final primaryPhoneRaw =
+        '${contactMap?['telephone'] ?? ''}'.trim().isNotEmpty
         ? '${contactMap?['telephone'] ?? ''}'.trim()
         : firstValueFromList(contactMap?['phones']);
+    final primaryPhoneFromList = firstPhoneFromList(contactMap?['phones']);
+    final primaryPhone = primaryPhoneFromList.isNotEmpty
+        ? primaryPhoneFromList
+        : _normalizePhoneValue('${contactMap?['telephone'] ?? ''}');
 
     return _CampusMapData(
       campusName: '${json['campus_name'] ?? ''}'.trim(),
       address: '${json['address'] ?? ''}'.trim(),
       googleMapsUrl: '${json['google_maps_url'] ?? ''}'.trim(),
       sourceUrl: '${json['source_url'] ?? ''}'.trim(),
+      transportScheduleUrl: '${json['schedule_url'] ?? ''}'.trim().isNotEmpty
+          ? '${json['schedule_url'] ?? ''}'.trim()
+          : '${transportMap?['schedule_url'] ?? ''}'.trim(),
       highlights: highlights,
       primaryEmail: primaryEmail,
       primaryPhone: primaryPhone,
+      primaryPhoneRaw: primaryPhoneRaw,
       offices: offices,
       emergencyContacts: emergencies,
     );

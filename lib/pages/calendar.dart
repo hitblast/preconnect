@@ -145,7 +145,7 @@ class _CalendarPageState extends State<CalendarPage> with RefreshBusState {
                         child: _CalendarCard(
                           key: isTargetCard ? _highlightKey : null,
                           item: itemEntry.value,
-                          isHighlighted: isTargetCard,
+                          isHighlighted: false,
                         ),
                       );
                     }),
@@ -227,7 +227,7 @@ class _CalendarCard extends StatelessWidget {
 
     return BracuCard(
       key: key,
-      isHighlighted: isHighlighted,
+      isHighlighted: false,
       highlightColor: BracuPalette.primary,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

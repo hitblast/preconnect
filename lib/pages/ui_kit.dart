@@ -144,6 +144,29 @@ Future<bool> openMailComposer(
   return openedMail;
 }
 
+Future<bool> openPhoneDialer(
+  BuildContext context,
+  String phone, {
+  String failureMessage = 'Unable to open phone dialer',
+}) async {
+  final cleaned = phone.trim();
+  if (cleaned.isEmpty) {
+    if (context.mounted) showAppSnackBar(context, failureMessage);
+    return false;
+  }
+  final normalized = cleaned.replaceAll(RegExp(r'[^\d+]'), '');
+  if (normalized.isEmpty) {
+    if (context.mounted) showAppSnackBar(context, failureMessage);
+    return false;
+  }
+  final telUri = Uri(scheme: 'tel', path: normalized);
+  final opened = await launchUrl(telUri, mode: LaunchMode.platformDefault);
+  if (!opened && context.mounted) {
+    showAppSnackBar(context, failureMessage);
+  }
+  return opened;
+}
+
 DateTime? _lastSnackAt;
 String? _lastSnackMessage;
 Timer? _snackAutoTimer;

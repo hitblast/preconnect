@@ -41,6 +41,8 @@ import 'package:preconnect/tools/time_utils.dart';
 import 'package:share_plus/share_plus.dart';
 
 part 'home_sections/home_dashboard_part.dart';
+part 'home_sections/home_dashboard_campus_map_part.dart';
+part 'home_sections/home_dashboard_view_part.dart';
 part 'home_sections/campus_map_models_part.dart';
 
 enum CaptiveWifiState { offline, validated, captive, unknown }

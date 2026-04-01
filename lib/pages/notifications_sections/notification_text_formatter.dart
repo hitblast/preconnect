@@ -75,7 +75,7 @@ String cleanNotificationBodyText(String raw, {String? title}) {
         (match) => '${match.group(1)} ${match.group(2)}',
       )
       .replaceAllMapped(
-        RegExp(r'(\d)([A-Za-z])'),
+        RegExp(r'(\d)([A-Z])'),
         (match) => '${match.group(1)} ${match.group(2)}',
       )
       .replaceAll(RegExp(r'[ \t]+\n'), '\n')

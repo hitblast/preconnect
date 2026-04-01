@@ -527,7 +527,7 @@ class _ClassScheduleState extends State<ClassSchedule> with RefreshBusState {
                         faculties: faculties,
                         consumedSeat: consumedSeat,
                         courseType: courseType,
-                        highlighted: isScrollTarget,
+                        highlighted: false,
                       ),
                     );
                   }),

@@ -101,11 +101,14 @@ class _ExamCountdownDigital extends StatelessWidget {
       );
     }
 
-    final units = <({String value, String label})>[
-      (value: days.toString(), label: 'Days'),
-      (value: hours.toString().padLeft(2, '0'), label: 'Hours'),
-      (value: minutes.toString().padLeft(2, '0'), label: 'Minutes'),
-    ];
+    final units = <({String value, String label})>[];
+    if (days > 0) {
+      units.add((value: days.toString(), label: 'Days'));
+    }
+    if (hours > 0) {
+      units.add((value: hours.toString().padLeft(2, '0'), label: 'Hours'));
+    }
+    units.add((value: minutes.toString().padLeft(2, '0'), label: 'Minutes'));
 
     return Row(
       mainAxisSize: MainAxisSize.min,

@@ -462,7 +462,7 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
                       const SizedBox(height: 8),
                       BracuCard(
                         key: isHighlighted ? _highlightKey : null,
-                        isHighlighted: isHighlighted,
+                        isHighlighted: false,
                         highlightColor: BracuPalette.primary,
                         child: Row(
                           children: [
@@ -614,7 +614,7 @@ class _ExamScheduleState extends State<ExamSchedule> with RefreshBusState {
                       const SizedBox(height: 8),
                       BracuCard(
                         key: isHighlighted ? _highlightKey : null,
-                        isHighlighted: isHighlighted,
+                        isHighlighted: false,
                         highlightColor: BracuPalette.primary,
                         child: Row(
                           children: [
