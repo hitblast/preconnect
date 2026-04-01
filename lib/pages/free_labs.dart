@@ -187,20 +187,32 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
     });
   }
 
+  String _dynamicHeaderTitle() {
+    return switch (_selectedFilter) {
+      _RoomFilter.labs => 'Free Labs',
+      _RoomFilter.classes => 'Free Classes',
+      _RoomFilter.theater => 'Free Theaters',
+    };
+  }
+
+  String _dynamicEmptyMessage() {
+    final weekday = formatWeekdayTitle(_activeDayName);
+    return switch (_selectedFilter) {
+      _RoomFilter.labs => 'No free labs found for $weekday.',
+      _RoomFilter.classes => 'No free classes found for $weekday.',
+      _RoomFilter.theater => 'No free theaters found for $weekday.',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     return BracuPageScaffold(
-      title: 'Free Labs',
+      title: _dynamicHeaderTitle(),
       subtitle: _headerDayLabel(),
       icon: Icons.computer_outlined,
       actions: [
         BracuSelectDropdownChip<_RoomFilter>(
           label: _selectedFilter.label,
-          icon: switch (_selectedFilter) {
-            _RoomFilter.classes => Icons.class_outlined,
-            _RoomFilter.labs => Icons.science_outlined,
-            _RoomFilter.theater => Icons.theaters_outlined,
-          },
           title: 'Choose Filter',
           subtitle: 'Filter free labs by room type',
           selectedValue: _selectedFilter,
@@ -209,19 +221,16 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
               value: _RoomFilter.labs,
               label: 'Labs',
               subtitle: 'Computer and lab rooms',
-              icon: Icons.science_outlined,
             ),
             BracuSelectOption<_RoomFilter>(
               value: _RoomFilter.classes,
               label: 'Classes',
               subtitle: 'Regular classrooms',
-              icon: Icons.class_outlined,
             ),
             BracuSelectOption<_RoomFilter>(
               value: _RoomFilter.theater,
               label: 'Theaters',
               subtitle: 'Lecture theater rooms',
-              icon: Icons.theaters_outlined,
             ),
           ],
           onSelected: _changeFilter,
@@ -246,8 +255,7 @@ class _FreeLabsPageState extends State<FreeLabsPage> {
             }
             return buildRefreshEmptyState(
               onRefresh: _refresh,
-              message:
-                  'No free labs found for ${formatWeekdayTitle(_activeDayName)}.',
+              message: _dynamicEmptyMessage(),
             );
           }
 
@@ -1028,7 +1036,7 @@ class _FreeRoomTime {
 enum _RoomFilter {
   classes('Classes'),
   labs('Labs'),
-  theater('Theater');
+  theater('Theaters');
 
   const _RoomFilter(this.label);
 

@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import 'package:preconnect/api/api_config.dart';
 import 'package:preconnect/api/auth_service.dart';
 import 'package:preconnect/api/exam_map_service.dart';
-import 'package:preconnect/api/notification_service.dart';
 import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/app.dart';
@@ -27,6 +26,7 @@ import 'package:preconnect/pages/settings.dart';
 import 'package:preconnect/pages/home_tab.dart';
 import 'package:preconnect/pages/home_sections/exam_countdown.dart';
 import 'package:preconnect/pages/home_sections/student_overview.dart';
+import 'package:preconnect/pages/shared_widgets/campus_map_shared.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/android_network_assist.dart';
@@ -41,9 +41,7 @@ import 'package:preconnect/tools/time_utils.dart';
 import 'package:share_plus/share_plus.dart';
 
 part 'home_sections/home_dashboard_part.dart';
-part 'home_sections/home_dashboard_campus_map_part.dart';
 part 'home_sections/home_dashboard_view_part.dart';
-part 'home_sections/campus_map_models_part.dart';
 
 enum CaptiveWifiState { offline, validated, captive, unknown }
 

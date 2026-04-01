@@ -193,6 +193,7 @@ class BracuImageCarousel extends StatefulWidget {
     this.aspectRatio = 16 / 9,
     this.borderRadius = 14,
     this.imageFit = BoxFit.cover,
+    this.maxBytesInPrefs = 8 * 1024 * 1024,
     this.autoPlay = false,
     this.autoPlayInterval = const Duration(seconds: 4),
   });
@@ -201,6 +202,7 @@ class BracuImageCarousel extends StatefulWidget {
   final double aspectRatio;
   final double borderRadius;
   final BoxFit imageFit;
+  final int maxBytesInPrefs;
   final bool autoPlay;
   final Duration autoPlayInterval;
 
@@ -267,6 +269,7 @@ class _BracuImageCarouselState extends State<BracuImageCarousel> {
               CachedImage(
                 url: widget.imageUrls.first,
                 fit: widget.imageFit,
+                maxBytesInPrefs: widget.maxBytesInPrefs,
                 placeholder: Container(
                   color: BracuPalette.primary.withValues(alpha: 0.08),
                 ),
@@ -288,6 +291,7 @@ class _BracuImageCarouselState extends State<BracuImageCarousel> {
                   return CachedImage(
                     url: widget.imageUrls[idx],
                     fit: widget.imageFit,
+                    maxBytesInPrefs: widget.maxBytesInPrefs,
                     placeholder: Container(
                       color: BracuPalette.primary.withValues(alpha: 0.08),
                     ),

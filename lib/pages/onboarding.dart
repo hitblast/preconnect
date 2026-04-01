@@ -1,6 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:preconnect/pages/devs.dart';
+import 'package:preconnect/pages/friend_schedule.dart';
+import 'package:preconnect/pages/free_labs.dart';
+import 'package:preconnect/pages/home_tab.dart';
+import 'package:preconnect/pages/seat_status.dart';
+import 'package:preconnect/pages/shared_widgets/campus_map_shared.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:preconnect/pages/home.dart';
 import 'package:preconnect/pages/login.dart';
@@ -17,6 +23,9 @@ class OnboardingPage extends StatefulWidget {
 }
 
 class _OnboardingPageState extends State<OnboardingPage> {
+  Future<CampusMapData?>? _campusMapFuture;
+  Future<String?>? _transportScheduleUrlFuture;
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +50,26 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   Future<void> _openLink(BuildContext context, String url) async {
     await openExternalUrl(context, url);
+  }
+
+  Future<void> _openCampusMapBottomSheet() async {
+    _campusMapFuture ??= fetchCampusMapData();
+    _transportScheduleUrlFuture ??= fetchTransportScheduleUrl();
+    if (!mounted) return;
+    await showCampusMapBottomSheet(
+      context,
+      campusMapFuture: _campusMapFuture!,
+      transportScheduleUrlFuture: _transportScheduleUrlFuture!,
+      showContacts: true,
+      showCallAction: false,
+      collapsedVisibleCount: 5,
+    );
+  }
+
+  Future<void> _openOnboardingQuickPage(Widget page) async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => page));
   }
 
   @override
@@ -206,7 +235,82 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      const spacing = 8.0;
+                      final width = (constraints.maxWidth - spacing * 3) / 4;
+                      return Center(
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: spacing,
+                          runSpacing: spacing,
+                          children: [
+                            _CompactQuickAccessCard(
+                              width: width,
+                              icon: Icons.event_seat_outlined,
+                              title: 'Seat',
+                              subtitle: 'Status',
+                              color: const Color(0xFF2C9DFF),
+                              onTap: () => _openOnboardingQuickPage(
+                                const SeatStatusPage(),
+                              ),
+                            ),
+                            _CompactQuickAccessCard(
+                              width: width,
+                              icon: Icons.science_outlined,
+                              title: 'Free',
+                              subtitle: 'Labs',
+                              color: const Color(0xFF22B573),
+                              onTap: () => _openOnboardingQuickPage(
+                                const FreeLabsPage(),
+                              ),
+                            ),
+                            _CompactQuickAccessCard(
+                              width: width,
+                              icon: Icons.people_outline_rounded,
+                              title: 'Friends',
+                              subtitle: 'Schedules',
+                              color: const Color(0xFF5B8DEF),
+                              onTap: () => _openOnboardingQuickPage(
+                                FriendSchedulePage(onNavigate: (HomeTab _) {}),
+                              ),
+                            ),
+                            _CompactQuickAccessCard(
+                              width: width,
+                              icon: Icons.developer_mode_outlined,
+                              title: 'Dev',
+                              subtitle: 'About',
+                              color: const Color(0xFF5B8DEF),
+                              onTap: () =>
+                                  _openOnboardingQuickPage(const DevsPage()),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _openCampusMapBottomSheet,
+                      icon: const Icon(Icons.map_rounded),
+                      label: const Text('Campus Map'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(44),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        textStyle: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
@@ -339,6 +443,82 @@ class _InfoCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CompactQuickAccessCard extends StatelessWidget {
+  const _CompactQuickAccessCard({
+    required this.width,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final double width;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: width,
+        padding: const EdgeInsets.fromLTRB(6, 6, 6, 5),
+        decoration: BoxDecoration(
+          color: BracuPalette.card(context),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: isDark
+              ? const []
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: BracuPalette.textPrimary(context),
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10.5,
+                height: 1.15,
+                color: BracuPalette.textSecondary(context),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

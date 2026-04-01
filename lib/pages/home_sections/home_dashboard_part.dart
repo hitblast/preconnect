@@ -28,7 +28,7 @@ class _HomeDashboardState extends State<_HomeDashboard> with RefreshBusState {
   DateTime? _lastAutoAssistantOpenAt;
   DateTime? _lastAutoSessionExtendAt;
   Timer? _captiveAutoTimer;
-  Future<_CampusMapData?>? _campusMapFuture;
+  Future<CampusMapData?>? _campusMapFuture;
   Future<String?>? _transportScheduleUrlFuture;
 
   static const Duration _captiveAutoPollInterval = Duration(seconds: 30);
@@ -199,8 +199,8 @@ class _HomeDashboardState extends State<_HomeDashboard> with RefreshBusState {
     }
     _isRefreshing = true;
     try {
-      _campusMapFuture = _fetchCampusMapData(forceRefresh: true);
-      _transportScheduleUrlFuture = _fetchTransportScheduleUrl(
+      _campusMapFuture = fetchCampusMapData(forceRefresh: true);
+      _transportScheduleUrlFuture = fetchTransportScheduleUrl(
         forceRefresh: true,
       );
       final fresh = await _loadData(forceRefresh: true);
@@ -626,6 +626,20 @@ class _HomeDashboardState extends State<_HomeDashboard> with RefreshBusState {
     if (sehriAt == null) return 'Iftar';
     if (iftarAt == null) return 'Sehri';
     return sehriAt.isBefore(iftarAt) ? 'Sehri' : 'Iftar';
+  }
+
+  Future<void> _openCampusMapBottomSheet() async {
+    _campusMapFuture ??= fetchCampusMapData();
+    _transportScheduleUrlFuture ??= fetchTransportScheduleUrl();
+    if (!mounted) return;
+    await showCampusMapBottomSheet(
+      context,
+      campusMapFuture: _campusMapFuture!,
+      transportScheduleUrlFuture: _transportScheduleUrlFuture!,
+      showContacts: true,
+      showCallAction: true,
+      collapsedVisibleCount: 5,
+    );
   }
 
   Future<void> _openCampusMapSheet() {

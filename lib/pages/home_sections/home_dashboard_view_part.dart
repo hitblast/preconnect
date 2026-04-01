@@ -555,7 +555,7 @@ extension _HomeDashboardViewPart on _HomeDashboardState {
           tab: HomeTab.devs,
           icon: Icons.developer_mode_outlined,
           title: 'Dev',
-          subtitle: 'About Us',
+          subtitle: 'About',
           color: Color(0xFF2C9DFF),
         ),
         _DashboardQuickAccessItem(
