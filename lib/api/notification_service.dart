@@ -191,6 +191,7 @@ class ScraperContentItem {
     required this.url,
     required this.publishedAt,
     this.imageUrl,
+    this.imageUrls = const <String>[],
   });
 
   final String id;
@@ -200,6 +201,7 @@ class ScraperContentItem {
   final String url;
   final DateTime? publishedAt;
   final String? imageUrl;
+  final List<String> imageUrls;
 }
 
 class NotificationService {
@@ -378,7 +380,7 @@ class NotificationService {
           final title = '${row['title'] ?? ''}'.trim();
           final message = '${row['message'] ?? ''}'.trim();
           final url = '${row['url'] ?? ''}'.trim();
-          final imageUrl = _normalizeScraperImageUrl(
+          final imageUrls = _normalizeScraperImageUrls(
             '${row['image_url'] ?? ''}',
           );
           final publishedRaw = '${row['published_date'] ?? ''}'.trim();
@@ -395,7 +397,8 @@ class NotificationService {
             message: message,
             url: url,
             publishedAt: _parseScraperPublishedDate(publishedRaw),
-            imageUrl: imageUrl.isEmpty ? null : imageUrl,
+            imageUrl: imageUrls.isEmpty ? null : imageUrls.first,
+            imageUrls: imageUrls,
           );
         })
         .whereType<ScraperContentItem>()
@@ -411,8 +414,10 @@ class NotificationService {
         .whereType<Map>()
         .map((item) => item.cast<String, dynamic>())
         .map((item) {
-          final normalizedImageUrl = _normalizeScraperImageUrl(
-            (item['imageUrl'] ?? '').toString(),
+          final normalizedImageUrls = _normalizeScraperImageUrls(
+            (item['imageUrls'] is List
+                ? jsonEncode(item['imageUrls'])
+                : (item['imageUrl'] ?? '').toString()),
           );
           return ScraperContentItem(
             id: (item['id'] ?? '').toString().trim().isEmpty
@@ -432,7 +437,10 @@ class NotificationService {
             publishedAt: DateTime.tryParse(
               (item['publishedAt'] ?? '').toString().trim(),
             ),
-            imageUrl: normalizedImageUrl.isEmpty ? null : normalizedImageUrl,
+            imageUrl: normalizedImageUrls.isEmpty
+                ? null
+                : normalizedImageUrls.first,
+            imageUrls: normalizedImageUrls,
           );
         })
         .toList(growable: false);
@@ -450,6 +458,7 @@ class NotificationService {
               'url': item.url,
               'publishedAt': item.publishedAt?.toIso8601String() ?? '',
               'imageUrl': item.imageUrl ?? '',
+              'imageUrls': item.imageUrls,
               'id': item.id,
             },
           )
@@ -490,45 +499,43 @@ class NotificationService {
     return DateTime.tryParse(normalized);
   }
 
-  String _normalizeScraperImageUrl(String raw) {
+  List<String> _normalizeScraperImageUrls(String raw) {
     final trimmed = raw.trim();
-    if (trimmed.isEmpty) return '';
+    if (trimmed.isEmpty) return const <String>[];
 
-    String pickFirstFromJsonArray(String value) {
+    final candidates = <String>[];
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
       try {
-        final decoded = jsonDecode(value);
+        final decoded = jsonDecode(trimmed);
         if (decoded is List) {
           for (final item in decoded) {
-            final candidate = '$item'.trim();
-            if (candidate.startsWith('http://') ||
-                candidate.startsWith('https://') ||
-                candidate.startsWith('//')) {
-              return candidate;
-            }
+            final value = '$item'.trim();
+            if (value.isNotEmpty) candidates.add(value);
           }
         }
       } catch (_) {}
-      return value;
+    }
+    if (candidates.isEmpty) {
+      candidates.add(trimmed);
     }
 
-    var resolved = trimmed;
-    if (resolved.startsWith('[') && resolved.endsWith(']')) {
-      resolved = pickFirstFromJsonArray(resolved);
-    }
+    final output = <String>{};
+    for (var resolved in candidates) {
+      if (resolved.startsWith('//')) {
+        resolved = 'https:$resolved';
+      } else if (!resolved.startsWith('http://') &&
+          !resolved.startsWith('https://')) {
+        continue;
+      }
 
-    if (resolved.startsWith('//')) {
-      resolved = 'https:$resolved';
-    } else if (!resolved.startsWith('http://') &&
-        !resolved.startsWith('https://')) {
-      return '';
+      try {
+        final uri = Uri.parse(resolved);
+        output.add(uri.toString());
+      } catch (_) {
+        output.add(Uri.encodeFull(resolved));
+      }
     }
-
-    try {
-      final uri = Uri.parse(resolved);
-      return uri.toString();
-    } catch (_) {
-      return Uri.encodeFull(resolved);
-    }
+    return output.toList(growable: false);
   }
 
   String _scraperContentId({

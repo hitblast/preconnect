@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:preconnect/api/notification_service.dart';
@@ -6,22 +8,80 @@ import 'package:preconnect/pages/notifications_sections/notification_text_format
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/cached_image.dart';
 
-class ScraperNotificationDetailPanel extends StatelessWidget {
+class ScraperNotificationDetailPanel extends StatefulWidget {
   const ScraperNotificationDetailPanel({super.key, required this.item});
 
   final NotificationListItem item;
 
   @override
+  State<ScraperNotificationDetailPanel> createState() =>
+      _ScraperNotificationDetailPanelState();
+}
+
+class _ScraperNotificationDetailPanelState
+    extends State<ScraperNotificationDetailPanel> {
+  late final PageController _imageController;
+  Timer? _autoPlayTimer;
+  int _activeImageIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _imageController = PageController();
+    _startAutoPlayIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant ScraperNotificationDetailPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_resolvedImageUrls().length != _resolvedImageUrls(oldWidget).length) {
+      _autoPlayTimer?.cancel();
+      _activeImageIndex = 0;
+      _startAutoPlayIfNeeded();
+    }
+  }
+
+  @override
+  void dispose() {
+    _autoPlayTimer?.cancel();
+    _imageController.dispose();
+    super.dispose();
+  }
+
+  List<String> _resolvedImageUrls([ScraperNotificationDetailPanel? panel]) {
+    final item = (panel ?? widget).item;
+    if (item.imageUrls.isNotEmpty) return item.imageUrls;
+    final fallback = (item.imageUrl ?? '').trim();
+    if (fallback.isEmpty) return const <String>[];
+    return <String>[fallback];
+  }
+
+  void _startAutoPlayIfNeeded() {
+    final imageUrls = _resolvedImageUrls();
+    if (imageUrls.length < 2) return;
+    _autoPlayTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted || !_imageController.hasClients) return;
+      final next = (_activeImageIndex + 1) % imageUrls.length;
+      _imageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final dragController = bracuBottomSheetScrollController(context);
     final cleanedDetails = cleanNotificationBodyText(
-      item.details,
-      title: item.title,
+      widget.item.details,
+      title: widget.item.title,
     );
     final parts = splitNotificationBodyParts(cleanedDetails);
-    final published = item.createdOn == null
-        ? item.module
-        : '${item.module}  •  ${DateFormat('EEEE, d MMMM yyyy, h:mm a').format(item.createdOn!.toLocal())}';
+    final imageUrls = _resolvedImageUrls();
+    final published = widget.item.createdOn == null
+        ? widget.item.module
+        : '${widget.item.module}  •  ${DateFormat('EEEE, d MMMM yyyy, h:mm a').format(widget.item.createdOn!.toLocal())}';
     return bracuBottomSheetSurface(
       context,
       child: SingleChildScrollView(
@@ -47,7 +107,9 @@ class ScraperNotificationDetailPanel extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    item.title.isEmpty ? 'Notification' : item.title,
+                    widget.item.title.isEmpty
+                        ? 'Notification'
+                        : widget.item.title,
                     style: TextStyle(
                       color: BracuPalette.textPrimary(context),
                       fontSize: 22,
@@ -70,21 +132,101 @@ class ScraperNotificationDetailPanel extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            if ((item.imageUrl ?? '').trim().isNotEmpty) ...[
+            if (imageUrls.isNotEmpty) ...[
               const SizedBox(height: 14),
               ClipRRect(
                 borderRadius: BorderRadius.circular(14),
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: CachedImage(
-                    url: item.imageUrl!.trim(),
-                    fit: BoxFit.cover,
-                    placeholder: Container(
-                      color: BracuPalette.primary.withValues(alpha: 0.08),
-                    ),
-                    error: Container(
-                      color: BracuPalette.primary.withValues(alpha: 0.08),
-                    ),
+                  child: Stack(
+                    children: [
+                      if (imageUrls.length == 1)
+                        CachedImage(
+                          url: imageUrls.first,
+                          fit: BoxFit.cover,
+                          placeholder: Container(
+                            color: BracuPalette.primary.withValues(alpha: 0.08),
+                          ),
+                          error: Container(
+                            color: BracuPalette.primary.withValues(alpha: 0.08),
+                          ),
+                        )
+                      else
+                        PageView.builder(
+                          controller: _imageController,
+                          itemCount: imageUrls.length,
+                          onPageChanged: (index) {
+                            if (!mounted) return;
+                            setState(() {
+                              _activeImageIndex = index;
+                            });
+                          },
+                          itemBuilder: (context, index) {
+                            return CachedImage(
+                              url: imageUrls[index],
+                              fit: BoxFit.cover,
+                              placeholder: Container(
+                                color: BracuPalette.primary.withValues(
+                                  alpha: 0.08,
+                                ),
+                              ),
+                              error: Container(
+                                color: BracuPalette.primary.withValues(
+                                  alpha: 0.08,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      if (imageUrls.length >= 2)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 10,
+                          child: Center(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.35),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: List.generate(imageUrls.length, (
+                                    index,
+                                  ) {
+                                    final isActive = index == _activeImageIndex;
+                                    return AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 2,
+                                      ),
+                                      width: isActive ? 14 : 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: isActive
+                                            ? Colors.white
+                                            : Colors.white.withValues(
+                                                alpha: 0.5,
+                                              ),
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -140,13 +282,13 @@ class ScraperNotificationDetailPanel extends StatelessWidget {
                 ),
               ),
             ],
-            if ((item.url ?? '').trim().isNotEmpty) ...[
+            if ((widget.item.url ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () async {
-                    await openExternalUrl(context, item.url!);
+                    await openExternalUrl(context, widget.item.url!);
                   },
                   icon: const Icon(Icons.open_in_new),
                   label: const Text('Open Source'),

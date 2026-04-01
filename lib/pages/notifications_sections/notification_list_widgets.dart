@@ -24,6 +24,7 @@ class NotificationListItem {
     required this.details,
     required this.url,
     required this.imageUrl,
+    required this.imageUrls,
     required this.seen,
     this.connectItem,
   });
@@ -35,6 +36,7 @@ class NotificationListItem {
   final String details;
   final String? url;
   final String? imageUrl;
+  final List<String> imageUrls;
   final bool seen;
   final RecentConnectNotification? connectItem;
 }
