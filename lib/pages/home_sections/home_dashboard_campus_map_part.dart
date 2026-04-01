@@ -18,7 +18,19 @@ extension _HomeDashboardCampusMapPart on _HomeDashboardState {
       forceRefresh: forceRefresh,
     );
     if (payload == null) return null;
-    return _CampusMapData.fromJson(payload);
+    final parsed = _CampusMapData.fromJson(payload);
+    final hasAnyImage =
+        parsed.mapImageUrl.isNotEmpty || parsed.images.isNotEmpty;
+    if (hasAnyImage || forceRefresh) return parsed;
+
+    final freshPayload = await ScraperDataService().fetchMap(
+      path: '/data/map',
+      cacheKey: 'scraper_campus_map_v1',
+      ttl: const Duration(hours: 12),
+      forceRefresh: true,
+    );
+    if (freshPayload == null) return parsed;
+    return _CampusMapData.fromJson(freshPayload);
   }
 
   Future<String?> _fetchTransportScheduleUrl({
@@ -40,11 +52,14 @@ extension _HomeDashboardCampusMapPart on _HomeDashboardState {
   Future<void> _openCampusMapBottomSheet() async {
     _campusMapFuture ??= _fetchCampusMapData();
     _transportScheduleUrlFuture ??= _fetchTransportScheduleUrl();
+    var highlightsExpanded = false;
+    var officesExpanded = false;
+    var emergencyExpanded = false;
     if (!mounted) return;
     await showBracuBottomSheet<void>(
       context,
       title: 'Campus Map',
-      subtitle: 'Directions, highlights and key contacts',
+      subtitle: 'Directions, highlights and contacts',
       builder: (sheetContext, textPrimary, textSecondary) {
         return FutureBuilder<List<dynamic>>(
           future: Future.wait<dynamic>([
@@ -141,6 +156,15 @@ extension _HomeDashboardCampusMapPart on _HomeDashboardState {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (mapData.mapImageUrl.isNotEmpty) ...[
+                        BracuImageCarousel(
+                          imageUrls: <String>[mapData.mapImageUrl],
+                          borderRadius: 10,
+                          aspectRatio: 16 / 10,
+                          imageFit: BoxFit.fitWidth,
+                        ),
+                        const SizedBox(height: 10),
+                      ],
                       Text(
                         mapData.campusName.isEmpty
                             ? 'BRAC University Campus'
@@ -252,171 +276,256 @@ extension _HomeDashboardCampusMapPart on _HomeDashboardState {
                     );
                   },
                 ),
+                if (mapData.images.isNotEmpty) ...[
+                  sectionTitle('Campus Gallery'),
+                  BracuImageCarousel(
+                    imageUrls: mapData.images,
+                    borderRadius: 12,
+                  ),
+                ],
                 if (mapData.highlights.isNotEmpty) ...[
                   sectionTitle('Highlights'),
-                  ...mapData.highlights.map(
-                    (item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
+                  StatefulBuilder(
+                    builder: (context, setLocalState) {
+                      final visibleHighlights = highlightsExpanded
+                          ? mapData.highlights
+                          : mapData.highlights.take(3).toList(growable: false);
+                      return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Icon(
-                              Icons.circle,
-                              size: 6,
-                              color: BracuPalette.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              item,
-                              style: TextStyle(
-                                color: textSecondary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                height: 1.35,
+                          ...visibleHighlights.map(
+                            (item) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Icon(
+                                      Icons.circle,
+                                      size: 6,
+                                      color: BracuPalette.primary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      item,
+                                      style: TextStyle(
+                                        color: textSecondary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.35,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
+                          if (mapData.highlights.length > 3)
+                            buildCenteredOutlinedActionButton(
+                              label: highlightsExpanded
+                                  ? 'Show Less'
+                                  : 'Show More',
+                              padding: const EdgeInsets.only(top: 2, bottom: 2),
+                              onPressed: () {
+                                setLocalState(() {
+                                  highlightsExpanded = !highlightsExpanded;
+                                });
+                              },
+                            ),
                         ],
-                      ),
-                    ),
+                      );
+                    },
                   ),
                 ],
                 if (mapData.offices.isNotEmpty) ...[
                   sectionTitle('General Contacts'),
-                  ...mapData.offices.map((office) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: minimalBlock(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              office.office,
-                              style: TextStyle(
-                                color: textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            if (office.emails.isNotEmpty) ...[
-                              const SizedBox(height: 6),
-                              ...office.emails.map(
-                                (email) => Row(
+                  StatefulBuilder(
+                    builder: (context, setLocalState) {
+                      final visibleOffices = officesExpanded
+                          ? mapData.offices
+                          : mapData.offices.take(3).toList(growable: false);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ...visibleOffices.map((office) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: minimalBlock(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                      child: Text(
-                                        email,
+                                    Text(
+                                      office.office,
+                                      style: TextStyle(
+                                        color: textPrimary,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    if (office.emails.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      ...office.emails.map(
+                                        (email) => Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                email,
+                                                style: TextStyle(
+                                                  color: textSecondary,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                            IconButton(
+                                              onPressed: () => openMailComposer(
+                                                sheetContext,
+                                                email,
+                                              ),
+                                              icon: const Icon(
+                                                Icons.email_outlined,
+                                                size: 18,
+                                              ),
+                                              tooltip: 'Email',
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ] else ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'No email listed',
                                         style: TextStyle(
                                           color: textSecondary,
                                           fontSize: 11,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
-                                    ),
-                                    IconButton(
-                                      onPressed: () =>
-                                          openMailComposer(sheetContext, email),
-                                      icon: const Icon(
-                                        Icons.email_outlined,
-                                        size: 18,
-                                      ),
-                                      tooltip: 'Email',
-                                    ),
+                                    ],
                                   ],
                                 ),
                               ),
-                            ] else ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                'No email listed',
-                                style: TextStyle(
-                                  color: textSecondary,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
+                            );
+                          }),
+                          if (mapData.offices.length > 3)
+                            buildCenteredOutlinedActionButton(
+                              label: officesExpanded
+                                  ? 'Show Less'
+                                  : 'Show More',
+                              padding: const EdgeInsets.only(top: 2, bottom: 2),
+                              onPressed: () {
+                                setLocalState(() {
+                                  officesExpanded = !officesExpanded;
+                                });
+                              },
+                            ),
+                        ],
+                      );
+                    },
+                  ),
                 ],
                 if (mapData.emergencyContacts.isNotEmpty) ...[
                   sectionTitle('Emergency Contacts'),
-                  ...mapData.emergencyContacts.map((item) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: minimalBlock(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.name,
-                              style: TextStyle(
-                                color: textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            if (item.services.isNotEmpty) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                item.services,
-                                style: TextStyle(
-                                  color: textSecondary,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                            if (item.phones.isNotEmpty) ...[
-                              const SizedBox(height: 6),
-                              ...item.phones.map(
-                                (phone) => Row(
+                  StatefulBuilder(
+                    builder: (context, setLocalState) {
+                      final visibleEmergency = emergencyExpanded
+                          ? mapData.emergencyContacts
+                          : mapData.emergencyContacts
+                                .take(3)
+                                .toList(growable: false);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ...visibleEmergency.map((item) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: minimalBlock(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                      child: Text(
-                                        phone,
+                                    Text(
+                                      item.name,
+                                      style: TextStyle(
+                                        color: textPrimary,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    if (item.services.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        item.services,
                                         style: TextStyle(
                                           color: textSecondary,
                                           fontSize: 11,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
-                                    ),
-                                    IconButton(
-                                      onPressed: () =>
-                                          _handlePhoneTap(sheetContext, phone),
-                                      icon: const Icon(
-                                        Icons.call_outlined,
-                                        size: 18,
+                                    ],
+                                    if (item.phones.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      ...item.phones.map(
+                                        (phone) => Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                phone,
+                                                style: TextStyle(
+                                                  color: textSecondary,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                            IconButton(
+                                              onPressed: () => _handlePhoneTap(
+                                                sheetContext,
+                                                phone,
+                                              ),
+                                              icon: const Icon(
+                                                Icons.call_outlined,
+                                                size: 18,
+                                              ),
+                                              tooltip: 'Call',
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      tooltip: 'Call',
-                                    ),
+                                    ] else ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'No phone listed',
+                                        style: TextStyle(
+                                          color: textSecondary,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
-                            ] else ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                'No phone listed',
-                                style: TextStyle(
-                                  color: textSecondary,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
+                            );
+                          }),
+                          if (mapData.emergencyContacts.length > 3)
+                            buildCenteredOutlinedActionButton(
+                              label: emergencyExpanded
+                                  ? 'Show Less'
+                                  : 'Show More',
+                              padding: const EdgeInsets.only(top: 2, bottom: 2),
+                              onPressed: () {
+                                setLocalState(() {
+                                  emergencyExpanded = !emergencyExpanded;
+                                });
+                              },
+                            ),
+                        ],
+                      );
+                    },
+                  ),
                 ],
               ],
             );

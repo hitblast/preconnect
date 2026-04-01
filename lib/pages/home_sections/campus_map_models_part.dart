@@ -23,9 +23,11 @@ class _CampusMapData {
   const _CampusMapData({
     required this.campusName,
     required this.address,
+    required this.mapImageUrl,
     required this.googleMapsUrl,
     required this.sourceUrl,
     required this.transportScheduleUrl,
+    required this.images,
     required this.highlights,
     required this.primaryEmail,
     required this.primaryPhone,
@@ -36,9 +38,11 @@ class _CampusMapData {
 
   final String campusName;
   final String address;
+  final String mapImageUrl;
   final String googleMapsUrl;
   final String sourceUrl;
   final String transportScheduleUrl;
+  final List<String> images;
   final List<String> highlights;
   final String primaryEmail;
   final String primaryPhone;
@@ -72,6 +76,31 @@ class _CampusMapData {
               .where((item) => item.isNotEmpty)
               .toList(growable: false)
         : const <String>[];
+    final imagesRaw = json['images'];
+    var images = imagesRaw is List
+        ? imagesRaw
+              .map((item) {
+                if (item is Map) {
+                  final map = item.cast<dynamic, dynamic>();
+                  return '${map['url'] ?? map['image_url'] ?? map['src'] ?? ''}'
+                      .trim();
+                }
+                return '$item'.trim();
+              })
+              .where(
+                (item) =>
+                    item.isNotEmpty &&
+                    (item.startsWith('http://') || item.startsWith('https://')),
+              )
+              .toList(growable: false)
+        : const <String>[];
+    if (images.isEmpty) {
+      final mapImageUrl = '${json['map_image_url'] ?? ''}'.trim();
+      if (mapImageUrl.startsWith('http://') ||
+          mapImageUrl.startsWith('https://')) {
+        images = <String>[mapImageUrl];
+      }
+    }
     final transportRaw = json['transport'];
     final transportMap = transportRaw is Map
         ? transportRaw.cast<String, dynamic>()
@@ -112,11 +141,13 @@ class _CampusMapData {
     return _CampusMapData(
       campusName: '${json['campus_name'] ?? ''}'.trim(),
       address: '${json['address'] ?? ''}'.trim(),
+      mapImageUrl: '${json['map_image_url'] ?? ''}'.trim(),
       googleMapsUrl: '${json['google_maps_url'] ?? ''}'.trim(),
       sourceUrl: '${json['source_url'] ?? ''}'.trim(),
       transportScheduleUrl: '${json['schedule_url'] ?? ''}'.trim().isNotEmpty
           ? '${json['schedule_url'] ?? ''}'.trim()
           : '${transportMap?['schedule_url'] ?? ''}'.trim(),
+      images: images,
       highlights: highlights,
       primaryEmail: primaryEmail,
       primaryPhone: primaryPhone,

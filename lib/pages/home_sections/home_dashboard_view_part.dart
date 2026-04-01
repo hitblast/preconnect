@@ -457,7 +457,7 @@ extension _HomeDashboardViewPart on _HomeDashboardState {
                             BracuActionBannerCard(
                               icon: Icons.map_outlined,
                               title: 'Campus Map & Contacts',
-                              subtitle: 'Locations and emergency details',
+                              subtitle: 'Locations and contact details',
                               iconColor: const Color(0xFF22B573),
                               onTap: _openCampusMapSheet,
                             ),

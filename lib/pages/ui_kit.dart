@@ -112,9 +112,15 @@ Future<bool> openExternalUrl(
     if (context.mounted) showAppSnackBar(context, failureMessage);
     return false;
   }
-  final mode = kIsWeb ? LaunchMode.platformDefault : mobilePreferredMode;
+  final platform = Theme.of(context).platform;
+  final isMobilePlatform =
+      !kIsWeb &&
+      (platform == TargetPlatform.android || platform == TargetPlatform.iOS);
+  final mode = isMobilePlatform
+      ? mobilePreferredMode
+      : LaunchMode.platformDefault;
   var launched = await launchUrl(uri, mode: mode);
-  if (!launched && !kIsWeb) {
+  if (!launched && isMobilePlatform) {
     launched = await launchUrl(uri, mode: mobileFallbackMode);
   }
   if (!launched && context.mounted) {
@@ -165,6 +171,175 @@ Future<bool> openPhoneDialer(
     showAppSnackBar(context, failureMessage);
   }
   return opened;
+}
+
+Widget buildCenteredOutlinedActionButton({
+  required String label,
+  required VoidCallback onPressed,
+  EdgeInsetsGeometry padding = const EdgeInsets.only(top: 2, bottom: 8),
+}) {
+  return Padding(
+    padding: padding,
+    child: Center(
+      child: OutlinedButton(onPressed: onPressed, child: Text(label)),
+    ),
+  );
+}
+
+class BracuImageCarousel extends StatefulWidget {
+  const BracuImageCarousel({
+    super.key,
+    required this.imageUrls,
+    this.aspectRatio = 16 / 9,
+    this.borderRadius = 14,
+    this.imageFit = BoxFit.cover,
+    this.autoPlay = false,
+    this.autoPlayInterval = const Duration(seconds: 4),
+  });
+
+  final List<String> imageUrls;
+  final double aspectRatio;
+  final double borderRadius;
+  final BoxFit imageFit;
+  final bool autoPlay;
+  final Duration autoPlayInterval;
+
+  @override
+  State<BracuImageCarousel> createState() => _BracuImageCarouselState();
+}
+
+class _BracuImageCarouselState extends State<BracuImageCarousel> {
+  late final PageController _controller;
+  Timer? _autoPlayTimer;
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController();
+    _restartAutoPlay();
+  }
+
+  @override
+  void didUpdateWidget(covariant BracuImageCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final shouldRestart =
+        oldWidget.autoPlay != widget.autoPlay ||
+        oldWidget.autoPlayInterval != widget.autoPlayInterval ||
+        oldWidget.imageUrls.length != widget.imageUrls.length;
+    if (!shouldRestart) return;
+    _autoPlayTimer?.cancel();
+    _index = 0;
+    _restartAutoPlay();
+  }
+
+  @override
+  void dispose() {
+    _autoPlayTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _restartAutoPlay() {
+    if (!widget.autoPlay || widget.imageUrls.length < 2) return;
+    _autoPlayTimer = Timer.periodic(widget.autoPlayInterval, (_) {
+      if (!mounted || !_controller.hasClients) return;
+      final next = (_index + 1) % widget.imageUrls.length;
+      _controller.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.imageUrls.isEmpty) return const SizedBox.shrink();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(widget.borderRadius),
+      child: AspectRatio(
+        aspectRatio: widget.aspectRatio,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (widget.imageUrls.length == 1)
+              CachedImage(
+                url: widget.imageUrls.first,
+                fit: widget.imageFit,
+                placeholder: Container(
+                  color: BracuPalette.primary.withValues(alpha: 0.08),
+                ),
+                error: Container(
+                  color: BracuPalette.primary.withValues(alpha: 0.08),
+                ),
+              )
+            else
+              PageView.builder(
+                controller: _controller,
+                itemCount: widget.imageUrls.length,
+                onPageChanged: (value) {
+                  if (!mounted) return;
+                  setState(() {
+                    _index = value;
+                  });
+                },
+                itemBuilder: (context, idx) {
+                  return CachedImage(
+                    url: widget.imageUrls[idx],
+                    fit: widget.imageFit,
+                    placeholder: Container(
+                      color: BracuPalette.primary.withValues(alpha: 0.08),
+                    ),
+                    error: Container(
+                      color: BracuPalette.primary.withValues(alpha: 0.08),
+                    ),
+                  );
+                },
+              ),
+            if (widget.imageUrls.length >= 2)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 10,
+                child: Center(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(widget.imageUrls.length, (i) {
+                          final active = i == _index;
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            width: active ? 14 : 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: active
+                                  ? Colors.white
+                                  : Colors.white.withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 DateTime? _lastSnackAt;

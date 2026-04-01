@@ -199,6 +199,10 @@ class _HomeDashboardState extends State<_HomeDashboard> with RefreshBusState {
     }
     _isRefreshing = true;
     try {
+      _campusMapFuture = _fetchCampusMapData(forceRefresh: true);
+      _transportScheduleUrlFuture = _fetchTransportScheduleUrl(
+        forceRefresh: true,
+      );
       final fresh = await _loadData(forceRefresh: true);
       if (!mounted) return;
       setState(() {

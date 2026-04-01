@@ -204,21 +204,16 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   ),
                 ),
                 if (hasMore)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2, bottom: 8),
-                    child: Center(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          setState(() {
-                            _visibleItemCount = math.min(
-                              _visibleItemCount + _pageSize,
-                              items.length,
-                            );
-                          });
-                        },
-                        child: const Text('Load More'),
-                      ),
-                    ),
+                  buildCenteredOutlinedActionButton(
+                    label: 'Load More',
+                    onPressed: () {
+                      setState(() {
+                        _visibleItemCount = math.min(
+                          _visibleItemCount + _pageSize,
+                          items.length,
+                        );
+                      });
+                    },
                   ),
               ],
             ),
