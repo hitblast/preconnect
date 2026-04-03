@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:preconnect/api/schedule_service.dart';
 import 'package:preconnect/model/section_info.dart' as section;
+import 'package:preconnect/pages/shared_widgets/course_community_sheet.dart';
 import 'package:preconnect/pages/shared_widgets/schedule_entry_card.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
@@ -158,6 +159,7 @@ class _ClassScheduleState extends State<ClassSchedule> with RefreshBusState {
           "consumedSeat": section.consumedSeat,
           "capacity": section.capacity,
           "courseType": section.courseType,
+          "semesterSessionId": section.semesterSessionId,
         });
 
         if (shouldHighlightCurrentSemester) {
@@ -335,6 +337,37 @@ class _ClassScheduleState extends State<ClassSchedule> with RefreshBusState {
     }
   }
 
+  Future<void> _openClassActionsSheet({
+    required String courseCode,
+    required String sectionName,
+    required section.ClassSchedule schedule,
+    required bool isRamadan,
+    required String? roomNumber,
+    required String? faculties,
+    required int? consumedSeat,
+    required String? courseType,
+    required String semesterLabel,
+  }) async {
+    await showBracuBottomSheet<void>(
+      context,
+      title: courseCode,
+      initialChildSize: 0.88,
+      builder: (sheetContext, textPrimary, textSecondary) {
+        return CourseCommunitySheet.forClass(
+          courseCode: courseCode,
+          sectionName: sectionName,
+          classSchedule: schedule,
+          isRamadan: isRamadan,
+          roomNumber: roomNumber,
+          faculties: faculties,
+          consumedSeat: consumedSeat,
+          courseType: courseType,
+          semesterLabel: semesterLabel,
+        );
+      },
+    );
+  }
+
   Future<_ScheduleData> _loadScheduleFromJson(String? scheduleJson) async {
     final shouldHighlightCurrentSemester = _selectedSemesterSessionId == null;
     final ramadanFuture = RamadanTiming.isRamadan(forceRefresh: true);
@@ -502,6 +535,8 @@ class _ClassScheduleState extends State<ClassSchedule> with RefreshBusState {
                     final faculties = entry["faculties"] as String?;
                     final consumedSeat = entry["consumedSeat"] as int?;
                     final courseType = (entry["courseType"] as String?)?.trim();
+                    final semesterSessionId =
+                        entry["semesterSessionId"] as int?;
                     final isScrollTarget =
                         shouldHighlightCurrentSemester &&
                         scrollSchedule == s &&
@@ -528,6 +563,24 @@ class _ClassScheduleState extends State<ClassSchedule> with RefreshBusState {
                         consumedSeat: consumedSeat,
                         courseType: courseType,
                         highlighted: false,
+                        onTap: () {
+                          final semesterLabel = semesterSessionId == null
+                              ? _semesterLabel(_selectedSemesterSessionId)
+                              : formatSemesterFromSessionIdInt(
+                                  semesterSessionId,
+                                );
+                          _openClassActionsSheet(
+                            courseCode: '$code',
+                            sectionName: sectionName?.toString() ?? '',
+                            schedule: s,
+                            isRamadan: isRamadan,
+                            roomNumber: room?.toString(),
+                            faculties: faculties,
+                            consumedSeat: consumedSeat,
+                            courseType: courseType,
+                            semesterLabel: semesterLabel,
+                          );
+                        },
                       ),
                     );
                   }),

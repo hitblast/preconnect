@@ -73,17 +73,6 @@ Future<T?> showBracuBottomSheet<T>(
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        if (subtitle != null && subtitle.trim().isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle.trim(),
-                            style: TextStyle(
-                              color: textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),

@@ -17,6 +17,7 @@ class ScheduleEntryCard extends StatelessWidget {
     this.highlighted = false,
     this.highlightColor = BracuPalette.primary,
     this.wrapInCard = true,
+    this.onTap,
   });
 
   final String? sectionName;
@@ -30,6 +31,7 @@ class ScheduleEntryCard extends StatelessWidget {
   final bool highlighted;
   final Color highlightColor;
   final bool wrapInCard;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -145,11 +147,21 @@ class ScheduleEntryCard extends StatelessWidget {
     if (!wrapInCard) {
       return content;
     }
-
-    return BracuCard(
+    final card = BracuCard(
       isHighlighted: highlighted,
       highlightColor: highlightColor,
       child: content,
+    );
+    if (onTap == null) {
+      return card;
+    }
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: card,
+      ),
     );
   }
 }

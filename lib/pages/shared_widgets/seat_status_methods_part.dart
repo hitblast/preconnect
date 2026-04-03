@@ -262,6 +262,7 @@ extension _SeatStatusPageStateMethods on _SeatStatusPageState {
                   item: item,
                   hasAlert: _seatAlerts[item.sectionId]?.hasAnyRule == true,
                   onAlertTap: () => _handleSeatAlertTap(item),
+                  onTap: () => _openCourseCommunitySheet(item),
                 ),
               );
             },

@@ -7,11 +7,14 @@ import 'package:intl/intl.dart';
 import 'package:preconnect/api/seat_alert_push_service.dart';
 import 'package:preconnect/api/seat_status_service.dart';
 import 'package:preconnect/pages/home_tab.dart';
+import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/model/seat_status_info.dart';
 import 'package:preconnect/pages/notifications.dart';
+import 'package:preconnect/pages/shared_widgets/course_community_sheet.dart';
 import 'package:preconnect/pages/ui_kit.dart';
 import 'package:preconnect/tools/push_notifications_service.dart';
 import 'package:preconnect/tools/refresh_bus.dart';
+import 'package:preconnect/tools/ramadan_timing.dart';
 import 'package:preconnect/tools/time_utils.dart';
 
 part 'shared_widgets/seat_status_methods_part.dart';
@@ -452,6 +455,42 @@ class _SeatStatusPageState extends State<SeatStatusPage>
     await _openSeatAlertSheet(item);
   }
 
+  Future<void> _openCourseCommunitySheet(_SeatStatusCardData item) async {
+    final primarySchedule = item.classSchedule.isNotEmpty
+        ? item.classSchedule.first
+        : (item.labSchedule.isNotEmpty ? item.labSchedule.first : null);
+    if (primarySchedule == null) {
+      showAppSnackBar(context, 'Not available');
+      return;
+    }
+    final schedule = section.ClassSchedule(
+      startTime: primarySchedule.startTime,
+      endTime: primarySchedule.endTime,
+      day: primarySchedule.day,
+    );
+    final isRamadan = await RamadanTiming.isRamadan();
+    if (!mounted) return;
+    await showBracuBottomSheet<void>(
+      context,
+      title: item.courseCode,
+      initialChildSize: 0.88,
+      builder: (sheetContext, textPrimary, textSecondary) {
+        return CourseCommunitySheet.forClass(
+          courseCode: item.courseCode,
+          sectionName: item.sectionName,
+          semesterLabel: 'Current',
+          roomNumber: item.room.isNotEmpty ? item.room : item.labRoom,
+          faculties: item.facultyInitial,
+          consumedSeat: item.consumed,
+          courseType: null,
+          classSchedule: schedule,
+          isRamadan: isRamadan,
+          showActions: false,
+        );
+      },
+    );
+  }
+
   void _showSeatAlertPermissionSnackBar() {
     showAppSnackBar(
       context,
@@ -474,11 +513,13 @@ class _SeatStatusCard extends StatelessWidget {
     required this.item,
     required this.hasAlert,
     required this.onAlertTap,
+    this.onTap,
   });
 
   final _SeatStatusCardData item;
   final bool hasAlert;
   final VoidCallback onAlertTap;
+  final VoidCallback? onTap;
 
   Future<void> _openFacultyEmail(BuildContext context) async {
     await openMailComposer(context, item.facultyEmail);
@@ -489,7 +530,7 @@ class _SeatStatusCard extends StatelessWidget {
     final textPrimary = BracuPalette.textPrimary(context);
     final textSecondary = BracuPalette.textSecondary(context);
 
-    return BracuCard(
+    final card = BracuCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -695,6 +736,15 @@ class _SeatStatusCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+    if (onTap == null) return card;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: card,
       ),
     );
   }
