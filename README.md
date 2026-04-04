@@ -235,3 +235,31 @@ Bug reports, feature requests, and ideas are welcome. Please create issues in ou
 This project is licensed under GPL-3.0 (see [LICENSE](LICENSE)).
 
 Third-party packages follow their own license (see package pages on [pub.dev](https://pub.dev)).
+
+## Trademarks
+
+Copyright (c) 2025-present PreConnect contributors. The PreConnect name and logo are trademarks of PreConnect contributors.
+
+Please see our [trademark guidelines](https://github.com/sabbirba/preconnect/blob/main/TRADEMARKS.md) for info on acceptable usage.
+
+## Contributors
+
+<a href="https://github.com/sabbirba/preconnect/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=sabbirba/preconnect&max=400&columns=20" width="100%"/>
+</a>
+
+## Star History
+
+<a href="https://star-history.com/#sabbirba/preconnect">
+  <picture>
+    <source
+      media="(prefers-color-scheme: dark)"
+      srcset="https://api.star-history.com/svg?repos=sabbirba/preconnect&type=Date&theme=dark"
+    />
+    <source
+      media="(prefers-color-scheme: light)"
+      srcset="https://api.star-history.com/svg?repos=sabbirba/preconnect&type=Date"
+    />
+    <img src="https://api.star-history.com/svg?repos=sabbirba/preconnect&type=Date" alt="Star History Chart" width="100%" />
+  </picture>
+</a>
