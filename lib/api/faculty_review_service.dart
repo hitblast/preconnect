@@ -37,6 +37,9 @@ class FacultySummary {
     required this.email,
     required this.courses,
     required this.stats,
+    this.reviewSummary = '',
+    this.reviewInsights = const <String>[],
+    this.sourceLabel = '',
   });
 
   final int facultyId;
@@ -45,6 +48,9 @@ class FacultySummary {
   final String email;
   final List<String> courses;
   final FacultyRatingStats stats;
+  final String reviewSummary;
+  final List<String> reviewInsights;
+  final String sourceLabel;
 
   factory FacultySummary.fromJson(Map<String, dynamic> json) {
     return FacultySummary(
@@ -62,6 +68,14 @@ class FacultySummary {
         (json['stats'] as Map?)?.cast<String, dynamic>() ??
             const <String, dynamic>{},
       ),
+      reviewSummary: '${json['reviewSummary'] ?? ''}'.trim(),
+      reviewInsights:
+          (json['reviewInsights'] as List?)
+              ?.map((v) => '$v'.trim())
+              .where((v) => v.isNotEmpty)
+              .toList() ??
+          const <String>[],
+      sourceLabel: '${json['sourceLabel'] ?? ''}'.trim(),
     );
   }
 }
@@ -78,6 +92,7 @@ class FacultyReviewItem {
     required this.comment,
     required this.isApproved,
     required this.canDelete,
+    required this.canReport,
     this.createdAt,
     this.updatedAt,
   });
@@ -92,6 +107,7 @@ class FacultyReviewItem {
   final String comment;
   final bool isApproved;
   final bool? canDelete;
+  final bool canReport;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -126,6 +142,8 @@ class FacultyReviewItem {
           (json['is_owner'] as bool?) ??
           (json['isMine'] as bool?) ??
           (json['is_mine'] as bool?),
+      canReport:
+          (json['canReport'] as bool?) ?? (json['can_report'] as bool?) ?? true,
       createdAt: DateTime.tryParse(
         '${json['createdAt'] ?? json['created_at'] ?? ''}',
       ),
@@ -219,11 +237,52 @@ class FacultyReviewService {
     int offset = 0,
   }) async {
     final initial = facultyInitial.trim().toUpperCase();
-    final response = await _client.publicGet(
-      '$_base/v1/faculty-reviews/${Uri.encodeComponent(initial)}?limit=$limit&offset=$offset',
-      headers: _facultyBearerHeaders,
+    final apiBundle = await _fetchApiBundle(initial);
+    final dbFeed = await _fetchDatabaseFeed(
+      initial,
+      limit: limit,
+      offset: offset,
     );
-    return FacultyReviewFeed.fromJson(_decodeMap(response.body));
+
+    final summary =
+        apiBundle?.summary ??
+        dbFeed?.faculty ??
+        FacultySummary(
+          facultyId: 0,
+          initial: initial,
+          name: '',
+          email: '',
+          courses: const <String>[],
+          stats: const FacultyRatingStats(
+            reviewsTotal: 0,
+            overall: 0,
+            teaching: 0,
+            fairness: 0,
+            behavior: 0,
+          ),
+          reviewSummary: '',
+          reviewInsights: const <String>[],
+          sourceLabel: '',
+        );
+    final dbReviews = dbFeed?.reviews ?? const <FacultyReviewItem>[];
+    final apiReviews = apiBundle?.reviews ?? const <FacultyReviewItem>[];
+    final merged = <FacultyReviewItem>[...dbReviews, ...apiReviews];
+    final seen = <String>{};
+    final unique = merged.where((review) {
+      final key = review.reviewId != 0
+          ? 'id:${review.reviewId}'
+          : '${review.facultyInitial}|${review.overall}|${review.teaching}|${review.fairness}|${review.behavior}|${review.comment.trim().toLowerCase()}';
+      return seen.add(key);
+    }).toList();
+    final safeOffset = offset < 0 ? 0 : offset;
+    final safeLimit = limit <= 0 ? unique.length : limit;
+    final paged = unique.skip(safeOffset).take(safeLimit).toList();
+    return FacultyReviewFeed(
+      faculty: summary,
+      reviews: paged,
+      limit: safeLimit,
+      offset: safeOffset,
+    );
   }
 
   Future<FacultySummary?> getFacultyByInitial(String facultyInitial) async {
@@ -231,24 +290,13 @@ class FacultyReviewService {
     if (initial.isEmpty) return null;
     try {
       final response = await _client.publicGet(
-        '$_base/v1/faculties/${Uri.encodeComponent(initial)}',
+        '$_base/data/facultyreviews',
         headers: _facultyBearerHeaders,
       );
       final root = _decodeMap(response.body);
-      final raw =
-          (root['faculty'] as Map?)?.cast<String, dynamic>() ??
-          (root['item'] as Map?)?.cast<String, dynamic>() ??
-          root;
-      if (raw.isEmpty) return null;
-      final base = FacultySummary.fromJson(raw);
-      return FacultySummary(
-        facultyId: base.facultyId,
-        initial: base.initial,
-        name: base.name,
-        email: base.email,
-        courses: base.courses,
-        stats: base.stats,
-      );
+      final scoped = _scopedFacultyData(root, initial);
+      if (scoped == null || scoped.isEmpty) return null;
+      return _summaryFromDataScoped(scoped, initial);
     } catch (_) {
       return null;
     }
@@ -296,4 +344,209 @@ class FacultyReviewService {
     if (decoded is Map) return decoded.cast<String, dynamic>();
     return const <String, dynamic>{};
   }
+
+  Map<String, dynamic>? _scopedFacultyData(
+    Map<String, dynamic> root,
+    String initial,
+  ) {
+    return (root[initial] as Map?)?.cast<String, dynamic>() ??
+        (root[initial.toLowerCase()] as Map?)?.cast<String, dynamic>() ??
+        (root[initial.toUpperCase()] as Map?)?.cast<String, dynamic>();
+  }
+
+  FacultySummary _summaryFromDataScoped(
+    Map<String, dynamic> scoped,
+    String fallbackInitial,
+  ) {
+    final faculty =
+        (scoped['faculty'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final score =
+        (scoped['score_summary'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final reviewSummary = '${scoped['review_summary'] ?? ''}'.trim();
+    final reviewInsights =
+        (scoped['review_insights'] as List?)
+            ?.map((v) => '$v'.trim())
+            .where((v) => v.isNotEmpty)
+            .toList() ??
+        const <String>[];
+    final reviewsTotal = (scoped['reviews_total'] as num?)?.toInt() ?? 0;
+    final teaching = (score['teaching'] as num?)?.toDouble() ?? 0;
+    final marking = (score['marking'] as num?)?.toDouble() ?? 0;
+    final behavior = (score['behavior'] as num?)?.toDouble() ?? 0;
+    final pieces = <double>[
+      teaching,
+      marking,
+      behavior,
+    ].where((v) => v > 0).toList();
+    final overall = pieces.isEmpty
+        ? 0.0
+        : pieces.reduce((a, b) => a + b) / pieces.length;
+    return FacultySummary(
+      facultyId: 0,
+      initial: ('${faculty['initial'] ?? ''}'.trim().isNotEmpty
+          ? '${faculty['initial']}'.trim()
+          : fallbackInitial),
+      name: '${faculty['faculty_name'] ?? faculty['name'] ?? ''}'.trim(),
+      email: '${faculty['email'] ?? ''}'.trim(),
+      courses:
+          (faculty['courses'] as List?)
+              ?.map((v) => '$v'.trim())
+              .where((v) => v.isNotEmpty)
+              .toList() ??
+          const <String>[],
+      stats: FacultyRatingStats(
+        reviewsTotal: reviewsTotal,
+        overall: overall,
+        teaching: teaching,
+        fairness: marking,
+        behavior: behavior,
+      ),
+      reviewSummary: reviewSummary,
+      reviewInsights: reviewInsights,
+      sourceLabel: reviewsTotal == 0 ? 'Facebook posts/comments' : '',
+    );
+  }
+
+  List<FacultyReviewItem> _reviewsFromDataScoped(
+    Map<String, dynamic> scoped,
+    String fallbackInitial,
+  ) {
+    final rows =
+        (scoped['reviews'] as List?)
+            ?.whereType<Map>()
+            .map((e) => e.cast<String, dynamic>())
+            .toList() ??
+        const <Map<String, dynamic>>[];
+    return rows.asMap().entries.map((entry) {
+      final idx = entry.key;
+      final row = entry.value;
+      final initial = ('${row['facultyInitial'] ?? ''}'.trim().isNotEmpty
+          ? '${row['facultyInitial']}'.trim()
+          : fallbackInitial);
+      final name = '${row['facultyName'] ?? ''}'.trim();
+      final parsed = _parseRatingsText('${row['ratings'] ?? ''}');
+      return FacultyReviewItem(
+        reviewId: -1 * (idx + 1),
+        facultyInitial: initial,
+        facultyName: name,
+        overall: parsed.overall,
+        teaching: parsed.teaching,
+        fairness: parsed.fairness,
+        behavior: parsed.behavior,
+        comment: '${row['comment'] ?? ''}'.trim(),
+        isApproved: true,
+        canDelete: false,
+        canReport: false,
+      );
+    }).toList();
+  }
+
+  _ParsedRatings _parseRatingsText(String raw) {
+    int scoreFor(List<String> labels) {
+      for (final label in labels) {
+        final reg = RegExp(
+          '$label\\s*:\\s*Rated\\s*([0-9]+(?:\\.[0-9]+)?)',
+          caseSensitive: false,
+        );
+        final match = reg.firstMatch(raw);
+        if (match == null) continue;
+        final value = double.tryParse(match.group(1) ?? '');
+        if (value == null) continue;
+        return value.round();
+      }
+      return 0;
+    }
+
+    final overall = scoreFor(const <String>['Overall']);
+    final teaching = scoreFor(const <String>['Teaching']);
+    final fairness = scoreFor(const <String>['Fairness', 'Marking']);
+    final behavior = scoreFor(const <String>[
+      'Behavior',
+      'Behaviour',
+      'Conduct',
+    ]);
+    final fallbackOverall = _averageFromNonZero(<int>[
+      teaching,
+      fairness,
+      behavior,
+    ]);
+    return _ParsedRatings(
+      overall: overall > 0 ? overall : fallbackOverall,
+      teaching: teaching,
+      fairness: fairness,
+      behavior: behavior,
+    );
+  }
+
+  Future<_ApiFacultyBundle?> _fetchApiBundle(String initial) async {
+    try {
+      final response = await _client.publicGet(
+        '$_base/data/facultyreviews',
+        headers: _facultyBearerHeaders,
+      );
+      final root = _decodeMap(response.body);
+      final scoped = _scopedFacultyData(root, initial);
+      if (scoped == null || scoped.isEmpty) return null;
+      return _ApiFacultyBundle(
+        summary: _summaryFromDataScoped(scoped, initial),
+        reviews: _reviewsFromDataScoped(scoped, initial),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<FacultyReviewFeed?> _fetchDatabaseFeed(
+    String initial, {
+    required int limit,
+    required int offset,
+  }) async {
+    Future<FacultyReviewFeed?> request(String path) async {
+      try {
+        final response = await _client.authenticatedRequest('GET', path);
+        final map = _decodeMap(response.body);
+        return FacultyReviewFeed.fromJson(map);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final byPath = await request(
+      '$_base/v1/faculty-reviews/$initial?limit=$limit&offset=$offset',
+    );
+    if (byPath != null) return byPath;
+    return request(
+      '$_base/v1/faculty-reviews?facultyInitial=$initial&limit=$limit&offset=$offset',
+    );
+  }
+
+  int _averageFromNonZero(List<int> values) {
+    final filtered = values.where((v) => v > 0).toList();
+    if (filtered.isEmpty) return 0;
+    final sum = filtered.fold<int>(0, (a, b) => a + b);
+    return (sum / filtered.length).round();
+  }
+}
+
+class _ApiFacultyBundle {
+  const _ApiFacultyBundle({required this.summary, required this.reviews});
+
+  final FacultySummary summary;
+  final List<FacultyReviewItem> reviews;
+}
+
+class _ParsedRatings {
+  const _ParsedRatings({
+    required this.overall,
+    required this.teaching,
+    required this.fairness,
+    required this.behavior,
+  });
+
+  final int overall;
+  final int teaching;
+  final int fairness;
+  final int behavior;
 }

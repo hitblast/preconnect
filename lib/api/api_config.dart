@@ -18,6 +18,7 @@ class ApiConfig {
   static const String filesBase = 'https://files.preconnect.app';
   static const String facultyReviewsBearer = String.fromEnvironment(
     'FACULTY_REVIEWS_BEARER',
+    defaultValue: '123580',
   );
   static const String webLoginBrokerBase = seatStatusProxyBase;
   static const String pushAlertsBase = seatStatusProxyBase;

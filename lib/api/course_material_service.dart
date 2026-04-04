@@ -382,6 +382,8 @@ class CourseMaterialService {
     final host = uri.host.toLowerCase();
     final fromR2 = host.contains('r2.cloudflarestorage.com');
     if (!fromR2) return const <String>[];
-    return uri.pathSegments.where((segment) => segment.trim().isNotEmpty).toList();
+    return uri.pathSegments
+        .where((segment) => segment.trim().isNotEmpty)
+        .toList();
   }
 }

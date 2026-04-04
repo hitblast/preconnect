@@ -220,7 +220,8 @@ class _DevsPageState extends State<DevsPage> {
                     _DevGridTile(
                       name: 'Mueen Ahmmed',
                       role: 'Faculty Reviews',
-                      avatarUrl: 'https://media.licdn.com/dms/image/v2/D5603AQHtYo7APsdwwQ/profile-displayphoto-shrink_800_800/B56ZcH6GpoH4Ag-/0/1748184362516?e=1776902400&v=beta&t=lAxMqND2jjkT4ybK2z9zvePqMtMkCr3zEcZ4w_vfxDw',
+                      avatarUrl:
+                          'https://media.licdn.com/dms/image/v2/D5603AQHtYo7APsdwwQ/profile-displayphoto-shrink_800_800/B56ZcH6GpoH4Ag-/0/1748184362516?e=1776902400&v=beta&t=lAxMqND2jjkT4ybK2z9zvePqMtMkCr3zEcZ4w_vfxDw',
                       primaryLabel: 'LinkedIn',
                       primaryUrl:
                           'https://www.linkedin.com/in/mueen-ahmmed-b337b8231/',
@@ -268,8 +269,9 @@ class _DevsPageState extends State<DevsPage> {
                       ),
                       if (allTiles.length > 4)
                         buildCenteredOutlinedActionButton(
-                          label:
-                              _showAllContributors ? 'Show Less' : 'Show More',
+                          label: _showAllContributors
+                              ? 'Show Less'
+                              : 'Show More',
                           onPressed: () {
                             setState(() {
                               _showAllContributors = !_showAllContributors;
@@ -315,7 +317,8 @@ List<_DevGridTile> _dedupeContributorTiles(List<_DevGridTile> tiles) {
   final seen = <String>{};
   final output = <_DevGridTile>[];
   for (final tile in tiles) {
-    final key = '${tile.name.trim().toLowerCase()}|'
+    final key =
+        '${tile.name.trim().toLowerCase()}|'
         '${tile.primaryUrl.trim().toLowerCase()}';
     if (seen.add(key)) {
       output.add(tile);

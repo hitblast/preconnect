@@ -181,17 +181,6 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
     });
   }
 
-  Future<void> _clearLocalDraft() async {
-    final initial = _facultyInitial;
-    if (initial.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_draftKey);
-    if (!mounted) return;
-    setState(() {
-      _localDraft = null;
-    });
-  }
-
   Future<void> _loadReviews() async {
     setState(() {
       _reviewsLoading = true;
@@ -225,6 +214,25 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
         _reviewsLoading = false;
       });
     } catch (_) {
+      try {
+        final facultyDetails = await _facultyService.getFacultyByInitial(
+          initial,
+        );
+        if (!mounted) return;
+        if (facultyDetails != null) {
+          setState(() {
+            _reviewFeed = FacultyReviewFeed(
+              faculty: facultyDetails,
+              reviews: const <FacultyReviewItem>[],
+              limit: 20,
+              offset: 0,
+            );
+            _reviewsLoading = false;
+            _reviewsError = null;
+          });
+          return;
+        }
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _reviewsLoading = false;
@@ -241,7 +249,9 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
     final source = lookup;
     final initial = (source?.initial ?? '').trim().isNotEmpty
         ? source!.initial
-        : (primary.initial.trim().isNotEmpty ? primary.initial : fallbackInitial);
+        : (primary.initial.trim().isNotEmpty
+              ? primary.initial
+              : fallbackInitial);
     final name = (source?.name ?? '').trim().isNotEmpty
         ? source!.name
         : primary.name;
@@ -256,12 +266,17 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
         ? primary.stats
         : (source?.stats ?? primary.stats);
     return FacultySummary(
-      facultyId: (source?.facultyId ?? 0) > 0 ? source!.facultyId : primary.facultyId,
+      facultyId: (source?.facultyId ?? 0) > 0
+          ? source!.facultyId
+          : primary.facultyId,
       initial: initial,
       name: name,
       email: email,
       courses: mergedCourses,
       stats: stats,
+      reviewSummary: primary.reviewSummary,
+      reviewInsights: primary.reviewInsights,
+      sourceLabel: primary.sourceLabel,
     );
   }
 
@@ -517,65 +532,6 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
     controller.dispose();
     if (reason.isEmpty) return null;
     return reason;
-  }
-
-  Future<void> _reportReview(int reviewId) async {
-    final reason = await _askReason('Report Review');
-    if (reason == null || reason.isEmpty) return;
-    setState(() {
-      _busyWriteAction = true;
-    });
-    try {
-      final reported = await _facultyService.reportReview(
-        reviewId,
-        reason: reason,
-      );
-      if (!mounted) return;
-      showAppSnackBar(
-        context,
-        reported ? 'Review reported' : 'Already reported by you',
-      );
-    } catch (_) {
-      if (!mounted) return;
-      showAppSnackBar(context, 'Report not available now');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _busyWriteAction = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _deleteReview(int reviewId) async {
-    final ok = await showBracuConfirmationDialog(
-      context,
-      icon: Icons.delete_outline_rounded,
-      title: 'Delete Review?',
-      message: 'You can only delete your own review.',
-      confirmLabel: 'Delete',
-      confirmColor: BracuPalette.danger,
-    );
-    if (!ok) return;
-    setState(() {
-      _busyWriteAction = true;
-    });
-    try {
-      await _facultyService.deleteReview(reviewId);
-      await _clearLocalDraft();
-      if (!mounted) return;
-      showAppSnackBar(context, 'Review deleted');
-      await _loadReviews();
-    } catch (_) {
-      if (!mounted) return;
-      showAppSnackBar(context, 'Delete not available now');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _busyWriteAction = false;
-        });
-      }
-    }
   }
 
   Future<void> _openMaterial(CourseMaterialItem item) async {
@@ -1043,7 +999,9 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
       if (!mounted) return;
       showAppSnackBar(
         context,
-        linkUrl.isNotEmpty ? 'Link add not available now' : 'Upload not available now',
+        linkUrl.isNotEmpty
+            ? 'Link add not available now'
+            : 'Upload not available now',
       );
     } finally {
       if (mounted) {
@@ -1101,9 +1059,9 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
       if (linkUrl.trim().isNotEmpty) 'linkUrl': linkUrl.trim(),
     };
     if (payload.isEmpty) return base;
-    final encoded = base64Url.encode(
-      utf8.encode(jsonEncode(payload)),
-    ).replaceAll('=', '');
+    final encoded = base64Url
+        .encode(utf8.encode(jsonEncode(payload)))
+        .replaceAll('=', '');
     return '$base\nPCMETA:$encoded';
   }
 
@@ -1200,11 +1158,117 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
     );
   }
 
+  bool _hasPositiveScore(num value) => value > 0;
+
+  String _formatScore(num value) {
+    final asDouble = value.toDouble();
+    if (asDouble <= 0) return '0.0';
+    final rounded = asDouble.roundToDouble();
+    if ((asDouble - rounded).abs() < 0.05) {
+      return '${rounded.toInt()}.0';
+    }
+    return asDouble.toStringAsFixed(1);
+  }
+
+  Widget _buildScoreBadge(
+    BuildContext context, {
+    required String label,
+    required num value,
+    bool emphasize = false,
+  }) {
+    final bg = emphasize
+        ? BracuPalette.primary.withValues(alpha: 0.16)
+        : BracuPalette.primary.withValues(alpha: 0.10);
+    final fg = emphasize
+        ? BracuPalette.primary
+        : BracuPalette.textSecondary(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: BracuPalette.primary.withValues(alpha: 0.20)),
+      ),
+      child: Text(
+        '$label ${_formatScore(value)}',
+        style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+
+  Widget _buildScoreBadgeWrap(
+    BuildContext context, {
+    required num overall,
+    required num teaching,
+    required num fairness,
+    required num behavior,
+    bool includeOverall = true,
+  }) {
+    final hasAnyScore =
+        _hasPositiveScore(overall) ||
+        _hasPositiveScore(teaching) ||
+        _hasPositiveScore(fairness) ||
+        _hasPositiveScore(behavior);
+    if (!hasAnyScore) return const SizedBox.shrink();
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        if (includeOverall && _hasPositiveScore(overall))
+          _buildScoreBadge(
+            context,
+            label: 'Overall',
+            value: overall,
+            emphasize: true,
+          ),
+        if (_hasPositiveScore(teaching))
+          _buildScoreBadge(context, label: 'Teaching', value: teaching),
+        if (_hasPositiveScore(fairness))
+          _buildScoreBadge(context, label: 'Fairness', value: fairness),
+        if (_hasPositiveScore(behavior))
+          _buildScoreBadge(context, label: 'Behavior', value: behavior),
+      ],
+    );
+  }
+
+  Widget _buildCommunityReviewCard(FacultyReviewItem review) {
+    final textPrimary = BracuPalette.textPrimary(context);
+    final textSecondary = BracuPalette.textSecondary(context);
+    return BracuCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!review.isApproved)
+            Text(
+              'Pending approval',
+              style: TextStyle(color: textSecondary, fontSize: 11),
+            ),
+          if (review.comment.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              review.comment.trim(),
+              style: TextStyle(color: textPrimary, fontSize: 13),
+            ),
+          ],
+          const SizedBox(height: 8),
+          _buildScoreBadgeWrap(
+            context,
+            overall: review.overall,
+            teaching: review.teaching,
+            fairness: review.fairness,
+            behavior: review.behavior,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final textPrimary = BracuPalette.textPrimary(context);
     final textSecondary = BracuPalette.textSecondary(context);
     final sheetScroll = bracuBottomSheetScrollController(context);
+    final materialSeenKeys = <String>{};
     String normalizeComment(String input) {
       return input.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
     }
@@ -1217,10 +1281,15 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
           : '${review.facultyInitial}|${review.overall}|${review.teaching}|${review.fairness}|${review.behavior}|${normalizeComment(review.comment)}';
       return reviewSeenKeys.add(key);
     }).toList();
+    final nonEmptyReviews = allReviews
+        .where(
+          (review) =>
+              review.comment.trim().isNotEmpty,
+        )
+        .toList();
     final displayReviews = _showAllReviews
-        ? allReviews
-        : allReviews.take(3).toList();
-    final materialSeenKeys = <String>{};
+        ? nonEmptyReviews
+        : nonEmptyReviews.take(4).toList();
     final allMaterials = _materials.where((item) {
       final key = '${item.semester}|${item.courseCode}|${item.fileName}';
       return materialSeenKeys.add(key);
@@ -1229,20 +1298,23 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
         ? allMaterials
         : allMaterials.take(3).toList();
     final totalReviews = _reviewFeed?.faculty.stats.reviewsTotal ?? 0;
-    final hasReviews = totalReviews > 0 || allReviews.isNotEmpty;
+    final stats = _reviewFeed?.faculty.stats;
+    final hasSummaryScores =
+        (stats?.overall ?? 0) > 0 ||
+        (stats?.teaching ?? 0) > 0 ||
+        (stats?.fairness ?? 0) > 0 ||
+        (stats?.behavior ?? 0) > 0;
+    final facultySummaryText = (_reviewFeed?.faculty.reviewSummary ?? '')
+        .trim();
+    final facultySourceLabel = ((_reviewFeed?.faculty.sourceLabel ?? '')
+        .trim());
+    final showSourceLine = totalReviews == 0 && facultySourceLabel.isNotEmpty;
+    final hasSummaryCardContent =
+        hasSummaryScores || showSourceLine || facultySummaryText.isNotEmpty;
+    final hasFacultyMeta =
+        hasSummaryCardContent || facultySummaryText.isNotEmpty;
+    final hasReviews = totalReviews > 0 || nonEmptyReviews.isNotEmpty;
     final localDraft = _localDraft;
-
-    final isLocalDraftVisibleInFeed =
-        localDraft != null &&
-        allReviews.any(
-          (review) =>
-              review.overall == localDraft.overall &&
-              review.teaching == localDraft.teaching &&
-              review.fairness == localDraft.fairness &&
-              review.behavior == localDraft.behavior &&
-              normalizeComment(review.comment) ==
-                  normalizeComment(localDraft.comment),
-        );
     return ListView(
       controller: sheetScroll,
       children: [
@@ -1271,49 +1343,59 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
             ),
           )
         else ...[
-          if (hasReviews) ...[
-            BracuCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _reviewFeed?.faculty.name.isNotEmpty == true
-                        ? _reviewFeed!.faculty.name
-                        : (_facultyInitial.isEmpty
-                              ? 'Faculty'
-                              : _facultyInitial),
-                    style: TextStyle(
-                      color: textPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
+          if (hasReviews || hasFacultyMeta) ...[
+            if (hasSummaryCardContent)
+              BracuCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildScoreBadgeWrap(
+                      context,
+                      overall: _reviewFeed?.faculty.stats.overall ?? 0,
+                      teaching: _reviewFeed?.faculty.stats.teaching ?? 0,
+                      fairness: _reviewFeed?.faculty.stats.fairness ?? 0,
+                      behavior: _reviewFeed?.faculty.stats.behavior ?? 0,
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Average rating: ${_reviewFeed?.faculty.stats.overall.toStringAsFixed(1) ?? '0.0'}/5'
-                    ' based on $totalReviews ${totalReviews == 1 ? 'review' : 'reviews'}',
-                    style: TextStyle(color: textSecondary, fontSize: 12),
-                  ),
-                  if ((_reviewFeed?.faculty.email ?? '').trim().isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      (_reviewFeed?.faculty.email ?? '').trim(),
-                      style: TextStyle(color: textSecondary, fontSize: 11),
-                    ),
+                    if (showSourceLine) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Source: $facultySourceLabel',
+                        style: TextStyle(
+                          color: textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    if (facultySummaryText.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        facultySummaryText,
+                        style: TextStyle(color: textSecondary, fontSize: 12),
+                      ),
+                    ],
                   ],
-                  if ((_reviewFeed?.faculty.courses ?? const <String>[]).isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      (_reviewFeed?.faculty.courses ?? const <String>[])
-                          .take(3)
-                          .join(', '),
-                      style: TextStyle(color: textSecondary, fontSize: 11),
-                    ),
-                  ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
+            if (hasSummaryCardContent) const SizedBox(height: 8),
+            if (nonEmptyReviews.isNotEmpty) ...[
+              ...displayReviews.map((review) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _buildCommunityReviewCard(review),
+                );
+              }),
+              if (nonEmptyReviews.length > 4)
+                buildCenteredOutlinedActionButton(
+                  label: _showAllReviews ? 'Show Less' : 'Show More',
+                  onPressed: () {
+                    setState(() {
+                      _showAllReviews = !_showAllReviews;
+                    });
+                  },
+                  padding: const EdgeInsets.only(top: 2, bottom: 8),
+                ),
+            ],
           ] else if (localDraft == null)
             BracuCard(
               child: Text(
@@ -1321,120 +1403,7 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
                 style: TextStyle(color: textSecondary, fontSize: 12),
               ),
             ),
-          ...displayReviews.map((review) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: BracuCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Overall ${review.overall}/5',
-                            style: TextStyle(
-                              color: textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          visualDensity: VisualDensity.compact,
-                          tooltip: 'Report',
-                          onPressed: _busyWriteAction
-                              ? null
-                              : () => _reportReview(review.reviewId),
-                          icon: const Icon(Icons.flag_outlined, size: 18),
-                        ),
-                        if (review.canDelete != false)
-                          IconButton(
-                            visualDensity: VisualDensity.compact,
-                            tooltip: 'Delete',
-                            onPressed: _busyWriteAction
-                                ? null
-                                : () => _deleteReview(review.reviewId),
-                            icon: const Icon(
-                              Icons.delete_outline_rounded,
-                              size: 18,
-                            ),
-                          ),
-                      ],
-                    ),
-                    if (review.comment.isNotEmpty)
-                      Text(
-                        review.comment,
-                        style: TextStyle(color: textSecondary, fontSize: 12),
-                      ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Teaching ${review.teaching}/5 • Fairness ${review.fairness}/5 • Behavior ${review.behavior}/5',
-                      style: TextStyle(color: textSecondary, fontSize: 11),
-                    ),
-                    if (!review.isApproved) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Pending approval',
-                        style: TextStyle(color: textSecondary, fontSize: 11),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            );
-          }),
-          if (allReviews.length > 3)
-            buildCenteredOutlinedActionButton(
-              label: _showAllReviews ? 'Show Less' : 'Show More',
-              onPressed: () {
-                setState(() {
-                  _showAllReviews = !_showAllReviews;
-                });
-              },
-              padding: const EdgeInsets.only(top: 2, bottom: 8),
-            ),
         ],
-        if (localDraft != null && !isLocalDraftVisibleInFeed)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: BracuCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Your review',
-                    style: TextStyle(
-                      color: textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Overall ${localDraft.overall}/5',
-                    style: TextStyle(
-                      color: textPrimary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Teaching ${localDraft.teaching}/5 • Fairness ${localDraft.fairness}/5 • Behavior ${localDraft.behavior}/5',
-                    style: TextStyle(color: textSecondary, fontSize: 11),
-                  ),
-                  if (localDraft.comment.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      localDraft.comment,
-                      style: TextStyle(color: textSecondary, fontSize: 12),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -1559,7 +1528,9 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
     if (semester.isNotEmpty) {
       parts.add(semester);
     }
-    final size = parsed.linkUrl.isNotEmpty ? '' : _formatFileSize(item.fileSize);
+    final size = parsed.linkUrl.isNotEmpty
+        ? ''
+        : _formatFileSize(item.fileSize);
     if (size.isNotEmpty) {
       parts.add(size);
     }
@@ -1580,7 +1551,8 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
         linkUrl = maybeUrl;
       }
     }
-    if (linkUrl.isEmpty && item.contentType.trim().toLowerCase() == 'text/uri-list') {
+    if (linkUrl.isEmpty &&
+        item.contentType.trim().toLowerCase() == 'text/uri-list') {
       final extracted = _extractFirstHttpUrl(item.description);
       if (extracted.isNotEmpty) linkUrl = extracted;
     }
@@ -1594,10 +1566,7 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
     final markerLine = raw
         .split('\n')
         .map((line) => line.trim())
-        .firstWhere(
-          (line) => line.startsWith(markerPrefix),
-          orElse: () => '',
-        );
+        .firstWhere((line) => line.startsWith(markerPrefix), orElse: () => '');
     if (markerLine.isEmpty) return null;
     final payload = markerLine.substring(markerPrefix.length).trim();
     if (payload.isEmpty) return null;
@@ -1606,9 +1575,7 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
       final decoded = utf8.decode(base64Url.decode(normalized));
       final map = jsonDecode(decoded);
       if (map is Map<String, dynamic>) {
-        return map.map(
-          (key, value) => MapEntry(key, '${value ?? ''}'.trim()),
-        );
+        return map.map((key, value) => MapEntry(key, '${value ?? ''}'.trim()));
       }
       if (map is Map) {
         return map.cast<String, dynamic>().map(
