@@ -323,7 +323,7 @@ The app uses a hosted proxy (`api.preconnect.app`) that handles caching and stre
 - BRAC University student community for continuous feedback and testing
 - Flutter and Dart ecosystems
 - Open-source package maintainers on [pub.dev](https://pub.dev)
-- Infrastructure providers: Firebase Messaging and Cloudflare Worker
+- Infrastructure providers: Firebase Cloud Messaging and Cloudflare Worker
 
 ## Developer Credit
 - NaiveInvestigator — GitHub: [@NaiveInvestigator](https://github.com/NaiveInvestigator)
