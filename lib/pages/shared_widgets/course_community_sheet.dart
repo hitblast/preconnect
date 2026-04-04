@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:preconnect/api/course_material_service.dart';
 import 'package:preconnect/api/faculty_review_service.dart';
+import 'package:preconnect/api/profile_service.dart';
 import 'package:preconnect/model/section_info.dart' as section;
 import 'package:preconnect/pages/shared_widgets/schedule_entry_card.dart';
 import 'package:preconnect/pages/ui_kit.dart';
@@ -67,6 +69,7 @@ class CourseCommunitySheet extends StatefulWidget {
 class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
   final FacultyReviewService _facultyService = FacultyReviewService();
   final CourseMaterialService _materialService = CourseMaterialService();
+  final ProfileService _profileService = ProfileService();
   final TextEditingController _reviewCommentController =
       TextEditingController();
 
@@ -79,6 +82,7 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
   bool _showAllMaterials = false;
   String? _reviewsError;
   String? _materialsError;
+  String _currentUserName = '';
   _LocalFacultyReviewDraft? _localDraft;
 
   String get _facultyInitial {
@@ -106,6 +110,7 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
       _loadReviews(),
       _loadMaterials(),
       _loadLocalDraft(),
+      _loadCurrentUserName(),
     ]);
   }
 
@@ -152,6 +157,17 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
         _localDraft = null;
       });
     }
+  }
+
+  Future<void> _loadCurrentUserName() async {
+    try {
+      final profile = await _profileService.getProfile();
+      final fullName = (profile?['fullName'] ?? '').trim();
+      if (!mounted) return;
+      setState(() {
+        _currentUserName = fullName;
+      });
+    } catch (_) {}
   }
 
   Future<void> _saveLocalDraft(_LocalFacultyReviewDraft draft) async {
@@ -520,12 +536,24 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
 
   Future<void> _openMaterial(CourseMaterialItem item) async {
     try {
+      final parsed = _parseMaterialMeta(item);
+      final directLink = parsed.linkUrl;
+      if (_isValidHttpUrl(directLink)) {
+        await openExternalUrl(context, directLink);
+        return;
+      }
       final detail = await _materialService.get(
         semester: item.semester,
         courseCode: item.courseCode,
         fileName: item.fileName,
       );
       if (!mounted) return;
+      final detailParsed = _parseMaterialMeta(detail.item);
+      final detailLink = detailParsed.linkUrl;
+      if (_isValidHttpUrl(detailLink)) {
+        await openExternalUrl(context, detailLink);
+        return;
+      }
       if (detail.downloadUrl.isEmpty) {
         showAppSnackBar(context, 'Download URL unavailable');
         return;
@@ -622,34 +650,316 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
     if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
       return 'image/jpeg';
     }
+    if (lower.endsWith('.url')) return 'text/uri-list';
     return 'application/octet-stream';
   }
 
-  Future<void> _uploadMaterial() async {
+  Future<void> _openAddMaterialSheet() async {
     if (_busyWriteAction) return;
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-      allowMultiple: false,
-      withData: true,
-    );
-    if (picked == null || picked.files.isEmpty) return;
-    final selected = picked.files.first;
-    final bytes = selected.bytes;
-    if (bytes == null || bytes.isEmpty) {
-      if (!mounted) return;
-      showAppSnackBar(context, 'Unable to read selected file');
-      return;
-    }
+    final linkController = TextEditingController();
+    final titleController = TextEditingController();
+    Uint8List? selectedFileBytes;
+    String selectedFileName = '';
+    bool pickingFile = false;
+    bool submitting = false;
+    _AddMaterialTab activeTab = _AddMaterialTab.file;
+    await showBracuBottomSheet<void>(
+      context,
+      title: 'Add Material',
+      subtitle: 'Choose File or Link',
+      builder: (sheetContext, textPrimary, textSecondary) {
+        final sheetScroll = bracuBottomSheetScrollController(sheetContext);
+        return StatefulBuilder(
+          builder: (innerContext, setSheetState) {
+            return ListView(
+              controller: sheetScroll,
+              shrinkWrap: true,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: BracuPalette.card(context),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: BracuPalette.textSecondary(
+                        context,
+                      ).withValues(alpha: 0.2),
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _AddTabButton(
+                          label: 'File',
+                          icon: Icons.upload_file_rounded,
+                          selected: activeTab == _AddMaterialTab.file,
+                          onTap: () {
+                            setSheetState(() {
+                              activeTab = _AddMaterialTab.file;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _AddTabButton(
+                          label: 'Link',
+                          icon: Icons.link_rounded,
+                          selected: activeTab == _AddMaterialTab.link,
+                          onTap: () {
+                            setSheetState(() {
+                              activeTab = _AddMaterialTab.link;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                BracuCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (activeTab == _AddMaterialTab.file) ...[
+                        Text(
+                          'Add File',
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Upload PDF, DOCX, PPTX, images, .zip and more.',
+                          style: TextStyle(color: textSecondary, fontSize: 12),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: (pickingFile || submitting)
+                                ? null
+                                : () async {
+                                    setSheetState(() {
+                                      pickingFile = true;
+                                    });
+                                    final picked = await FilePicker.platform
+                                        .pickFiles(
+                                          type: FileType.any,
+                                          allowMultiple: false,
+                                          withData: true,
+                                        );
+                                    if (!mounted) return;
+                                    if (picked == null ||
+                                        picked.files.isEmpty) {
+                                      setSheetState(() {
+                                        pickingFile = false;
+                                      });
+                                      return;
+                                    }
+                                    final selected = picked.files.first;
+                                    final bytes = selected.bytes;
+                                    setSheetState(() {
+                                      pickingFile = false;
+                                    });
+                                    if (bytes == null || bytes.isEmpty) {
+                                      showAppSnackBar(
+                                        context,
+                                        'Unable to read selected file',
+                                      );
+                                      return;
+                                    }
+                                    setSheetState(() {
+                                      selectedFileName = selected.name.trim();
+                                      selectedFileBytes = bytes;
+                                    });
+                                  },
+                            icon: pickingFile
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.upload_file_rounded),
+                            label: Text(
+                              pickingFile ? 'Choosing file...' : 'Choose File',
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        Text(
+                          'Add Link',
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Accessible YouTube video/playlist, GitHub repositories, or any web resource.',
+                          style: TextStyle(color: textSecondary, fontSize: 12),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: linkController,
+                          keyboardType: TextInputType.url,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: 'Link URL',
+                            hintText: 'https://youtube.com/...',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: titleController,
+                          textInputAction: TextInputAction.done,
+                          decoration: const InputDecoration(
+                            labelText: 'Title (optional)',
+                            hintText: 'Lecture 03 Recording',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (activeTab == _AddMaterialTab.file &&
+                    selectedFileName.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Selected: $selectedFileName',
+                    style: TextStyle(color: textSecondary, fontSize: 12),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: (pickingFile || submitting)
+                            ? null
+                            : () => Navigator.of(sheetContext).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: (pickingFile || submitting)
+                            ? null
+                            : () async {
+                                if (activeTab == _AddMaterialTab.file) {
+                                  if (selectedFileBytes == null ||
+                                      selectedFileName.trim().isEmpty) {
+                                    showAppSnackBar(
+                                      context,
+                                      'Choose a file first',
+                                    );
+                                    return;
+                                  }
+                                  setSheetState(() {
+                                    submitting = true;
+                                  });
+                                  if (sheetContext.mounted) {
+                                    Navigator.of(sheetContext).pop();
+                                  }
+                                  await _uploadMaterialBytes(
+                                    fileName: selectedFileName.trim(),
+                                    bytes: selectedFileBytes!,
+                                    titleHint: selectedFileName
+                                        .replaceAll(RegExp(r'\.[^.]+$'), '')
+                                        .trim(),
+                                    descriptionHint:
+                                        'Uploaded from class/exam schedule',
+                                    linkUrl: '',
+                                  );
+                                  return;
+                                }
 
+                                final url = linkController.text.trim();
+                                final customTitle = titleController.text.trim();
+                                if (!_isValidHttpUrl(url)) {
+                                  showAppSnackBar(
+                                    context,
+                                    'Enter a valid http/https link',
+                                  );
+                                  return;
+                                }
+                                final uri = Uri.parse(url);
+                                final fileName = _materialLinkFileName(uri);
+                                final bytes = Uint8List.fromList(
+                                  utf8.encode('$url\n'),
+                                );
+                                final title = customTitle.isNotEmpty
+                                    ? customTitle
+                                    : _defaultMaterialLinkTitle(uri);
+                                setSheetState(() {
+                                  submitting = true;
+                                });
+                                if (sheetContext.mounted) {
+                                  Navigator.of(sheetContext).pop();
+                                }
+                                await _uploadMaterialBytes(
+                                  fileName: fileName,
+                                  bytes: bytes,
+                                  titleHint: title,
+                                  descriptionHint:
+                                      'Link shared from class/exam schedule',
+                                  linkUrl: url,
+                                );
+                              },
+                        icon: submitting
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                activeTab == _AddMaterialTab.file
+                                    ? Icons.check_circle_outline
+                                    : Icons.link_rounded,
+                              ),
+                        label: Text(submitting ? 'Submitting...' : 'Submit'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    linkController.dispose();
+    titleController.dispose();
+  }
+
+  Future<void> _uploadMaterialBytes({
+    required String fileName,
+    required Uint8List bytes,
+    required String titleHint,
+    required String descriptionHint,
+    required String linkUrl,
+  }) async {
+    if (_busyWriteAction) return;
+    final normalizedName = fileName.trim();
+    if (normalizedName.isEmpty || bytes.isEmpty) return;
     setState(() {
       _busyWriteAction = true;
     });
     try {
-      final name = selected.name.trim();
-      final contentType = _contentTypeForPath(name);
+      final contentType = _contentTypeForPath(normalizedName);
       final uploadMeta = await _materialService.createUploadUrl(
         CourseMaterialUploadUrlInput(
-          fileName: name,
+          fileName: normalizedName,
           contentType: contentType,
           courseCode: widget.courseCode,
           semester: widget.semesterLabel,
@@ -660,26 +970,37 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
         contentType: contentType,
         bytes: bytes,
       );
-      final title = name.replaceAll(RegExp(r'\.[^.]+$'), '').trim();
+      final title = titleHint.trim();
+      final finalTitle = title.isEmpty ? 'Course material' : title;
       await _materialService.finalize(
         CourseMaterialFinalizeInput(
           key: uploadMeta.key,
           courseCode: widget.courseCode,
           courseTitle: widget.courseCode,
           semester: widget.semesterLabel,
-          title: title.isEmpty ? 'Class material' : title,
-          description: 'Uploaded from class/exam schedule',
-          fileName: name,
+          title: finalTitle,
+          description: _materialDescription(
+            base: descriptionHint,
+            uploaderName: _currentUserName,
+            linkUrl: linkUrl,
+          ),
+          fileName: normalizedName,
           contentType: contentType,
           fileSize: bytes.length,
         ),
       );
       if (!mounted) return;
-      showAppSnackBar(context, 'Material uploaded');
+      showAppSnackBar(
+        context,
+        linkUrl.isNotEmpty ? 'Link added' : 'Material uploaded',
+      );
       await _loadMaterials();
     } catch (_) {
       if (!mounted) return;
-      showAppSnackBar(context, 'Upload not available now');
+      showAppSnackBar(
+        context,
+        linkUrl.isNotEmpty ? 'Link add not available now' : 'Upload not available now',
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -687,6 +1008,59 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
         });
       }
     }
+  }
+
+  bool _isValidHttpUrl(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return false;
+    final uri = Uri.tryParse(value);
+    if (uri == null) return false;
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme != 'http' && scheme != 'https') return false;
+    return uri.hasAuthority;
+  }
+
+  String _materialLinkFileName(Uri uri) {
+    final host = uri.host.trim().replaceAll(RegExp(r'[^a-zA-Z0-9.-]'), '');
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final safeHost = host.isEmpty ? 'link' : host.toLowerCase();
+    return '$safeHost-$ts.url';
+  }
+
+  String _defaultMaterialLinkTitle(Uri uri) {
+    final host = uri.host.trim().toLowerCase();
+    if (host.contains('youtube.com') || host.contains('youtu.be')) {
+      if ((uri.queryParameters['list'] ?? '').trim().isNotEmpty) {
+        return 'YouTube playlist';
+      }
+      return 'YouTube video';
+    }
+    if (host.contains('github.com')) {
+      final parts = uri.pathSegments
+          .where((segment) => segment.trim().isNotEmpty)
+          .toList();
+      if (parts.length >= 2) {
+        return 'GitHub ${parts[0]}/${parts[1]}';
+      }
+      return 'GitHub resource';
+    }
+    return host.isEmpty ? 'Shared link' : host;
+  }
+
+  String _materialDescription({
+    required String base,
+    required String uploaderName,
+    required String linkUrl,
+  }) {
+    final payload = <String, String>{
+      if (uploaderName.trim().isNotEmpty) 'uploader': uploaderName.trim(),
+      if (linkUrl.trim().isNotEmpty) 'linkUrl': linkUrl.trim(),
+    };
+    if (payload.isEmpty) return base;
+    final encoded = base64Url.encode(
+      utf8.encode(jsonEncode(payload)),
+    ).replaceAll('=', '');
+    return '$base\nPCMETA:$encoded';
   }
 
   Widget _buildSummaryCard() {
@@ -1007,8 +1381,8 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
             const Expanded(child: BracuSectionTitle(title: 'Course Materials')),
             if (widget.showActions)
               TextButton(
-                onPressed: _busyWriteAction ? null : _uploadMaterial,
-                child: const Text('Upload'),
+                onPressed: _busyWriteAction ? null : _openAddMaterialSheet,
+                child: const Text('Add'),
               ),
           ],
         ),
@@ -1110,16 +1484,85 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
   }
 
   String _materialSubtitle(CourseMaterialItem item) {
+    final parsed = _parseMaterialMeta(item);
     final parts = <String>[];
+    final uploader = parsed.uploaderName;
+    if (uploader.isNotEmpty) {
+      parts.add('by $uploader');
+    } else {
+      parts.add('by Unknown');
+    }
+    if (parsed.linkUrl.isNotEmpty) {
+      parts.add('Link');
+    }
     final semester = item.semester.trim();
     if (semester.isNotEmpty) {
       parts.add(semester);
     }
-    final size = _formatFileSize(item.fileSize);
+    final size = parsed.linkUrl.isNotEmpty ? '' : _formatFileSize(item.fileSize);
     if (size.isNotEmpty) {
       parts.add(size);
     }
     return parts.isEmpty ? 'Course material' : parts.join(' • ');
+  }
+
+  _MaterialMeta _parseMaterialMeta(CourseMaterialItem item) {
+    var uploader = item.uploaderName.trim();
+    var linkUrl = item.externalUrl.trim();
+    final marker = _extractMetaMarker(item.description);
+    if (marker != null) {
+      final maybeUploader = (marker['uploader'] ?? '').trim();
+      final maybeUrl = (marker['linkUrl'] ?? '').trim();
+      if (uploader.isEmpty && maybeUploader.isNotEmpty) {
+        uploader = maybeUploader;
+      }
+      if (linkUrl.isEmpty && maybeUrl.isNotEmpty) {
+        linkUrl = maybeUrl;
+      }
+    }
+    if (linkUrl.isEmpty && item.contentType.trim().toLowerCase() == 'text/uri-list') {
+      final extracted = _extractFirstHttpUrl(item.description);
+      if (extracted.isNotEmpty) linkUrl = extracted;
+    }
+    return _MaterialMeta(uploaderName: uploader, linkUrl: linkUrl);
+  }
+
+  Map<String, String>? _extractMetaMarker(String description) {
+    final raw = description.trim();
+    if (raw.isEmpty) return null;
+    final markerPrefix = 'PCMETA:';
+    final markerLine = raw
+        .split('\n')
+        .map((line) => line.trim())
+        .firstWhere(
+          (line) => line.startsWith(markerPrefix),
+          orElse: () => '',
+        );
+    if (markerLine.isEmpty) return null;
+    final payload = markerLine.substring(markerPrefix.length).trim();
+    if (payload.isEmpty) return null;
+    try {
+      final normalized = base64Url.normalize(payload);
+      final decoded = utf8.decode(base64Url.decode(normalized));
+      final map = jsonDecode(decoded);
+      if (map is Map<String, dynamic>) {
+        return map.map(
+          (key, value) => MapEntry(key, '${value ?? ''}'.trim()),
+        );
+      }
+      if (map is Map) {
+        return map.cast<String, dynamic>().map(
+          (key, value) => MapEntry(key, '${value ?? ''}'.trim()),
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String _extractFirstHttpUrl(String raw) {
+    final match = RegExp(r'https?://[^\s]+').firstMatch(raw);
+    if (match == null) return '';
+    return match.group(0)?.trim() ?? '';
   }
 
   String _formatFileSize(int bytes) {
@@ -1164,6 +1607,63 @@ class _LocalFacultyReviewDraft {
       fairness: (json['fairness'] as num?)?.toInt() ?? 0,
       behavior: (json['behavior'] as num?)?.toInt() ?? 0,
       comment: '${json['comment'] ?? ''}'.trim(),
+    );
+  }
+}
+
+class _MaterialMeta {
+  const _MaterialMeta({required this.uploaderName, required this.linkUrl});
+
+  final String uploaderName;
+  final String linkUrl;
+}
+
+enum _AddMaterialTab { file, link }
+
+class _AddTabButton extends StatelessWidget {
+  const _AddTabButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = BracuPalette.primary;
+    final textColor = selected
+        ? Colors.white
+        : BracuPalette.textSecondary(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: textColor),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

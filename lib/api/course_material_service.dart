@@ -19,6 +19,8 @@ class CourseMaterialItem {
     required this.isApproved,
     required this.canDelete,
     required this.filePath,
+    required this.uploaderName,
+    required this.externalUrl,
     this.createdAt,
     this.updatedAt,
   });
@@ -35,6 +37,8 @@ class CourseMaterialItem {
   final bool isApproved;
   final bool? canDelete;
   final String filePath;
+  final String uploaderName;
+  final String externalUrl;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -58,9 +62,32 @@ class CourseMaterialItem {
           (json['isMine'] as bool?) ??
           (json['is_mine'] as bool?),
       filePath: '${json['filePath'] ?? ''}'.trim(),
+      uploaderName: _firstNonEmpty(<dynamic>[
+        json['uploaderName'],
+        json['uploadedByName'],
+        json['uploadedBy'],
+        json['ownerName'],
+        json['studentName'],
+        json['fullName'],
+        json['createdByName'],
+      ]),
+      externalUrl: _firstNonEmpty(<dynamic>[
+        json['externalUrl'],
+        json['linkUrl'],
+        json['url'],
+        json['materialUrl'],
+      ]),
       createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}'),
       updatedAt: DateTime.tryParse('${json['updatedAt'] ?? ''}'),
     );
+  }
+
+  static String _firstNonEmpty(List<dynamic> values) {
+    for (final value in values) {
+      final normalized = '${value ?? ''}'.trim();
+      if (normalized.isNotEmpty) return normalized;
+    }
+    return '';
   }
 }
 
