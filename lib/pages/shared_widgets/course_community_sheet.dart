@@ -207,9 +207,21 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
     }
     try {
       final feed = await _facultyService.getFacultyReviews(initial, limit: 20);
+      final facultyDetails = await _facultyService.getFacultyByInitial(initial);
+      final mergedFaculty = _mergeFacultySummary(
+        primary: feed.faculty,
+        lookup: facultyDetails,
+        fallbackInitial: initial,
+      );
+      final mergedFeed = FacultyReviewFeed(
+        faculty: mergedFaculty,
+        reviews: feed.reviews,
+        limit: feed.limit,
+        offset: feed.offset,
+      );
       if (!mounted) return;
       setState(() {
-        _reviewFeed = feed;
+        _reviewFeed = mergedFeed;
         _reviewsLoading = false;
       });
     } catch (_) {
@@ -219,6 +231,38 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
         _reviewsError = 'Not available';
       });
     }
+  }
+
+  FacultySummary _mergeFacultySummary({
+    required FacultySummary primary,
+    required FacultySummary? lookup,
+    required String fallbackInitial,
+  }) {
+    final source = lookup;
+    final initial = (source?.initial ?? '').trim().isNotEmpty
+        ? source!.initial
+        : (primary.initial.trim().isNotEmpty ? primary.initial : fallbackInitial);
+    final name = (source?.name ?? '').trim().isNotEmpty
+        ? source!.name
+        : primary.name;
+    final email = (source?.email ?? '').trim().isNotEmpty
+        ? source!.email
+        : primary.email;
+    final courses = (source?.courses ?? const <String>[])
+        .where((c) => c.trim().isNotEmpty)
+        .toList();
+    final mergedCourses = courses.isNotEmpty ? courses : primary.courses;
+    final stats = primary.stats.reviewsTotal > 0
+        ? primary.stats
+        : (source?.stats ?? primary.stats);
+    return FacultySummary(
+      facultyId: (source?.facultyId ?? 0) > 0 ? source!.facultyId : primary.facultyId,
+      initial: initial,
+      name: name,
+      email: email,
+      courses: mergedCourses,
+      stats: stats,
+    );
   }
 
   Future<void> _loadMaterials() async {
@@ -1250,6 +1294,22 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
                     ' based on $totalReviews ${totalReviews == 1 ? 'review' : 'reviews'}',
                     style: TextStyle(color: textSecondary, fontSize: 12),
                   ),
+                  if ((_reviewFeed?.faculty.email ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      (_reviewFeed?.faculty.email ?? '').trim(),
+                      style: TextStyle(color: textSecondary, fontSize: 11),
+                    ),
+                  ],
+                  if ((_reviewFeed?.faculty.courses ?? const <String>[]).isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      (_reviewFeed?.faculty.courses ?? const <String>[])
+                          .take(3)
+                          .join(', '),
+                      style: TextStyle(color: textSecondary, fontSize: 11),
+                    ),
+                  ],
                 ],
               ),
             ),

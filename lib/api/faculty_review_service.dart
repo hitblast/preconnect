@@ -207,6 +207,12 @@ class FacultyReviewService {
 
   String get _base => ApiConfig.seatStatusProxyBase;
 
+  Map<String, String> get _facultyBearerHeaders {
+    final token = ApiConfig.facultyReviewsBearer.trim();
+    if (token.isEmpty) return const <String, String>{};
+    return <String, String>{'Authorization': 'Bearer $token'};
+  }
+
   Future<FacultyReviewFeed> getFacultyReviews(
     String facultyInitial, {
     int limit = 20,
@@ -215,8 +221,37 @@ class FacultyReviewService {
     final initial = facultyInitial.trim().toUpperCase();
     final response = await _client.publicGet(
       '$_base/v1/faculty-reviews/${Uri.encodeComponent(initial)}?limit=$limit&offset=$offset',
+      headers: _facultyBearerHeaders,
     );
     return FacultyReviewFeed.fromJson(_decodeMap(response.body));
+  }
+
+  Future<FacultySummary?> getFacultyByInitial(String facultyInitial) async {
+    final initial = facultyInitial.trim().toUpperCase();
+    if (initial.isEmpty) return null;
+    try {
+      final response = await _client.publicGet(
+        '$_base/v1/faculties/${Uri.encodeComponent(initial)}',
+        headers: _facultyBearerHeaders,
+      );
+      final root = _decodeMap(response.body);
+      final raw =
+          (root['faculty'] as Map?)?.cast<String, dynamic>() ??
+          (root['item'] as Map?)?.cast<String, dynamic>() ??
+          root;
+      if (raw.isEmpty) return null;
+      final base = FacultySummary.fromJson(raw);
+      return FacultySummary(
+        facultyId: base.facultyId,
+        initial: base.initial,
+        name: base.name,
+        email: base.email,
+        courses: base.courses,
+        stats: base.stats,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<FacultyReviewItem> upsertReview(FacultyReviewUpsertInput input) async {
