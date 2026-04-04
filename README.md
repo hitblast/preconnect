@@ -154,6 +154,53 @@ Output:
 build/app/outputs/bundle/release/app-release.aab
 ```
 
+## Download
+
+- Latest release assets (APK / AAB / Web zip / iOS / macOS): [GitHub Releases](https://github.com/sabbirba/preconnect/releases/latest)
+- Web app: [web.preconnect.app](https://web.preconnect.app)
+- Release feed: [All releases](https://github.com/sabbirba/preconnect/releases)
+
+## Platform Support
+
+| Platform | Status | Notes |
+| --- | --- | --- |
+| Android | Stable | Signed APK/AAB are generated in release workflow when signing secrets are configured. |
+| Web | Stable | Built and deployed by CI to Cloudflare Workers. |
+| iOS | Beta | CI builds are enabled, but signing/export depends on Apple certificates/profiles. |
+| macOS | Beta | CI builds and packages a DMG artifact from release workflow. |
+
+## CI/CD
+
+Release automation is handled by [`.github/workflows/release.yml`](.github/workflows/release.yml).
+
+Main flow on push to `main`:
+
+1. Auto-bumps `pubspec.yaml` build number (`x.y.z+NNN`)
+2. Creates/updates a GitHub release tag like `v1.2.3+456`
+3. Builds and uploads platform artifacts (Android, iOS, macOS, Web)
+4. Deploys web build to Cloudflare Workers
+5. Publishes Android AAB to Google Play Open Beta Testing when required secrets are available
+
+## Architecture
+
+High-level request/data flow:
+
+```mermaid
+flowchart LR
+  A[PreConnect Client\nAndroid/iOS/macOS/Web] --> B[PreConnect Hosted API\napi.preconnect.app]
+  B --> C[BRAC Connect APIs]
+  B --> D[Seat Status Cache + Stream]
+  B --> E[Firebase Cloud Messaging]
+  E --> A
+```
+
+Why this architecture:
+
+- Reduces direct upstream pressure on BRAC Connect APIs
+- Centralizes seat-status caching and real-time triggers
+- Supports push-based alerts for important seat changes
+- Improves reliability and consistency across client platforms
+
 ## Data Safety and Privacy (Critical Dependencies)
 
 Key packages related to user data safety/privacy are listed below.
@@ -174,6 +221,24 @@ Privacy notes:
 - Users can control OS-level permissions (camera/notifications) at any time.
 - Local caches are used to improve offline and performance behavior.
 - Notification delivery depends on Firebase Cloud Messaging.
+
+## Testing & Quality
+
+Run these checks before opening a PR:
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+dart format --set-exit-if-changed .
+```
+
+Optional local release smoke checks:
+
+```bash
+flutter build apk --release --dart-define-from-file=.env
+flutter build web --pwa-strategy=none
+```
 
 ## Seat Status Proxy
 
@@ -227,6 +292,39 @@ Reference (required): **PreConnect App**
 
 Bug reports, feature requests, and ideas are welcome. Please create issues in our GitHub repo.
 
+## Roadmap
+
+- Improve offline reliability and sync conflict handling for schedule and profile views
+- Expand notification controls (fine-grained seat alert preferences)
+- Add more onboarding guidance for first-time BRACU students
+- Increase automated coverage for API/service and schedule flows
+- Harden release pipeline with richer health checks and release validation
+
+## FAQ
+
+### Is this an official BRAC University app?
+
+PreConnect is an initiative run and funded by BRAC University students. It is community-driven and focused on improving daily academic workflows.
+
+### Does PreConnect store sensitive login data insecurely?
+
+Sensitive tokens are stored using `flutter_secure_storage` (on-device-backed secure storage), not plain local preferences and server data share.
+
+### Does the app work with poor internet?
+
+Yes. The app uses cache-first patterns in several flows so students can still access key information with limited connectivity.
+
+### Where do seat-status updates come from?
+
+The app uses a hosted proxy (`api.preconnect.app`) that handles caching and stream updates, then notifies clients when data changes.
+
+## Acknowledgements
+
+- BRAC University student community for continuous feedback and testing
+- Flutter and Dart ecosystems
+- Open-source package maintainers on [pub.dev](https://pub.dev)
+- Infrastructure providers: Firebase Messaging and Cloudflare Worker
+
 ## Developer Credit
 - NaiveInvestigator — GitHub: [@NaiveInvestigator](https://github.com/NaiveInvestigator)
 - Sabbir Bin Abbas — GitHub: [@sabbirba](https://github.com/sabbirba)
@@ -245,7 +343,7 @@ Please see our [trademark guidelines](https://github.com/sabbirba/preconnect/blo
 ## Contributors
 
 <a href="https://github.com/sabbirba/preconnect/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=sabbirba/preconnect&max=400&columns=20" width="100%"/>
+  <img src="https://contrib.rocks/image?repo=sabbirba/preconnect" />
 </a>
 
 ## Star History
