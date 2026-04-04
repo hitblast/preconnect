@@ -279,7 +279,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             _CompactQuickAccessCard(
                               width: width,
                               icon: Icons.developer_mode_outlined,
-                              title: 'Dev',
+                              title: 'Devs',
                               subtitle: 'About',
                               color: const Color(0xFF5B8DEF),
                               onTap: () =>
