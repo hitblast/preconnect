@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:preconnect/pages/api_test.dart';
 import 'package:preconnect/pages/ui_kit.dart';
@@ -13,12 +16,15 @@ class DevsPage extends StatefulWidget {
 
 class _DevsPageState extends State<DevsPage> {
   late Future<String> _subtitleFuture;
+  late Future<List<_GitHubContributor>> _contributorsFuture;
   int _secretTapCount = 0;
+  bool _showAllContributors = false;
 
   @override
   void initState() {
     super.initState();
     _subtitleFuture = _buildVersionSubtitle();
+    _contributorsFuture = _loadContributors();
   }
 
   Future<String> _buildVersionSubtitle() async {
@@ -32,6 +38,33 @@ class _DevsPageState extends State<DevsPage> {
     } catch (_) {
       return 'App Version';
     }
+  }
+
+  Future<List<_GitHubContributor>> _loadContributors() async {
+    final uri = Uri.parse(
+      'https://api.github.com/repos/sabbirba/preconnect/contributors?per_page=100',
+    );
+    final response = await http.get(
+      uri,
+      headers: const <String, String>{'Accept': 'application/vnd.github+json'},
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Unable to load contributors');
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List) return const <_GitHubContributor>[];
+    final contributors = decoded
+        .whereType<Map>()
+        .map((raw) => _GitHubContributor.fromJson(raw.cast<String, dynamic>()))
+        .where((item) => item.login.isNotEmpty && item.avatarUrl.isNotEmpty)
+        .where((item) => !item.login.toLowerCase().endsWith('[bot]'))
+        .where(
+          (item) =>
+              item.login.toLowerCase() != 'naiveinvestigator' &&
+              item.login.toLowerCase() != 'sabbirba',
+        )
+        .toList();
+    return contributors;
   }
 
   Future<void> _onHeaderSecretTap() async {
@@ -155,17 +188,98 @@ class _DevsPageState extends State<DevsPage> {
                     name: 'NaiveInvestigator',
                     role: 'Lead Developer',
                     avatarUrl: 'https://github.com/NaiveInvestigator.png',
-                    githubUrl: 'https://github.com/NaiveInvestigator',
-                    facebookUrl: '',
+                    primaryLabel: 'GitHub',
+                    primaryUrl: 'https://github.com/NaiveInvestigator',
                   ),
                   _DevGridTile(
                     name: 'Sabbir Bin Abbas',
                     role: 'Developer & UI/UX',
                     avatarUrl: 'https://github.com/sabbirba.png',
-                    githubUrl: 'https://github.com/sabbirba',
-                    facebookUrl: 'https://facebook.com/Sabbirba10',
+                    primaryLabel: 'GitHub',
+                    primaryUrl: 'https://github.com/sabbirba',
+                    secondaryLabel: 'Facebook',
+                    secondaryUrl: 'https://facebook.com/Sabbirba10',
                   ),
                 ],
+              ),
+              const SizedBox(height: 14),
+              const BracuSectionTitle(title: 'Contributors'),
+              const SizedBox(height: 10),
+              FutureBuilder<List<_GitHubContributor>>(
+                future: _contributorsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 10),
+                      child: BracuLoading(label: 'Loading...'),
+                    );
+                  }
+                  final contributors =
+                      snapshot.data ?? const <_GitHubContributor>[];
+                  final manualTiles = const <_DevGridTile>[
+                    _DevGridTile(
+                      name: 'Mueen Ahmmed',
+                      role: 'Faculty Reviews',
+                      avatarUrl: 'https://media.licdn.com/dms/image/v2/D5603AQHtYo7APsdwwQ/profile-displayphoto-shrink_800_800/B56ZcH6GpoH4Ag-/0/1748184362516?e=1776902400&v=beta&t=lAxMqND2jjkT4ybK2z9zvePqMtMkCr3zEcZ4w_vfxDw',
+                      primaryLabel: 'LinkedIn',
+                      primaryUrl:
+                          'https://www.linkedin.com/in/mueen-ahmmed-b337b8231/',
+                      keepVisibleInCollapsed: true,
+                    ),
+                  ];
+                  final autoTiles = contributors
+                      .map(
+                        (item) => _DevGridTile(
+                          name: item.login,
+                          role: 'Contributor',
+                          avatarUrl: item.avatarUrl,
+                          primaryLabel: 'GitHub',
+                          primaryUrl: item.htmlUrl,
+                        ),
+                      )
+                      .toList();
+                  final allTiles = _dedupeContributorTiles(<_DevGridTile>[
+                    ...autoTiles,
+                    ...manualTiles,
+                  ]);
+                  if (allTiles.isEmpty) {
+                    return BracuCard(
+                      child: Text(
+                        'Contributor list not available right now.',
+                        style: TextStyle(color: textSecondary),
+                      ),
+                    );
+                  }
+                  final visibleTiles = _visibleContributorTiles(
+                    allTiles,
+                    showAll: _showAllContributors,
+                    collapsedCount: 4,
+                  );
+                  return Column(
+                    children: [
+                      GridView.count(
+                        crossAxisCount: 2,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 0.85,
+                        children: visibleTiles,
+                      ),
+                      if (allTiles.length > 4)
+                        buildCenteredOutlinedActionButton(
+                          label:
+                              _showAllContributors ? 'Show Less' : 'Show More',
+                          onPressed: () {
+                            setState(() {
+                              _showAllContributors = !_showAllContributors;
+                            });
+                          },
+                          padding: const EdgeInsets.only(top: 6),
+                        ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 14),
               const BracuSectionTitle(title: 'Funding & Support'),
@@ -197,20 +311,58 @@ class _DevsPageState extends State<DevsPage> {
   }
 }
 
+List<_DevGridTile> _dedupeContributorTiles(List<_DevGridTile> tiles) {
+  final seen = <String>{};
+  final output = <_DevGridTile>[];
+  for (final tile in tiles) {
+    final key = '${tile.name.trim().toLowerCase()}|'
+        '${tile.primaryUrl.trim().toLowerCase()}';
+    if (seen.add(key)) {
+      output.add(tile);
+    }
+  }
+  return output;
+}
+
+List<_DevGridTile> _visibleContributorTiles(
+  List<_DevGridTile> all, {
+  required bool showAll,
+  int collapsedCount = 4,
+}) {
+  if (showAll || all.length <= collapsedCount) return all;
+  final pinned = all
+      .where((tile) => tile.keepVisibleInCollapsed)
+      .take(collapsedCount)
+      .toList();
+  final visible = <_DevGridTile>[...pinned];
+  for (final tile in all) {
+    if (visible.length >= collapsedCount) break;
+    if (visible.contains(tile)) continue;
+    visible.add(tile);
+  }
+  return visible;
+}
+
 class _DevGridTile extends StatelessWidget {
   const _DevGridTile({
     required this.name,
     required this.role,
     required this.avatarUrl,
-    required this.githubUrl,
-    required this.facebookUrl,
+    required this.primaryLabel,
+    required this.primaryUrl,
+    this.secondaryLabel = '',
+    this.secondaryUrl = '',
+    this.keepVisibleInCollapsed = false,
   });
 
   final String name;
   final String role;
   final String avatarUrl;
-  final String githubUrl;
-  final String facebookUrl;
+  final String primaryLabel;
+  final String primaryUrl;
+  final String secondaryLabel;
+  final String secondaryUrl;
+  final bool keepVisibleInCollapsed;
 
   Future<void> _openUrl(BuildContext context, String rawUrl) async {
     await openExternalUrl(context, rawUrl);
@@ -236,7 +388,7 @@ class _DevGridTile extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           InkWell(
-            onTap: () => _openUrl(context, githubUrl),
+            onTap: () => _openUrl(context, primaryUrl),
             borderRadius: BorderRadius.circular(24),
             child: SizedBox(
               width: 44,
@@ -270,13 +422,13 @@ class _DevGridTile extends StatelessWidget {
             runSpacing: 4,
             children: [
               _LinkChip(
-                label: 'GitHub',
-                onTap: () => _openUrl(context, githubUrl),
+                label: primaryLabel,
+                onTap: () => _openUrl(context, primaryUrl),
               ),
-              if (facebookUrl.isNotEmpty)
+              if (secondaryUrl.isNotEmpty)
                 _LinkChip(
-                  label: 'Facebook',
-                  onTap: () => _openUrl(context, facebookUrl),
+                  label: secondaryLabel,
+                  onTap: () => _openUrl(context, secondaryUrl),
                 ),
             ],
           ),
@@ -318,4 +470,24 @@ class _LinkChip extends StatelessWidget {
 
 Future<void> _openRepo(BuildContext context) async {
   await openExternalUrl(context, 'https://github.com/sabbirba/preconnect');
+}
+
+class _GitHubContributor {
+  const _GitHubContributor({
+    required this.login,
+    required this.avatarUrl,
+    required this.htmlUrl,
+  });
+
+  final String login;
+  final String avatarUrl;
+  final String htmlUrl;
+
+  factory _GitHubContributor.fromJson(Map<String, dynamic> json) {
+    return _GitHubContributor(
+      login: '${json['login'] ?? ''}'.trim(),
+      avatarUrl: '${json['avatar_url'] ?? ''}'.trim(),
+      htmlUrl: '${json['html_url'] ?? ''}'.trim(),
+    );
+  }
 }
