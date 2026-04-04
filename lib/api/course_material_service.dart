@@ -174,6 +174,7 @@ class CourseMaterialService {
 
   final ApiClient _client = ApiClient();
   static const Duration _uploadTimeout = Duration(seconds: 40);
+  static final Uri _filesBaseUri = Uri.parse(ApiConfig.filesBase);
 
   String get _base => ApiConfig.seatStatusProxyBase;
 
@@ -219,6 +220,26 @@ class CourseMaterialService {
         '${Uri.encodeComponent(fileName.trim())}';
     final response = await _client.publicGet('$_base$path');
     return CourseMaterialDetail.fromJson(_decodeMap(response.body));
+  }
+
+  String resolvePublicDownloadUrl({
+    required CourseMaterialItem item,
+    required String signedDownloadUrl,
+  }) {
+    final fromFilePath = _storageKeySegmentsFromRaw(item.filePath);
+    if (fromFilePath.isNotEmpty) {
+      return _filesBaseUri.replace(pathSegments: fromFilePath).toString();
+    }
+
+    final signedUri = Uri.tryParse(signedDownloadUrl.trim());
+    if (signedUri != null && signedUri.pathSegments.isNotEmpty) {
+      final cleanedSegments = _storageKeySegmentsFromSignedUrl(signedUri);
+      if (cleanedSegments.isNotEmpty) {
+        return _filesBaseUri.replace(pathSegments: cleanedSegments).toString();
+      }
+    }
+
+    return signedDownloadUrl.trim();
   }
 
   Future<CourseMaterialUploadUrlResponse> createUploadUrl(
@@ -312,5 +333,28 @@ class CourseMaterialService {
     if (decoded is Map<String, dynamic>) return decoded;
     if (decoded is Map) return decoded.cast<String, dynamic>();
     return const <String, dynamic>{};
+  }
+
+  List<String> _storageKeySegmentsFromRaw(String rawPath) {
+    final normalized = rawPath.trim().replaceAll('\\', '/');
+    if (normalized.isEmpty) return const <String>[];
+    final segments = normalized
+        .split('/')
+        .where((segment) => segment.trim().isNotEmpty)
+        .toList();
+    if (segments.isEmpty) return const <String>[];
+    if (segments.length >= 2 &&
+        segments[0].toLowerCase() == 'v1' &&
+        segments[1].toLowerCase() == 'course-materials') {
+      return const <String>[];
+    }
+    return segments;
+  }
+
+  List<String> _storageKeySegmentsFromSignedUrl(Uri uri) {
+    final host = uri.host.toLowerCase();
+    final fromR2 = host.contains('r2.cloudflarestorage.com');
+    if (!fromR2) return const <String>[];
+    return uri.pathSegments.where((segment) => segment.trim().isNotEmpty).toList();
   }
 }

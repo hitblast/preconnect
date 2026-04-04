@@ -530,7 +530,11 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
         showAppSnackBar(context, 'Download URL unavailable');
         return;
       }
-      await openExternalUrl(context, detail.downloadUrl);
+      final publicUrl = _materialService.resolvePublicDownloadUrl(
+        item: detail.item,
+        signedDownloadUrl: detail.downloadUrl,
+      );
+      await openExternalUrl(context, publicUrl);
     } catch (_) {
       if (!mounted) return;
       showAppSnackBar(context, 'Open not available now');
@@ -1053,7 +1057,7 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '${item.fileName} • ${_materialTypeLabel(item.contentType)}',
+                                _materialSubtitle(item),
                                 style: TextStyle(
                                   color: textSecondary,
                                   fontSize: 11,
@@ -1105,12 +1109,26 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
     );
   }
 
-  String _materialTypeLabel(String raw) {
-    final value = raw.trim().toLowerCase();
-    if (value.isEmpty || value == 'application/octet-stream') {
-      return 'Not available';
+  String _materialSubtitle(CourseMaterialItem item) {
+    final parts = <String>[];
+    final semester = item.semester.trim();
+    if (semester.isNotEmpty) {
+      parts.add(semester);
     }
-    return value;
+    final size = _formatFileSize(item.fileSize);
+    if (size.isNotEmpty) {
+      parts.add(size);
+    }
+    return parts.isEmpty ? 'Course material' : parts.join(' • ');
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes <= 0) return '';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }
 

@@ -15,6 +15,7 @@ class ApiConfig {
       : 'https://connect.bracu.ac.bd/api';
   static const String cdnBase = 'https://connect.bracu.ac.bd/cdn';
   static const String seatStatusProxyBase = 'https://api.preconnect.app';
+  static const String filesBase = 'https://files.preconnect.app';
   static const String webLoginBrokerBase = seatStatusProxyBase;
   static const String pushAlertsBase = seatStatusProxyBase;
 
