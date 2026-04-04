@@ -17,6 +17,7 @@ class CourseMaterialItem {
     required this.contentType,
     required this.fileSize,
     required this.isApproved,
+    required this.canDelete,
     required this.filePath,
     this.createdAt,
     this.updatedAt,
@@ -32,6 +33,7 @@ class CourseMaterialItem {
   final String contentType;
   final int fileSize;
   final bool isApproved;
+  final bool? canDelete;
   final String filePath;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -48,6 +50,13 @@ class CourseMaterialItem {
       contentType: '${json['contentType'] ?? ''}'.trim(),
       fileSize: (json['fileSize'] as num?)?.toInt() ?? 0,
       isApproved: json['isApproved'] == true,
+      canDelete:
+          (json['canDelete'] as bool?) ??
+          (json['can_delete'] as bool?) ??
+          (json['isOwner'] as bool?) ??
+          (json['is_owner'] as bool?) ??
+          (json['isMine'] as bool?) ??
+          (json['is_mine'] as bool?),
       filePath: '${json['filePath'] ?? ''}'.trim(),
       createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}'),
       updatedAt: DateTime.tryParse('${json['updatedAt'] ?? ''}'),

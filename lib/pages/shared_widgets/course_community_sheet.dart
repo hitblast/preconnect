@@ -67,12 +67,16 @@ class CourseCommunitySheet extends StatefulWidget {
 class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
   final FacultyReviewService _facultyService = FacultyReviewService();
   final CourseMaterialService _materialService = CourseMaterialService();
+  final TextEditingController _reviewCommentController =
+      TextEditingController();
 
   FacultyReviewFeed? _reviewFeed;
   List<CourseMaterialItem> _materials = const <CourseMaterialItem>[];
   bool _reviewsLoading = true;
   bool _materialsLoading = true;
   bool _busyWriteAction = false;
+  bool _showAllReviews = false;
+  bool _showAllMaterials = false;
   String? _reviewsError;
   String? _materialsError;
   _LocalFacultyReviewDraft? _localDraft;
@@ -89,6 +93,12 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
   void initState() {
     super.initState();
     _loadAll();
+  }
+
+  @override
+  void dispose() {
+    _reviewCommentController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAll() async {
@@ -229,20 +239,16 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
     }
 
     final existingDraft = _localDraft;
-    final commentController = TextEditingController(
-      text: existingDraft?.comment ?? '',
-    );
+    _reviewCommentController.text = existingDraft?.comment ?? '';
     int? overall;
     int? teaching;
     int? fairness;
     int? behavior;
-    var anonymous = true;
     if (existingDraft != null) {
       overall = existingDraft.overall;
       teaching = existingDraft.teaching;
       fairness = existingDraft.fairness;
       behavior = existingDraft.behavior;
-      anonymous = existingDraft.isAnonymous;
     }
 
     final result = await showBracuBottomSheet<bool>(
@@ -285,7 +291,7 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
               );
             }
 
-            final comment = commentController.text.trim();
+            final comment = _reviewCommentController.text.trim();
             final ratingsReady =
                 overall != null &&
                 teaching != null &&
@@ -303,30 +309,14 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
                   ratingRow('Behavior', behavior, (v) => behavior = v),
                   const SizedBox(height: 8),
                   TextField(
-                    controller: commentController,
+                    controller: _reviewCommentController,
                     maxLines: 4,
                     maxLength: 500,
                     onChanged: (_) => setSheetState(() {}),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Write your review...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      contentPadding: const EdgeInsets.all(14),
+                      border: OutlineInputBorder(),
                     ),
-                  ),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Anonymous'),
-                    value: anonymous,
-                    onChanged: (value) =>
-                        setSheetState(() => anonymous = value),
                   ),
                   const SizedBox(height: 10),
                   Row(
@@ -359,16 +349,9 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
       },
     );
 
-    if (result != true) {
-      commentController.dispose();
-      return;
-    }
-    if (!mounted) {
-      commentController.dispose();
-      return;
-    }
-    final comment = commentController.text.trim();
-    commentController.dispose();
+    if (result != true) return;
+    if (!mounted) return;
+    final comment = _reviewCommentController.text.trim();
     if (comment.isEmpty) {
       showAppSnackBar(context, 'Comment is required');
       return;
@@ -393,7 +376,6 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
           fairness: fairness!,
           behavior: behavior!,
           comment: comment,
-          isAnonymous: anonymous,
         ),
       );
       await _saveLocalDraft(
@@ -403,7 +385,6 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
           fairness: fairness!,
           behavior: behavior!,
           comment: comment,
-          isAnonymous: anonymous,
         ),
       );
       if (!mounted) return;
@@ -429,7 +410,7 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
     final ok = await showBracuBottomSheet<bool>(
       context,
       title: title,
-      initialChildSize: 0.42,
+      initialChildSize: 0.56,
       builder: (sheetContext, textPrimary, textSecondary) {
         final sheetScroll = bracuBottomSheetScrollController(sheetContext);
         return SingleChildScrollView(
@@ -802,10 +783,44 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
     final textPrimary = BracuPalette.textPrimary(context);
     final textSecondary = BracuPalette.textSecondary(context);
     final sheetScroll = bracuBottomSheetScrollController(context);
-    final previewReviews =
-        _reviewFeed?.reviews.take(3).toList() ?? const <FacultyReviewItem>[];
+    String normalizeComment(String input) {
+      return input.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+    }
+
+    final allReviewsRaw = _reviewFeed?.reviews ?? const <FacultyReviewItem>[];
+    final reviewSeenKeys = <String>{};
+    final allReviews = allReviewsRaw.where((review) {
+      final key = review.reviewId > 0
+          ? 'id:${review.reviewId}'
+          : '${review.facultyInitial}|${review.overall}|${review.teaching}|${review.fairness}|${review.behavior}|${normalizeComment(review.comment)}';
+      return reviewSeenKeys.add(key);
+    }).toList();
+    final displayReviews = _showAllReviews
+        ? allReviews
+        : allReviews.take(3).toList();
+    final materialSeenKeys = <String>{};
+    final allMaterials = _materials.where((item) {
+      final key = '${item.semester}|${item.courseCode}|${item.fileName}';
+      return materialSeenKeys.add(key);
+    }).toList();
+    final displayMaterials = _showAllMaterials
+        ? allMaterials
+        : allMaterials.take(3).toList();
     final totalReviews = _reviewFeed?.faculty.stats.reviewsTotal ?? 0;
-    final hasReviews = totalReviews > 0 || previewReviews.isNotEmpty;
+    final hasReviews = totalReviews > 0 || allReviews.isNotEmpty;
+    final localDraft = _localDraft;
+
+    final isLocalDraftVisibleInFeed =
+        localDraft != null &&
+        allReviews.any(
+          (review) =>
+              review.overall == localDraft.overall &&
+              review.teaching == localDraft.teaching &&
+              review.fairness == localDraft.fairness &&
+              review.behavior == localDraft.behavior &&
+              normalizeComment(review.comment) ==
+                  normalizeComment(localDraft.comment),
+        );
     return ListView(
       controller: sheetScroll,
       children: [
@@ -815,10 +830,9 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
           children: [
             const Expanded(child: BracuSectionTitle(title: 'Faculty Reviews')),
             if (widget.showActions)
-              TextButton.icon(
+              TextButton(
                 onPressed: _busyWriteAction ? null : _writeReview,
-                icon: const Icon(Icons.rate_review_outlined, size: 17),
-                label: Text(_localDraft == null ? 'Write' : 'Edit'),
+                child: Text(_localDraft == null ? 'Write' : 'Edit'),
               ),
           ],
         ),
@@ -854,22 +868,22 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Avg ${_reviewFeed?.faculty.stats.overall.toStringAsFixed(2) ?? '0.00'}'
-                    ' • $totalReviews reviews',
+                    'Average rating: ${_reviewFeed?.faculty.stats.overall.toStringAsFixed(1) ?? '0.0'}/5'
+                    ' based on $totalReviews ${totalReviews == 1 ? 'review' : 'reviews'}',
                     style: TextStyle(color: textSecondary, fontSize: 12),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 8),
-          ] else
+          ] else if (localDraft == null)
             BracuCard(
               child: Text(
                 'No reviews yet for this faculty.',
                 style: TextStyle(color: textSecondary, fontSize: 12),
               ),
             ),
-          ...previewReviews.map((review) {
+          ...displayReviews.map((review) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: BracuCard(
@@ -896,17 +910,18 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
                               : () => _reportReview(review.reviewId),
                           icon: const Icon(Icons.flag_outlined, size: 18),
                         ),
-                        IconButton(
-                          visualDensity: VisualDensity.compact,
-                          tooltip: 'Delete',
-                          onPressed: _busyWriteAction
-                              ? null
-                              : () => _deleteReview(review.reviewId),
-                          icon: const Icon(
-                            Icons.delete_outline_rounded,
-                            size: 18,
+                        if (review.canDelete != false)
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Delete',
+                            onPressed: _busyWriteAction
+                                ? null
+                                : () => _deleteReview(review.reviewId),
+                            icon: const Icon(
+                              Icons.delete_outline_rounded,
+                              size: 18,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                     if (review.comment.isNotEmpty)
@@ -914,21 +929,82 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
                         review.comment,
                         style: TextStyle(color: textSecondary, fontSize: 12),
                       ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Teaching ${review.teaching}/5 • Fairness ${review.fairness}/5 • Behavior ${review.behavior}/5',
+                      style: TextStyle(color: textSecondary, fontSize: 11),
+                    ),
+                    if (!review.isApproved) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Pending approval',
+                        style: TextStyle(color: textSecondary, fontSize: 11),
+                      ),
+                    ],
                   ],
                 ),
               ),
             );
           }),
+          if (allReviews.length > 3)
+            buildCenteredOutlinedActionButton(
+              label: _showAllReviews ? 'Show Less' : 'Show More',
+              onPressed: () {
+                setState(() {
+                  _showAllReviews = !_showAllReviews;
+                });
+              },
+              padding: const EdgeInsets.only(top: 2, bottom: 8),
+            ),
         ],
+        if (localDraft != null && !isLocalDraftVisibleInFeed)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: BracuCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Your review',
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Overall ${localDraft.overall}/5',
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Teaching ${localDraft.teaching}/5 • Fairness ${localDraft.fairness}/5 • Behavior ${localDraft.behavior}/5',
+                    style: TextStyle(color: textSecondary, fontSize: 11),
+                  ),
+                  if (localDraft.comment.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      localDraft.comment,
+                      style: TextStyle(color: textSecondary, fontSize: 12),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
         const SizedBox(height: 12),
         Row(
           children: [
             const Expanded(child: BracuSectionTitle(title: 'Course Materials')),
             if (widget.showActions)
-              TextButton.icon(
+              TextButton(
                 onPressed: _busyWriteAction ? null : _uploadMaterial,
-                icon: const Icon(Icons.upload_file_rounded, size: 17),
-                label: const Text('Upload'),
+                child: const Text('Upload'),
               ),
           ],
         ),
@@ -944,15 +1020,15 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
               style: TextStyle(color: textSecondary, fontSize: 12),
             ),
           )
-        else if (_materials.isEmpty)
+        else if (allMaterials.isEmpty)
           BracuCard(
             child: Text(
               'No materials yet for ${widget.courseCode}.',
               style: TextStyle(color: textSecondary, fontSize: 12),
             ),
           )
-        else
-          ..._materials.map((item) {
+        else ...[
+          ...displayMaterials.map((item) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: BracuCard(
@@ -996,19 +1072,34 @@ class _CourseCommunitySheetState extends State<CourseCommunitySheet> {
                           : () => _reportMaterial(item),
                       icon: const Icon(Icons.flag_outlined, size: 18),
                     ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      tooltip: 'Delete',
-                      onPressed: _busyWriteAction
-                          ? null
-                          : () => _deleteMaterial(item),
-                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                    ),
+                    if (item.canDelete != false)
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Delete',
+                        onPressed: _busyWriteAction
+                            ? null
+                            : () => _deleteMaterial(item),
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          size: 18,
+                        ),
+                      ),
                   ],
                 ),
               ),
             );
           }),
+          if (allMaterials.length > 3)
+            buildCenteredOutlinedActionButton(
+              label: _showAllMaterials ? 'Show Less' : 'Show More',
+              onPressed: () {
+                setState(() {
+                  _showAllMaterials = !_showAllMaterials;
+                });
+              },
+              padding: const EdgeInsets.only(top: 2, bottom: 8),
+            ),
+        ],
         const SizedBox(height: 8),
       ],
     );
@@ -1030,7 +1121,6 @@ class _LocalFacultyReviewDraft {
     required this.fairness,
     required this.behavior,
     required this.comment,
-    required this.isAnonymous,
   });
 
   final int overall;
@@ -1038,7 +1128,6 @@ class _LocalFacultyReviewDraft {
   final int fairness;
   final int behavior;
   final String comment;
-  final bool isAnonymous;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -1047,7 +1136,6 @@ class _LocalFacultyReviewDraft {
       'fairness': fairness,
       'behavior': behavior,
       'comment': comment,
-      'isAnonymous': isAnonymous,
     };
   }
 
@@ -1058,7 +1146,6 @@ class _LocalFacultyReviewDraft {
       fairness: (json['fairness'] as num?)?.toInt() ?? 0,
       behavior: (json['behavior'] as num?)?.toInt() ?? 0,
       comment: '${json['comment'] ?? ''}'.trim(),
-      isAnonymous: json['isAnonymous'] == true,
     );
   }
 }

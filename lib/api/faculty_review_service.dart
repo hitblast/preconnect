@@ -76,8 +76,8 @@ class FacultyReviewItem {
     required this.fairness,
     required this.behavior,
     required this.comment,
-    required this.isAnonymous,
     required this.isApproved,
+    required this.canDelete,
     this.createdAt,
     this.updatedAt,
   });
@@ -90,8 +90,8 @@ class FacultyReviewItem {
   final int fairness;
   final int behavior;
   final String comment;
-  final bool isAnonymous;
   final bool isApproved;
+  final bool? canDelete;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -118,8 +118,14 @@ class FacultyReviewItem {
           (json['behavior'] as num?)?.toInt() ??
           0,
       comment: '${json['comment'] ?? ''}'.trim(),
-      isAnonymous: json['isAnonymous'] == true || json['is_anonymous'] == true,
       isApproved: json['isApproved'] == true || json['is_approved'] == true,
+      canDelete:
+          (json['canDelete'] as bool?) ??
+          (json['can_delete'] as bool?) ??
+          (json['isOwner'] as bool?) ??
+          (json['is_owner'] as bool?) ??
+          (json['isMine'] as bool?) ??
+          (json['is_mine'] as bool?),
       createdAt: DateTime.tryParse(
         '${json['createdAt'] ?? json['created_at'] ?? ''}',
       ),
@@ -170,7 +176,6 @@ class FacultyReviewUpsertInput {
     required this.fairness,
     required this.behavior,
     required this.comment,
-    required this.isAnonymous,
   });
 
   final String facultyInitial;
@@ -179,7 +184,6 @@ class FacultyReviewUpsertInput {
   final int fairness;
   final int behavior;
   final String comment;
-  final bool isAnonymous;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -189,7 +193,6 @@ class FacultyReviewUpsertInput {
       'fairness': fairness,
       'behavior': behavior,
       'comment': comment,
-      'isAnonymous': isAnonymous,
     };
   }
 }
